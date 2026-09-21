@@ -1,0 +1,566 @@
+openapi: 3.0.3
+info:
+  title: LMS «Медицина Долголетия» — API
+  version: "1.0.0"
+  description: |
+    API платформы обучения врачей. Авторизация — через httpOnly cookie `token` (JWT),
+    выдаётся эндпоинтами `/api/auth/login` и `/api/auth/register`.
+    Роли: `student` (врач), `curator`, `admin`, `super_admin`.
+servers:
+  - url: /api
+security:
+  - cookieAuth: []
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: token
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string }
+        name: { type: string }
+        role: { type: string, enum: [student, curator, admin, super_admin] }
+        specialization: { type: string, nullable: true }
+        workplace: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        stream_id: { type: string, nullable: true }
+        referral_code: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        message: { type: string }
+
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Регистрация врача (или назначение роли из приглашения по email)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name]
+              properties:
+                email: { type: string }
+                password: { type: string, minLength: 6 }
+                name: { type: string }
+                specialization: { type: string, description: "Обязательно для роли student" }
+                phone: { type: string }
+                workplace: { type: string }
+                ref: { type: string, description: "Реферальный код пригласившего (необязательно)" }
+      responses:
+        "200": { description: "Успешная регистрация, выдана cookie token" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { description: "Email уже зарегистрирован" }
+        "429": { $ref: "#/components/responses/TooManyAttempts" }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Вход по email и паролю
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        "200": { description: "Успешный вход, выдана cookie token" }
+        "401": { description: "Неверный email или пароль" }
+        "429": { $ref: "#/components/responses/TooManyAttempts" }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Выйти (текущая сессия)
+      responses: { "200": { description: OK } }
+
+  /auth/logout-everywhere:
+    post:
+      tags: [Auth]
+      summary: Выйти со всех устройств (отзывает все ранее выданные токены)
+      responses: { "200": { description: OK } }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Текущий пользователь
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { user: { $ref: "#/components/schemas/User" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Смена пароля (нужен текущий пароль)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string }
+                newPassword: { type: string, minLength: 6 }
+      responses:
+        "200": { description: OK }
+        "401": { description: "Текущий пароль неверен" }
+
+  /invites:
+    get:
+      tags: [Invites]
+      summary: Список активных приглашений (curator+)
+      responses: { "200": { description: OK } }
+    post:
+      tags: [Invites]
+      summary: Пригласить по email (роль назначается при первой регистрации на этот email)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: { type: string }
+                role: { type: string, enum: [student, curator, admin] }
+      responses:
+        "200": { description: OK }
+        "403": { description: "Недостаточно прав для этой роли" }
+
+  /invites/bulk:
+    post:
+      tags: [Invites]
+      summary: Массовое приглашение врачей (из CSV/Excel, распарсенного на фронтенде)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [emails]
+              properties:
+                emails:
+                  type: array
+                  items: { type: string }
+                  maxItems: 500
+      responses:
+        "200":
+          description: "Итог загрузки"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created: { type: array, items: { type: string } }
+                  skipped:
+                    type: array
+                    items:
+                      type: object
+                      properties: { email: { type: string }, reason: { type: string } }
+
+  /invites/{email}:
+    delete:
+      tags: [Invites]
+      summary: Отменить приглашение (admin/super_admin)
+      parameters:
+        - { name: email, in: path, required: true, schema: { type: string } }
+      responses: { "200": { description: OK }, "404": { description: "Не найдено" } }
+
+  /staff/team:
+    get:
+      tags: [Staff]
+      summary: Список кураторов и администраторов
+      responses: { "200": { description: OK } }
+
+  /staff/directory:
+    get:
+      tags: [Staff]
+      summary: Полный справочник персонала, включая главного администратора
+      responses: { "200": { description: OK } }
+
+  /staff/team/{id}:
+    delete:
+      tags: [Staff]
+      summary: Отозвать доступ у сотрудника (admin/super_admin, по иерархии ролей)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK }, "403": { description: "Недостаточно прав" } }
+
+  /staff/team/{id}/reset-password:
+    post:
+      tags: [Staff]
+      summary: Сбросить пароль коллеге, вернёт временный пароль один раз
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { tempPassword: { type: string } }
+
+  /staff/students:
+    get:
+      tags: [Staff]
+      summary: Список врачей с прогрессом
+      responses: { "200": { description: OK } }
+
+  /staff/students/{id}:
+    get:
+      tags: [Staff]
+      summary: Карточка врача
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK }, "404": { description: "Не найдено" } }
+
+  /staff/students/{id}/reset-password:
+    post:
+      tags: [Staff]
+      summary: Сбросить пароль врачу, вернёт временный пароль один раз
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { tempPassword: { type: string } }
+
+  /staff/students/{id}/access:
+    patch:
+      tags: [Staff]
+      summary: Установить дату окончания доступа (null — снять срок)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { expiresAt: { type: string, format: date, nullable: true } }
+      responses: { "200": { description: OK } }
+
+  /staff/students/{id}/access/extend:
+    post:
+      tags: [Staff]
+      summary: Продлить доступ на N дней
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { days: { type: integer } } }
+      responses: { "200": { description: OK } }
+
+  /staff/students/{id}/access/block:
+    patch:
+      tags: [Staff]
+      summary: Заблокировать/разблокировать доступ немедленно
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { blocked: { type: boolean } } }
+      responses: { "200": { description: OK } }
+
+  /staff/students/{id}/stream:
+    patch:
+      tags: [Staff]
+      summary: Назначить поток одному врачу
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK } }
+
+  /staff/students/bulk-stream:
+    post:
+      tags: [Staff]
+      summary: Назначить поток нескольким врачам сразу
+      responses: { "200": { description: OK } }
+
+  /staff/students/bulk-field:
+    post:
+      tags: [Staff]
+      summary: Массово проставить продукт или статус оплаты
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ids: { type: array, items: { type: string } }
+                field: { type: string, enum: [product, payment_status] }
+                value: { type: string }
+      responses: { "200": { description: OK } }
+
+  /staff/audit-log:
+    get:
+      tags: [Staff]
+      summary: Журнал действий персонала (admin/super_admin)
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, maximum: 300 } }
+      responses: { "200": { description: OK } }
+
+  /staff/course-preview:
+    get:
+      tags: [Staff]
+      summary: Просмотр курса «глазами врача» без создания тестового аккаунта
+      responses: { "200": { description: OK } }
+
+  /course:
+    get:
+      tags: [Course]
+      summary: Курс с уроками, тестом (без ответов) и прогрессом текущего врача
+      responses: { "200": { description: OK }, "403": { description: "Только для роли student" } }
+
+  /course/lesson-done:
+    post:
+      tags: [Course]
+      summary: Отметить урок пройденным
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, required: [lessonId], properties: { lessonId: { type: string } } }
+      responses: { "200": { description: OK }, "403": { description: "Доступ ограничен или урок скрыт" } }
+
+  /course/quiz-submit:
+    post:
+      tags: [Course]
+      summary: Отправить ответы теста (балл считается на сервере)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                answers: { type: object, additionalProperties: { type: integer } }
+      responses: { "200": { description: OK } }
+
+  /course/request-full-access:
+    post:
+      tags: [Course]
+      summary: Оставить заявку на полную программу
+      responses: { "200": { description: OK } }
+
+  /course/certificate/{studentId}/issue:
+    post:
+      tags: [Course]
+      summary: Выдать сертификат врачу (curator+)
+      parameters: [{ name: studentId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK } }
+
+  /course/materials:
+    get:
+      tags: [Course]
+      summary: Список уроков (заголовки) для вкладки «Материалы»
+      responses: { "200": { description: OK } }
+
+  /course/visibility:
+    get:
+      tags: [Course]
+      summary: Карта скрытых материалов по врачам
+      responses: { "200": { description: OK } }
+
+  /course/visibility/{targetId}:
+    put:
+      tags: [Course]
+      summary: "Задать список врачей, от которых скрыт урок/тест (targetId = id урока или \"quiz\")"
+      parameters: [{ name: targetId, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { ids: { type: array, items: { type: string } } } }
+      responses: { "200": { description: OK } }
+
+  /course/lessons/{id}:
+    get:
+      tags: [Course]
+      summary: Полное содержимое урока (для редактора, admin/super_admin)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK } }
+
+  /course/lessons/{id}/draft:
+    put:
+      tags: [Course]
+      summary: Сохранить черновик урока (не публикуется автоматически)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, html]
+              properties:
+                title: { type: string }
+                duration: { type: string }
+                html: { type: string }
+      responses: { "200": { description: OK } }
+
+  /course/lessons/{id}/publish:
+    post:
+      tags: [Course]
+      summary: Опубликовать черновик (прежняя версия уходит в историю)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK }, "400": { description: "Нет черновика" } }
+
+  /course/lessons/{id}/history:
+    get:
+      tags: [Course]
+      summary: История версий урока (последние 20)
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK } }
+
+  /course/lessons/{id}/restore/{historyId}:
+    post:
+      tags: [Course]
+      summary: Откатить урок к прежней версии из истории
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: historyId, in: path, required: true, schema: { type: string } }
+      responses: { "200": { description: OK } }
+
+  /course/quiz-admin:
+    get:
+      tags: [Course]
+      summary: Полный список вопросов теста с правильными ответами (admin/super_admin)
+      responses: { "200": { description: OK } }
+
+  /course/quiz-admin/{id}:
+    put:
+      tags: [Course]
+      summary: Редактировать вопрос теста
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                question: { type: string }
+                options: { type: array, items: { type: string } }
+                correct: { type: integer }
+      responses: { "200": { description: OK } }
+
+  /messages/{studentId}:
+    get:
+      tags: [Messages]
+      summary: История чата с врачом
+      parameters: [{ name: studentId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK } }
+
+  /messages:
+    post:
+      tags: [Messages]
+      summary: Отправить сообщение
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [studentId, text]
+              properties: { studentId: { type: string }, text: { type: string } }
+      responses: { "200": { description: OK } }
+
+  /streams:
+    get:
+      tags: [Calendar]
+      summary: Список потоков
+      responses: { "200": { description: OK } }
+    post:
+      tags: [Calendar]
+      summary: Создать поток
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties: { name: { type: string }, startDate: { type: string, format: date } }
+      responses: { "200": { description: OK } }
+
+  /streams/{id}:
+    delete:
+      tags: [Calendar]
+      summary: Удалить поток
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: OK } }
+
+  /events:
+    get:
+      tags: [Calendar]
+      summary: Список прямых эфиров
+      responses: { "200": { description: OK } }
+    post:
+      tags: [Calendar]
+      summary: Создать эфир (можно с еженедельным повтором)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, date, time]
+              properties:
+                title: { type: string }
+                date: { type: string, format: date }
+                time: { type: string, example: "18:00" }
+                duration: { type: integer, example: 60 }
+                speaker: { type: string }
+                streamId: { type: string, nullable: true, description: "null = виден всем потокам" }
+                joinUrl: { type: string }
+                description: { type: string }
+                recurrence: { type: string, enum: [weekly], description: "Необязательно — еженедельный повтор" }
+                recurrenceUntil: { type: string, format: date }
+      responses: { "200": { description: OK } }
+
+  /events/{id}:
+    delete:
+      tags: [Calendar]
+      summary: Удалить эфир (?series=true — удалить всю серию повторов)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: series, in: query, schema: { type: boolean } }
+      responses: { "200": { description: OK } }
+
+  /health:
+    get:
+      tags: [System]
+      summary: Проверка живости сервера
+      security: []
+      responses: { "200": { description: OK } }
+
+components:
+  responses:
+    Unauthorized:
+      description: "Не авторизован или сессия отозвана"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    BadRequest:
+      description: "Некорректные входные данные"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    TooManyAttempts:
+      description: "Слишком много попыток — подождите несколько минут"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }

@@ -1,0 +1,104 @@
+const request = require("supertest");
+const { app, pool, createUser, loginAs } = require("./helpers");
+
+afterAll(async () => { await pool.end(); });
+
+describe("Права доступа персонала", () => {
+  test("врач не может открыть список учеников (403)", async () => {
+    const student = await createUser({ role: "student" });
+    const cookie = await loginAs(student);
+    const res = await request(app).get("/api/staff/students").set("Cookie", cookie);
+    expect(res.status).toBe(403);
+  });
+
+  test("куратор видит список учеников", async () => {
+    const curator = await createUser({ role: "curator" });
+    const cookie = await loginAs(curator);
+    const res = await request(app).get("/api/staff/students").set("Cookie", cookie);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.students)).toBe(true);
+  });
+
+  test("куратор видит команду на чтение, но не может управлять ею", async () => {
+    const curator = await createUser({ role: "curator" });
+    const cookie = await loginAs(curator);
+    const readRes = await request(app).get("/api/staff/team").set("Cookie", cookie);
+    expect(readRes.status).toBe(200);
+
+    const admin = await createUser({ role: "admin" });
+    const removeRes = await request(app).delete(`/api/staff/team/${admin.id}`).set("Cookie", cookie);
+    expect(removeRes.status).toBe(403);
+  });
+
+  test("администратор видит команду", async () => {
+    const admin = await createUser({ role: "admin" });
+    const cookie = await loginAs(admin);
+    const res = await request(app).get("/api/staff/team").set("Cookie", cookie);
+    expect(res.status).toBe(200);
+  });
+
+  test("куратор не может пригласить администратора (403)", async () => {
+    const curator = await createUser({ role: "curator" });
+    const cookie = await loginAs(curator);
+    const res = await request(app).post("/api/invites").set("Cookie", cookie)
+      .send({ email: `newadmin.${Date.now()}@example.com`, role: "admin" });
+    expect(res.status).toBe(403);
+  });
+
+  test("администратор не может пригласить другого администратора (только super_admin)", async () => {
+    const admin = await createUser({ role: "admin" });
+    const cookie = await loginAs(admin);
+    const res = await request(app).post("/api/invites").set("Cookie", cookie)
+      .send({ email: `newadmin2.${Date.now()}@example.com`, role: "admin" });
+    expect(res.status).toBe(403);
+  });
+
+  test("куратор может пригласить врача", async () => {
+    const curator = await createUser({ role: "curator" });
+    const cookie = await loginAs(curator);
+    const res = await request(app).post("/api/invites").set("Cookie", cookie)
+      .send({ email: `newdoc.${Date.now()}@example.com`, role: "student" });
+    expect(res.status).toBe(200);
+  });
+
+  test("приглашение по email назначает роль при регистрации", async () => {
+    const superAdmin = await createUser({ role: "super_admin" });
+    const cookie = await loginAs(superAdmin);
+    const email = `invited-curator.${Date.now()}@example.com`;
+    await request(app).post("/api/invites").set("Cookie", cookie).send({ email, role: "curator" });
+
+    const registerRes = await request(app).post("/api/auth/register").send({
+      email, password: "password123", name: "Приглашённый Куратор"
+    });
+    expect(registerRes.status).toBe(200);
+    expect(registerRes.body.user.role).toBe("curator");
+  });
+
+  test("массовое приглашение: валидные email приглашены, некорректные и уже зарегистрированные пропущены", async () => {
+    const superAdmin = await createUser({ role: "super_admin" });
+    const cookie = await loginAs(superAdmin);
+    const existing = await createUser({ role: "student" });
+    const good1 = `bulk1.${Date.now()}@example.com`;
+    const good2 = `bulk2.${Date.now()}@example.com`;
+
+    const res = await request(app).post("/api/invites/bulk").set("Cookie", cookie)
+      .send({ emails: [good1, good2, "не-email", existing.email] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.created).toEqual(expect.arrayContaining([good1, good2]));
+    expect(res.body.skipped.length).toBe(2);
+  });
+
+  test("журнал действий недоступен куратору, доступен администратору", async () => {
+    const curator = await createUser({ role: "curator" });
+    const curatorCookie = await loginAs(curator);
+    const forbidden = await request(app).get("/api/staff/audit-log").set("Cookie", curatorCookie);
+    expect(forbidden.status).toBe(403);
+
+    const admin = await createUser({ role: "admin" });
+    const adminCookie = await loginAs(admin);
+    const allowed = await request(app).get("/api/staff/audit-log").set("Cookie", adminCookie);
+    expect(allowed.status).toBe(200);
+    expect(Array.isArray(allowed.body.log)).toBe(true);
+  });
+});

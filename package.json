@@ -1,0 +1,31 @@
+{
+  "name": "dolgoletie-lms-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Бэкенд платформы обучения врачей «Медицина Долголетия» — этап 1: роли, авторизация, демо-курс и прогресс",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "migrate": "node src/migrate.js",
+    "seed": "node src/seed.js",
+    "reset-password": "node src/reset-password.js",
+    "test": "jest --runInBand"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.11.5",
+    "swagger-ui-express": "^5.0.1",
+    "xss": "^1.0.15",
+    "yamljs": "^0.3.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
+  }
+}
