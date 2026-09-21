@@ -787,14 +787,14 @@ function renderMonthCalendar(){
     var dateIso = isoDate(new Date(year,month,day));
     var dayEvents = eventsByDate[dateIso] || [];
     html += '<div class="cal-cell'+(dateIso===todayIso?' cal-today':'')+'" data-action="open-event-form" data-date="'+dateIso+'"><span class="cal-daynum">'+day+'</span>';
-    dayEvents.slice(0,3).forEach(function(ev){
+    dayEvents.slice(0,2).forEach(function(ev){
       var start = new Date(ev.event_date+"T"+(ev.event_time||"00:00")+":00");
       var end = new Date(start.getTime() + (ev.duration_min||60)*60000);
       var now = new Date();
       var live = start<=now && now<=end;
       html += '<div class="cal-chip'+(live?' live':'')+'" data-action="open-event-details" data-id="'+ev.id+'">'+(ev.event_time?escapeHtml(ev.event_time)+' ':'')+escapeHtml(ev.title)+'</div>';
     });
-    if(dayEvents.length>3) html += '<div class="cal-more">+'+(dayEvents.length-3)+' ещё</div>';
+    if(dayEvents.length>2) html += '<div class="cal-more">+'+(dayEvents.length-2)+' ещё</div>';
     html += '</div>';
   }
   var totalCells = startOffset + daysInMonth;
