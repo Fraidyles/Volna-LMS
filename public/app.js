@@ -86,6 +86,29 @@ function $(sel, root){ return (root||document).querySelector(sel); }
 function el(html){ var d=document.createElement("div"); d.innerHTML=html.trim(); return d.firstChild; }
 function escapeHtml(s){ return (s==null?"":String(s)).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
 function initials(name){ var p=(name||"?").trim().split(/\s+/); return ((p[0]||"?")[0]+(p[1]?p[1][0]:"")).toUpperCase(); }
+
+/* ============================= ИКОНКИ (авторский SVG-набор) ============================= */
+var ICONS = {
+  sun: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.6M12 18.9v2.6M4.6 4.6l1.9 1.9M17.5 17.5l1.9 1.9M2.5 12h2.6M18.9 12h2.6M4.6 19.4l1.9-1.9M17.5 6.5l1.9-1.9"/>',
+  moon: '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5Z"/>',
+  eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="3"/>',
+  check: '<path d="M4.5 12.5l4.5 4.5L19.5 7"/>',
+  lock: '<rect x="5" y="10.5" width="14" height="10" rx="1.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>',
+  star: '<path d="M12 3.5l2.6 5.5 6 .8-4.4 4.2 1.1 6-5.3-2.9-5.3 2.9 1.1-6-4.4-4.2 6-.8Z"/>',
+  repeat: '<path d="M4 7.5h12.5a3.5 3.5 0 0 1 3.5 3.5v1M20 16.5H7.5A3.5 3.5 0 0 1 4 13v-1"/><path d="M7.5 4 4 7.5 7.5 11M16.5 20l3.5-3.5-3.5-3.5"/>',
+  clipboard: '<rect x="5.5" y="4.5" width="13" height="16" rx="1.5"/><path d="M9 4.5V3.8A1.8 1.8 0 0 1 10.8 2h2.4A1.8 1.8 0 0 1 15 3.8v.7"/><path d="M8.5 11h7M8.5 15h7"/>',
+  search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M19.5 19.5l-4.3-4.3"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  badge: '<circle cx="12" cy="9.5" r="5.5"/><path d="M9 14l-2 7 5-2.5L17 21l-2-7"/>',
+  doctor: '<path d="M7 3.5v5a5 5 0 0 0 10 0v-5"/><path d="M17 8v2a5 5 0 0 1-10 0"/><circle cx="19" cy="5" r="2"/><path d="M12 15.5v3.5"/><circle cx="12" cy="20.5" r="1.3"/>'
+};
+function icon(name, cls){ return '<svg class="ic'+(cls?' '+cls:'')+'" viewBox="0 0 24 24">'+(ICONS[name]||'')+'</svg>'; }
+function brandMark(style){ return '<span class="mark"'+(style?' style="'+style+'"':'')+'>'+icon("doctor")+'</span>'; }
+
+/* ============================= МАГНИТ (единственный язык статуса) ============================= */
+function magnet(kind, label){
+  return '<span class="magnet '+kind+'"><span class="magnet-dot"></span><span class="magnet-label">'+escapeHtml(label)+'</span></span>';
+}
 function fmtDate(iso){ if(!iso) return "—"; try{ return new Date(iso).toLocaleDateString("ru-RU",{day:"numeric",month:"short",year:"numeric"}); }catch(e){ return "—"; } }
 function fmtTime(iso){ if(!iso) return ""; try{ return new Date(iso).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}); }catch(e){ return ""; } }
 function showToast(text){
@@ -319,7 +342,7 @@ function renderAuthScreen(mode){
   var isLogin = mode === "login";
   var left =
     '<div class="onb-left">' +
-      '<div><div class="brand" style="color:#fff;"><span class="mark" style="background:rgba(255,255,255,.18);">🩺</span>Медицина Долголетия</div>' +
+      '<div><div class="brand" style="color:#fff;">'+brandMark("background:rgba(255,255,255,.18);")+'Медицина Долголетия</div>' +
       '<h1 style="margin-top:56px;">'+(isLogin ? "С возвращением" : "Регистрация на демо-курс")+'</h1>' +
       '<p>'+(isLogin ? "Войдите, чтобы продолжить обучение или открыть панель куратора." : "Пара полей — и вы сразу в первом уроке.")+'</p></div>' +
     '</div>';
@@ -328,7 +351,7 @@ function renderAuthScreen(mode){
   if(isLogin){
     right =
       '<div class="onb-right"><div class="onb-box">' +
-        '<div class="brand" style="margin-bottom:28px;"><span class="mark">🩺</span>Медицина Долголетия</div>' +
+        '<div class="brand" style="margin-bottom:28px;">'+brandMark()+'Медицина Долголетия</div>' +
         '<h2 style="font-size:19px;margin:0 0 20px;">Вход</h2>' +
         '<form id="loginForm">' +
           '<div class="field"><label>Email</label><input class="input" type="email" name="email" required></div>' +
@@ -342,7 +365,7 @@ function renderAuthScreen(mode){
     right =
       '<div class="onb-right"><div class="onb-box">' +
         '<button class="back-link" data-action="go-login">← Уже есть аккаунт? Войти</button>' +
-        '<div class="brand" style="margin-bottom:20px;"><span class="mark">🩺</span>Медицина Долголетия</div>' +
+        '<div class="brand" style="margin-bottom:20px;">'+brandMark()+'Медицина Долголетия</div>' +
         '<h2 style="font-size:19px;margin:0 0 20px;">Расскажите о себе</h2>' +
         '<form id="registerForm">' +
           '<div class="field"><label>Имя и фамилия</label><input class="input" name="name" required placeholder="Например, Анна Ковалёва"></div>' +
@@ -364,16 +387,15 @@ function renderAuthScreen(mode){
 function renderTopbar(){
   var roleText = previewMode ? "Просмотр" : (view === "staff" ? roleLabel(me.role) : "Демо-курс");
   var isDark = getTheme()==="dark";
+  var themeBtn = '<button class="btn btn-sm btn-ghost" data-action="toggle-theme" title="Переключить тему">'+icon(isDark?"sun":"moon")+'</button>';
   var rightControls = previewMode
-    ? '<button class="btn btn-sm btn-ghost" data-action="toggle-theme" title="Переключить тему">'+(isDark?'☀️':'🌙')+'</button>' +
-      '<button class="btn btn-sm btn-ghost" data-action="exit-preview">Вернуться в панель</button>'
-    : '<button class="btn btn-sm btn-ghost" data-action="toggle-theme" title="Переключить тему">'+(isDark?'☀️':'🌙')+'</button>' +
-      '<button class="btn btn-sm btn-ghost" data-action="open-change-password">Сменить пароль</button>' +
+    ? themeBtn + '<button class="btn btn-sm btn-ghost" data-action="exit-preview">Вернуться в панель</button>'
+    : themeBtn + '<button class="btn btn-sm btn-ghost" data-action="open-change-password">Сменить пароль</button>' +
       '<button class="btn btn-sm btn-ghost" data-action="logout">Выйти</button>';
   return el(
     '<div class="topbar"><div class="wrap topbar-inner">' +
-      '<div class="brand"><span class="mark">🩺</span>Медицина Долголетия</div>' +
-      '<div class="who"><span class="pill">'+escapeHtml(roleText)+'</span><span class="name">'+escapeHtml(me.name||"")+'</span>' +
+      '<div class="brand">'+brandMark()+'Медицина Долголетия</div>' +
+      '<div class="who"><span class="role-label">'+escapeHtml(roleText)+'</span><span class="name">'+escapeHtml(me.name||"")+'</span>' +
       rightControls + '</div>' +
     '</div></div>'
   );
@@ -396,7 +418,7 @@ function toggleTheme(){
 function renderStudentShell(){
   var wrap = el('<div></div>');
   if(previewMode){
-    wrap.appendChild(el('<div style="background:var(--accent);color:#fff;text-align:center;padding:10px 16px;font-size:13.5px;position:sticky;top:0;z-index:40;">👁 Режим просмотра «глазами врача» — изменения не сохраняются &nbsp; <button class="btn btn-sm" style="background:rgba(255,255,255,.2);border-color:transparent;color:#fff;" data-action="exit-preview">Вернуться в панель</button></div>'));
+    wrap.appendChild(el('<div style="background:var(--accent);color:#1B1A14;text-align:center;padding:10px 16px;font-size:13.5px;font-weight:600;position:sticky;top:0;z-index:40;display:flex;align-items:center;justify-content:center;gap:8px;">'+icon("eye")+' Режим просмотра «глазами врача» — изменения не сохраняются &nbsp; <button class="btn btn-sm" style="background:rgba(27,26,20,.14);border-color:transparent;color:#1B1A14;" data-action="exit-preview">Вернуться в панель</button></div>'));
   }
   wrap.appendChild(renderTopbar());
   var shell = el('<div class="shell"><div class="wrap" id="studentContent"></div></div>');
@@ -431,16 +453,29 @@ function renderTabsRow(tabs, active, actionName){
 function renderStudentSchedule(){
   var mySid = me.stream_id || "";
   var relevant = calendarState.events.filter(function(ev){ return !ev.stream_id || ev.stream_id===mySid; });
-  var nowKey = isoDate(new Date()) + new Date().toTimeString().slice(0,5);
-  var upcoming = relevant.filter(function(ev){ return (ev.event_date+(ev.event_time||"00:00")) >= nowKey; });
-  var past = relevant.filter(function(ev){ return (ev.event_date+(ev.event_time||"00:00")) < nowKey; });
+
+  function eventEnd(ev){
+    var start = new Date(ev.event_date+"T"+(ev.event_time||"00:00")+":00");
+    return new Date(start.getTime() + (ev.duration_min||60)*60000);
+  }
+  function isLiveNow(ev){
+    var start = new Date(ev.event_date+"T"+(ev.event_time||"00:00")+":00");
+    var now = new Date();
+    return start<=now && now<=eventEnd(ev);
+  }
+  // «Прошедший» — это уже закончившийся эфир (учитывая длительность), а не просто наступившее время начала:
+  // иначе идущий сейчас эфир мгновенно попадал бы в прошедшие в момент старта.
+  var now = new Date();
+  var upcoming = relevant.filter(function(ev){ return eventEnd(ev) >= now; });
+  var past = relevant.filter(function(ev){ return eventEnd(ev) < now; });
 
   function row(ev, isUpcoming){
+    var live = isUpcoming && isLiveNow(ev);
     return '<div class="card" style="padding:14px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">' +
-      '<div><b style="font-size:14px;display:block;">'+escapeHtml(ev.title)+'</b>' +
-      '<span style="font-size:12.5px;color:var(--muted);">'+fmtDate(ev.event_date)+' в '+escapeHtml(ev.event_time||"—")+(ev.speaker?(' · '+escapeHtml(ev.speaker)):'')+'</span></div>' +
+      '<div>'+(live?magnet("live","В эфире")+'<br>':'')+'<b style="font-size:14px;display:block;margin-top:'+(live?'6px':'0')+';">'+escapeHtml(ev.title)+'</b>' +
+      '<span style="font-family:var(--mono);font-size:12px;color:var(--muted);">'+fmtDate(ev.event_date)+' в '+escapeHtml(ev.event_time||"—")+(ev.speaker?(' · '+escapeHtml(ev.speaker)):'')+'</span></div>' +
       (isUpcoming ? '<div style="display:flex;gap:8px;">' +
-        (ev.join_url?'<a class="btn btn-sm btn-primary" href="'+escapeHtml(ev.join_url)+'" target="_blank" rel="noopener">Подключиться</a>':'') +
+        (ev.join_url?'<a class="btn btn-sm '+(live?'btn-primary':'btn-ghost')+'" href="'+escapeHtml(ev.join_url)+'" target="_blank" rel="noopener">Подключиться</a>':'') +
         '<button class="btn btn-sm btn-ghost" data-action="download-ics" data-id="'+ev.id+'">В календарь</button></div>' : '') +
     '</div>';
   }
@@ -459,41 +494,92 @@ function renderStudentSchedule(){
 function renderStudentHome(){
   var pr = course.progress || {};
   var total = course.lessons.length;
-  var done = (pr.completed_lessons||[]).length;
-  var pct = Math.round((done/total)*100);
+  var doneIds = pr.completed_lessons||[];
+  var done = doneIds.length;
   var lock = course.locked || {locked:false};
 
-  var html = '<div style="margin-top:6px;" class="grid-2">';
+  var html = '<div style="margin-top:10px;">';
   if(lock.locked){
-    html += '<div class="card course-hero" style="background:var(--danger-tint);">' +
-      '<span class="tag" style="background:#fff;color:var(--danger);">Доступ ограничен</span>' +
-      '<h2>'+escapeHtml(course.course.title)+'</h2>' +
+    html += '<div class="card course-hero" style="background:var(--status-blocked-tint);">' +
+      magnet("blocked", "Доступ ограничен") +
+      '<h2 style="margin-top:14px;">'+escapeHtml(course.course.title)+'</h2>' +
       '<p>'+(lock.reason==="blocked" ? 'Куратор временно ограничил ваш доступ к демо-курсу.' : 'Срок доступа к демо-курсу истёк.')+' Чтобы продолжить обучение, напишите куратору — он может продлить или снять ограничение.</p>' +
       '<button class="btn btn-primary" data-action="student-tab" data-tab="messages">Написать куратору</button></div>';
   } else {
+    // Статус-трек: один слот на урок + слот теста. Это «Моя строка» — сигнатурный элемент направления.
+    var slots = '<div class="status-track">';
+    course.lessons.forEach(function(l,i){
+      var isDone = doneIds.indexOf(l.id)!==-1;
+      var isCurrent = !isDone && doneIds.length===i;
+      slots += '<div class="slot'+(isDone?' done':(isCurrent?' current':''))+'" title="'+escapeHtml(l.title)+'"></div>';
+    });
+    var quizDone = !!pr.completed;
+    var quizCurrent = !quizDone && done===total;
+    slots += '<div class="slot'+(quizDone?' done':(quizCurrent?' current':''))+'" title="Итоговый тест"></div>';
+    slots += '</div>';
+
     html += '<div class="card course-hero">' +
-      '<span class="tag">Демо-курс</span>' +
       '<h2>'+escapeHtml(course.course.title)+'</h2>' +
       '<p>5 коротких уроков и итоговый тест. По завершении — сертификат и возможность оставить заявку на полную программу обучения.</p>' +
-      '<div class="progressbar"><i style="width:'+pct+'%;"></i></div>' +
-      '<div class="progress-label">'+done+' из '+total+' уроков пройдено'+(pr.completed?' · тест сдан ('+pr.quiz_score+'%)':'')+'</div>' +
+      slots +
+      '<div class="progress-label">'+done+' / '+total+' уроков'+(pr.completed?' · тест '+pr.quiz_score+'%':'')+'</div>' +
       '<button class="btn btn-primary" data-action="open-course">'+(done>0?'Продолжить курс':'Начать курс')+'</button>' +
       '</div>';
   }
 
-  html += '<div style="display:flex;flex-direction:column;gap:14px;">';
-  if(pr.completed){
-    html += '<div class="card" style="padding:22px;">' +
-      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;"><span style="font-size:22px;">'+(pr.certificate_status==="issued"?'🎓':'⏳')+'</span><b style="font-size:15px;">'+(pr.certificate_status==="issued"?'Сертификат выдан':'Демо-курс завершён')+'</b></div>' +
-      '<p style="font-size:13.5px;color:var(--muted);margin:0 0 14px;">Результат теста: <b style="color:var(--ink);">'+pr.quiz_score+'%</b>.'+(pr.certificate_status!=="issued"?' Сертификат на проверке у куратора.':'')+'</p>' +
-      (pr.requested_full_access ?
-        '<div class="pill" style="background:var(--primary-tint);color:var(--primary-dark);">Заявка отправлена куратору</div>' :
-        '<button class="btn btn-primary btn-block" data-action="request-full">Оставить заявку на полную программу</button>') +
-      '</div>';
+  // Строка доски: ближайший эфир / сертификат / сообщения — три разных по форме плитки, не одинаковые icon+heading карточки.
+  var mySid = me.stream_id || "";
+  var relevantEvents = calendarState.events.filter(function(ev){ return !ev.stream_id || ev.stream_id===mySid; });
+  var nextEvent = null, liveNow = false;
+  relevantEvents.forEach(function(ev){
+    var startKey = ev.event_date+"T"+(ev.event_time||"00:00");
+    var start = new Date(startKey);
+    var end = new Date(start.getTime() + (ev.duration_min||60)*60000);
+    var now = new Date();
+    if(!nextEvent && end >= now){ nextEvent = ev; liveNow = (start<=now && now<=end); }
+  });
+
+  html += '<div class="board-strip">';
+
+  html += '<div class="card" style="padding:18px;">';
+  if(nextEvent){
+    html += (liveNow ? magnet("live","Идёт сейчас") : magnet("attention","Ближайший эфир")) +
+      '<b style="font-size:14px;display:block;margin:10px 0 2px;">'+escapeHtml(nextEvent.title)+'</b>' +
+      '<span style="font-family:var(--mono);font-size:12px;color:var(--muted);">'+fmtDate(nextEvent.event_date)+' · '+escapeHtml(nextEvent.event_time||"")+'</span>' +
+      (liveNow && nextEvent.join_url ? '<a class="btn btn-sm btn-primary" style="margin-top:12px;" href="'+escapeHtml(nextEvent.join_url)+'" target="_blank" rel="noopener">Подключиться</a>' :
+        '<button class="btn btn-sm btn-ghost" style="margin-top:12px;" data-action="student-tab" data-tab="schedule">Все эфиры →</button>');
+  } else {
+    html += magnet("neutral","Эфиры") + '<p style="font-size:12.5px;color:var(--muted);margin:10px 0 0;">Пока не запланированы.</p>';
   }
+  html += '</div>';
+
+  html += '<div class="card" style="padding:18px;">';
+  if(pr.completed){
+    var issued = pr.certificate_status==="issued";
+    html += magnet(issued?"done":"attention", issued?"Сертификат выдан":"На проверке") +
+      '<div style="font-family:var(--display);font-weight:800;font-size:26px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
+      '<span style="font-size:12px;color:var(--muted);">результат теста</span>';
+    if(!issued && !pr.requested_full_access){
+      html += '<button class="btn btn-sm btn-primary btn-block" style="margin-top:12px;" data-action="request-full">Заявка на полную программу</button>';
+    } else if(pr.requested_full_access){
+      html += '<div style="margin-top:12px;">'+magnet("done","Заявка отправлена")+'</div>';
+    }
+  } else {
+    html += magnet("neutral","Сертификат") + '<p style="font-size:12.5px;color:var(--muted);margin:10px 0 0;">Появится после теста.</p>';
+  }
+  html += '</div>';
+
+  html += '<div class="card" style="padding:18px;">' +
+    magnet("neutral","Куратор") +
+    '<p style="font-size:13px;color:var(--muted);margin:10px 0 12px;line-height:1.4;">Вопрос по курсу или доступу — куратор ответит в чате.</p>' +
+    '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="messages">Открыть чат →</button>' +
+  '</div>';
+
+  html += '</div>';
+
   if(me.referral_code){
     var refLink = window.location.origin + "/?ref=" + me.referral_code;
-    html += '<div class="card" style="padding:18px;">' +
+    html += '<div class="card" style="padding:18px;margin-top:14px;max-width:520px;">' +
       '<b style="font-size:14px;display:block;margin-bottom:4px;">Пригласите коллегу</b>' +
       '<p style="font-size:12.5px;color:var(--muted);margin:0 0 12px;">Поделитесь ссылкой — когда коллега зарегистрируется по ней, мы это увидим.</p>' +
       '<div style="display:flex;gap:6px;">' +
@@ -501,7 +587,7 @@ function renderStudentHome(){
         '<button class="btn btn-sm btn-ghost" data-action="copy-ref-link">Скопировать</button>' +
       '</div></div>';
   }
-  html += '</div></div>';
+  html += '</div>';
   return el(html);
 }
 
@@ -516,15 +602,15 @@ function renderCoursePlayer(){
     var isDone = doneIds.indexOf(l.id)!==-1;
     var isLocked = l.hiddenForMe;
     nav += '<div class="lesson-item'+(i===idx?' active':'')+(isDone?' done':'')+'" data-action="goto-lesson" data-idx="'+i+'"'+(isLocked?' style="opacity:.45;cursor:not-allowed;"':'')+'>' +
-      '<span class="lesson-num">'+(isLocked?'🔒':(isDone?'✓':(i+1)))+'</span><div><b>'+escapeHtml(l.title)+'</b><span>'+(isLocked?'Временно недоступен':escapeHtml(l.duration||""))+'</span></div></div>';
+      '<span class="lesson-num">'+(isLocked?icon("lock","ic-sm"):(isDone?icon("check","ic-sm"):(i+1)))+'</span><div><b>'+escapeHtml(l.title)+'</b><span>'+(isLocked?'Временно недоступен':escapeHtml(l.duration||""))+'</span></div></div>';
   });
   nav += '<div class="lesson-item'+(studentState.quizMode?' active':'')+'" data-action="goto-quiz"'+(course.quizHiddenForMe?' style="opacity:.45;cursor:not-allowed;"':'')+'>' +
-    '<span class="lesson-num">'+(course.quizHiddenForMe?'🔒':(course.progress && course.progress.completed?'✓':'★'))+'</span><div><b>Итоговый тест</b><span>'+(course.quizHiddenForMe?'Временно недоступен':course.quiz.length+' вопросов')+'</span></div></div>';
+    '<span class="lesson-num">'+(course.quizHiddenForMe?icon("lock","ic-sm"):(course.progress && course.progress.completed?icon("check","ic-sm"):icon("star","ic-sm")))+'</span><div><b>Итоговый тест</b><span>'+(course.quizHiddenForMe?'Временно недоступен':course.quiz.length+' вопросов')+'</span></div></div>';
   nav += '</div>';
 
   if(lesson.hiddenForMe){
     var lockedBody = '<div class="lesson-body"><button class="back-link" data-action="close-course">← К курсу</button>' +
-      '<div class="empty-state" style="padding:60px 10px;"><div class="big">🔒</div>Этот урок временно недоступен.<br>Куратор откроет его позже.</div></div>';
+      '<div class="empty-state" style="padding:60px 10px;"><div class="big">'+icon("lock","ic-lg")+'</div>Этот урок временно недоступен.<br>Куратор откроет его позже.</div></div>';
     return el('<div class="player" style="margin-top:6px;">'+nav+lockedBody+'</div>');
   }
 
@@ -548,7 +634,7 @@ function renderQuizOrCert(){
   if(course.quizHiddenForMe){
     return el('<div class="player" style="margin-top:6px;grid-template-columns:1fr;"><div class="lesson-body">' +
       '<button class="back-link" data-action="close-course">← К курсу</button>' +
-      '<div class="empty-state" style="padding:60px 10px;"><div class="big">🔒</div>Итоговый тест временно недоступен.<br>Куратор откроет его позже.</div></div></div>');
+      '<div class="empty-state" style="padding:60px 10px;"><div class="big">'+icon("lock","ic-lg")+'</div>Итоговый тест временно недоступен.<br>Куратор откроет его позже.</div></div></div>');
   }
 
   var html = '<div class="player" style="margin-top:6px;grid-template-columns:1fr;"><div class="lesson-body">' +
@@ -569,7 +655,7 @@ function renderCertificate(){
   var pr = course.progress || {};
   var issued = pr.certificate_status === "issued";
   var html = '<div class="player" style="margin-top:6px;grid-template-columns:1fr;"><div class="cert">' +
-    '<div class="seal">'+(issued?'🎓':'⏳')+'</div>' +
+    '<div class="seal'+(issued?'':' pending')+'">'+icon(issued?"badge":"clock","ic-lg")+'</div>' +
     '<h2>'+(issued?'Сертификат выдан':'Тест сдан — сертификат на проверке')+'</h2>' +
     '<p style="color:var(--muted);font-size:14px;">'+escapeHtml(me.name)+', «'+escapeHtml(course.course.title)+'»</p>' +
     '<div class="score">'+pr.quiz_score+'%</div>' +
@@ -706,10 +792,19 @@ function renderMonthCalendar(){
     var dateIso = isoDate(new Date(year,month,day));
     var dayEvents = eventsByDate[dateIso] || [];
     html += '<div class="cal-cell'+(dateIso===todayIso?' cal-today':'')+'" data-action="open-event-form" data-date="'+dateIso+'"><span class="cal-daynum">'+day+'</span>';
-    dayEvents.slice(0,3).forEach(function(ev){ html += '<div class="cal-chip" data-action="open-event-details" data-id="'+ev.id+'">'+(ev.event_time?escapeHtml(ev.event_time)+' ':'')+escapeHtml(ev.title)+'</div>'; });
+    dayEvents.slice(0,3).forEach(function(ev){
+      var start = new Date(ev.event_date+"T"+(ev.event_time||"00:00")+":00");
+      var end = new Date(start.getTime() + (ev.duration_min||60)*60000);
+      var now = new Date();
+      var live = start<=now && now<=end;
+      html += '<div class="cal-chip'+(live?' live':'')+'" data-action="open-event-details" data-id="'+ev.id+'">'+(ev.event_time?escapeHtml(ev.event_time)+' ':'')+escapeHtml(ev.title)+'</div>';
+    });
     if(dayEvents.length>3) html += '<div class="cal-more">+'+(dayEvents.length-3)+' ещё</div>';
     html += '</div>';
   }
+  var totalCells = startOffset + daysInMonth;
+  var trailing = (7 - (totalCells % 7)) % 7;
+  for(var j=0;j<trailing;j++){ html += '<div class="cal-cell cal-cell-empty"></div>'; }
   html += '</div></div>';
   return html;
 }
@@ -741,7 +836,7 @@ function renderEventModal(){
     '<div class="drawer-body"><p style="font-size:13.5px;color:var(--muted);margin:0 0 4px;">'+fmtDate(ev.event_date)+' в '+escapeHtml(ev.event_time||"—")+' · '+(ev.duration_min||60)+' мин</p>' +
     (ev.speaker?'<p style="font-size:13.5px;margin:0 0 4px;">Спикер: '+escapeHtml(ev.speaker)+'</p>':'') +
     '<p style="font-size:13.5px;margin:0 0 4px;">Поток: '+(stream?escapeHtml(stream.name):'Все потоки')+'</p>' +
-    (ev.recurrence_group_id ? '<p style="font-size:12.5px;color:var(--accent);margin:0 0 4px;">🔁 Часть серии повторов</p>' : '') +
+    (ev.recurrence_group_id ? '<p style="font-size:12.5px;color:var(--accent);margin:0 0 4px;display:flex;align-items:center;gap:5px;">'+icon("repeat","ic-sm")+' Часть серии повторов</p>' : '') +
     (ev.join_url?'<p style="font-size:13.5px;margin:0 0 12px;"><a href="'+escapeHtml(ev.join_url)+'" target="_blank" rel="noopener" style="color:var(--primary-dark);">Ссылка на подключение →</a></p>':'') +
     (ev.description?'<p style="font-size:13.5px;color:var(--muted);margin:0 0 16px;">'+escapeHtml(ev.description)+'</p>':'') +
     '<div style="display:flex;gap:10px;flex-wrap:wrap;">' +
@@ -778,6 +873,14 @@ var AUDIT_ACTION_LABELS = {
   "audit.revert": "Откат действия"
 };
 function auditActionLabel(a){ return AUDIT_ACTION_LABELS[a] || a; }
+function auditActionKind(a){
+  if(!a) return "neutral";
+  if(a.indexOf("access.block")===0 || a==="staff.remove" || a==="invite.cancel") return "blocked";
+  if(a.indexOf("access.")===0 || a.indexOf("password.")===0) return "attention";
+  if(a==="certificate.issue" || a.indexOf("content.lesson_published")===0) return "done";
+  if(a==="audit.revert") return "live";
+  return "active";
+}
 
 function renderAuditLogTab(){
   var html = '<div class="card" style="padding:18px 20px;margin-top:6px;">' +
@@ -785,21 +888,21 @@ function renderAuditLogTab(){
     '<p style="font-size:12.5px;color:var(--muted);margin:0 0 16px;">Последние 100 действий. '+(me.role==="super_admin"?'Обратимые действия можно откатить — это вернёт состояние к тому, что было до изменения.':'')+'</p>';
 
   if(!staffState.auditLog.length){
-    html += '<div class="empty-state"><div class="big">📋</div>Пока пусто.</div>';
+    html += '<div class="empty-state"><div class="big">'+icon("clipboard","ic-lg")+'</div>Пока пусто.</div>';
   } else {
-    html += '<table class="roster"><thead><tr><th>Когда</th><th>Кто</th><th>Действие</th><th>Кого/чего касается</th><th></th></tr></thead><tbody>';
+    html += '<div style="overflow-x:auto;"><table class="roster"><thead><tr><th>Когда</th><th>Кто</th><th>Действие</th><th>Кого/чего касается</th><th></th></tr></thead><tbody>';
     staffState.auditLog.forEach(function(l){
       var canRevert = me.role==="super_admin" && l.revertible && !l.reverted_at;
       var statusNote = l.reverted_at ? '<span style="font-size:11px;color:var(--muted-2);display:block;">откачено '+fmtDate(l.reverted_at)+(l.reverted_by?(' · '+escapeHtml(l.reverted_by)):'')+'</span>' : '';
       html += '<tr>' +
-        '<td style="color:var(--muted);white-space:nowrap;">'+fmtDate(l.created_at)+' '+fmtTime(l.created_at)+'</td>' +
+        '<td class="audit-when">'+fmtDate(l.created_at)+' '+fmtTime(l.created_at)+'</td>' +
         '<td>'+escapeHtml(l.actor_name)+(l.actor_role?(' <span style="color:var(--muted);font-size:11.5px;">('+roleLabel(l.actor_role)+')</span>'):'')+'</td>' +
-        '<td>'+escapeHtml(auditActionLabel(l.action))+statusNote+'</td>' +
+        '<td>'+magnet(auditActionKind(l.action), auditActionLabel(l.action))+statusNote+'</td>' +
         '<td style="color:var(--muted);">'+escapeHtml(l.target_name||l.target_id||"—")+'</td>' +
         '<td style="text-align:right;">'+(canRevert ? '<button class="btn btn-sm btn-ghost" data-action="revert-log" data-id="'+l.id+'" data-label="'+escapeHtml(auditActionLabel(l.action))+'">Откатить</button>' : '')+'</td>' +
       '</tr>';
     });
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
   }
   html += '</div>';
   return el(html);
@@ -813,7 +916,7 @@ function renderMaterialsTab(){
   staffState.materials.forEach(function(l,i){
     var hiddenCount = (courseVisibility[l.id]||[]).length;
     html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);">' +
-      '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+(i+1)+'. '+escapeHtml(l.title)+(l.has_draft?' <span class="status-chip progress">черновик</span>':'')+'</b><span style="font-size:12px;color:var(--muted);">'+(hiddenCount?'Скрыт от '+hiddenCount+' врачей':'Виден всем')+'</span></div>' +
+      '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+(i+1)+'. '+escapeHtml(l.title)+(l.has_draft?' '+magnet("attention","черновик"):'')+'</b><span style="font-size:12px;color:var(--muted);">'+(hiddenCount?'Скрыт от '+hiddenCount+' врачей':'Виден всем')+'</span></div>' +
       (canEdit ? '<button class="btn btn-sm btn-ghost" data-action="open-lesson-editor" data-id="'+l.id+'">Редактировать</button>' : '') +
       '<button class="btn btn-sm '+(hiddenCount?'btn-primary':'btn-ghost')+'" data-action="open-materials-picker" data-id="'+l.id+'" data-title="'+escapeHtml(l.title)+'">Настроить видимость</button></div>';
   });
@@ -970,24 +1073,26 @@ function renderDashboardTab(){
       '<button class="btn btn-sm btn-ghost" data-action="export-dash-csv"'+(!filtered.length?' disabled':'')+'>Экспорт в CSV</button></div>';
 
   if(!filtered.length){
-    html += '<div class="empty-state"><div class="big">🔎</div>Никого не нашлось по этим фильтрам.</div>';
+    html += '<div class="empty-state"><div class="big">'+icon("search","ic-lg")+'</div>Никого не нашлось по этим фильтрам.</div>';
   } else {
     html += '<div style="overflow-x:auto;"><table class="roster"><thead><tr><th>Врач</th><th>Специальность</th><th>Поток</th><th>Продукт</th><th>Этап</th><th>Тест</th><th>Сертификат</th><th>Оплата</th><th>Доступ</th><th>Куратор</th><th>Регистрация</th><th></th></tr></thead><tbody>';
     filtered.forEach(function(s){
       var streamName = (calendarState.streams.filter(function(x){ return x.id===s.stream_id; })[0]||{}).name || "—";
       var curatorName = (directory.filter(function(c){ return c.id===s.assigned_curator_id; })[0]||{}).name || "—";
       var accessSt = accessStatusOf(s);
-      var accessLbl = accessSt==="active"?"Активен":(accessSt==="blocked"?"Заблокирован":"Истёк");
+      var accessMagnet = accessSt==="active"?magnet("active","Активен"):(accessSt==="blocked"?magnet("blocked","Заблокирован"):magnet("attention","Истёк"));
+      var stage = studentStage(s);
+      var stageMagnet = magnet(stage==="certified"?"done":(stage==="demo_done"?"attention":(stage==="in_progress"?"active":"neutral")), STAGE_LABELS[stage]);
       html += '<tr>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;"><div class="who-cell"><div class="avatar">'+initials(s.name)+'</div><div><b>'+escapeHtml(s.name)+'</b></div></div></td>' +
         '<td>'+escapeHtml(s.specialization||"—")+'</td>' +
         '<td>'+escapeHtml(streamName)+'</td>' +
         '<td>'+escapeHtml(PRODUCTS[s.product||"longevity"])+'</td>' +
-        '<td>'+STAGE_LABELS[studentStage(s)]+'</td>' +
+        '<td>'+stageMagnet+'</td>' +
         '<td>'+(typeof s.quiz_score==="number"?s.quiz_score+'%':'—')+'</td>' +
         '<td>'+(s.certificate_status==="issued"?"Выдан":"—")+'</td>' +
         '<td>'+PAYMENT_LABELS[s.payment_status||"unpaid"]+'</td>' +
-        '<td>'+accessLbl+'</td>' +
+        '<td>'+accessMagnet+'</td>' +
         '<td>'+escapeHtml(curatorName)+'</td>' +
         '<td style="color:var(--muted);">'+fmtDate(s.created_at)+'</td>' +
         '<td style="text-align:right;"><button class="btn btn-sm btn-ghost" data-action="open-student" data-id="'+s.id+'">Открыть →</button></td>' +
@@ -1049,7 +1154,7 @@ function renderRoster(){
   var html = '<div class="card" style="padding:18px 18px 6px;">' +
     '<div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;"><input class="input" id="rosterSearch" placeholder="Поиск по имени, специализации, email или телефону" value="'+escapeHtml(staffState.search)+'" style="max-width:320px;">' +
     '<button class="btn btn-sm btn-ghost" data-action="toggle-invite-student">'+(staffState.showInviteStudent?'Скрыть':'+ Пригласить врача')+'</button>' +
-    '<button class="btn btn-sm btn-ghost" data-action="open-course-preview">👁 Просмотреть как врач</button></div>';
+    '<button class="btn btn-sm btn-ghost" data-action="open-course-preview">'+icon("eye","ic-sm")+' Просмотреть как врач</button></div>';
 
   if(staffState.showInviteStudent){
     html += '<div class="tabs" style="margin-bottom:14px;">' +
@@ -1086,13 +1191,13 @@ function renderRoster(){
   }
 
   if(!students.length){
-    html += '<div class="empty-state"><div class="big">🩺</div>Пока никто не зарегистрировался.</div>';
+    html += '<div class="empty-state"><div class="big">'+icon("doctor","ic-lg")+'</div>Пока никто не зарегистрировался.</div>';
   } else {
-    html += '<table class="roster"><thead><tr><th style="width:32px;"><input type="checkbox" data-action="select-all-students"'+(allSelected?' checked':'')+'></th><th>Врач</th><th>Прогресс</th><th>Тест</th><th>Статус</th><th>Поток</th><th>Регистрация</th><th></th></tr></thead><tbody>';
+    html += '<div style="overflow-x:auto;"><table class="roster"><thead><tr><th style="width:32px;"><input type="checkbox" data-action="select-all-students"'+(allSelected?' checked':'')+'></th><th>Врач</th><th>Прогресс</th><th>Тест</th><th>Статус</th><th>Поток</th><th>Регистрация</th><th></th></tr></thead><tbody>';
     students.forEach(function(s){
       var done = (s.completed_lessons||[]).length;
       var isChecked = staffState.selectedIds.indexOf(s.id)!==-1;
-      var status = s.completed ? '<span class="status-chip done">Завершил</span>' : (done>0 ? '<span class="status-chip progress">В процессе</span>' : '<span class="status-chip new">Новый</span>');
+      var status = s.completed ? magnet("done","Завершил") : (done>0 ? magnet("active","В процессе") : magnet("neutral","Новый"));
       html += '<tr>' +
         '<td><input type="checkbox" data-action="select-student" data-id="'+s.id+'"'+(isChecked?' checked':'')+'></td>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;"><div class="who-cell"><div class="avatar">'+initials(s.name)+'</div><div><b>'+escapeHtml(s.name)+'</b><span>'+escapeHtml(s.specialization||"—")+'</span></div></div></td>' +
@@ -1104,7 +1209,7 @@ function renderRoster(){
         '<td style="text-align:right;"><button class="btn btn-sm btn-ghost" data-action="open-student" data-id="'+s.id+'">Открыть →</button></td>' +
       '</tr>';
     });
-    html += '</tbody></table>';
+    html += '</tbody></table></div>';
   }
   html += '</div>';
   return el(html);
