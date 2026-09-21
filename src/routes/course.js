@@ -179,9 +179,22 @@ router.put("/visibility/:targetId", authRequired, requireRole("curator", "admin"
   const ids = (req.body && req.body.ids) || [];
   if (!Array.isArray(ids)) return res.status(400).json({ error: "invalid_input" });
 
-  const course = await pool.query("SELECT id FROM courses LIMIT 1");
-  if (!course.rowCount) return res.status(404).json({ error: "no_course" });
-  const courseId = course.rows[0].id;
+  // targetId — либо реальный id урока (тогда курс однозначно определяется по нему),
+  // либо служебное значение "quiz" (тест общий на курс, урока нет) — тогда, как и
+  // везде в остальном коде на один курс, берём единственный существующий курс.
+  // Важно резолвить именно так, а не всегда через LIMIT 1: если курсов когда-нибудь
+  // станет больше одного, LIMIT 1 без ORDER BY может вернуть не тот курс, которому
+  // принадлежит urok, и видимость молча запишется не туда.
+  let courseId;
+  if (req.params.targetId === "quiz") {
+    const course = await pool.query("SELECT id FROM courses LIMIT 1");
+    if (!course.rowCount) return res.status(404).json({ error: "no_course" });
+    courseId = course.rows[0].id;
+  } else {
+    const lesson = await pool.query("SELECT course_id FROM lessons WHERE id=$1", [req.params.targetId]);
+    if (!lesson.rowCount) return res.status(404).json({ error: "not_found" });
+    courseId = lesson.rows[0].course_id;
+  }
 
   const map = await getHiddenForMap(courseId);
   const beforeIds = map[req.params.targetId] || [];

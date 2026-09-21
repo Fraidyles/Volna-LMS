@@ -1,4 +1,8 @@
 require("dotenv").config();
+// Каждый роут — async-функция без try/catch; без этого пакета отклонённый промис
+// внутри обработчика не долетает до error-middleware ниже и валит весь процесс
+// (Node с версии 15 завершает процесс на необработанном отклонении промиса).
+require("express-async-errors");
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");

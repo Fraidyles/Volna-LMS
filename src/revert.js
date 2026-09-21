@@ -39,9 +39,19 @@ const HANDLERS = {
   },
   "content.visibility_change": async (log) => {
     const b = requireBefore(log);
-    const course = await pool.query("SELECT id FROM courses LIMIT 1");
-    if (!course.rowCount) throw new Error("Курс не найден");
-    const courseId = course.rows[0].id;
+    // См. комментарий у PUT /course/visibility/:targetId — курс резолвится так же,
+    // через сам урок, а не через LIMIT 1, чтобы откат писал видимость в тот же курс,
+    // что и исходное действие.
+    let courseId;
+    if (log.target_id === "quiz") {
+      const course = await pool.query("SELECT id FROM courses LIMIT 1");
+      if (!course.rowCount) throw new Error("Курс не найден");
+      courseId = course.rows[0].id;
+    } else {
+      const lesson = await pool.query("SELECT course_id FROM lessons WHERE id=$1", [log.target_id]);
+      if (!lesson.rowCount) throw new Error("Урок не найден");
+      courseId = lesson.rows[0].course_id;
+    }
     const row = await pool.query("SELECT hidden_for FROM course_visibility WHERE course_id=$1", [courseId]);
     const map = row.rowCount ? row.rows[0].hidden_for : {};
     map[log.target_id] = b.ids || [];

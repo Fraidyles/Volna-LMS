@@ -58,13 +58,18 @@ var quizEditor = { open:false, id:null, question:"", options:[], correct:0 };
 function pad2(n){ return (n<10?"0":"")+n; }
 function isoDate(d){ return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); }
 function monthLabel(d){ return d.toLocaleDateString("ru-RU",{month:"long",year:"numeric"}); }
+function icsEscape(s){
+  // RFC 5545: экранировать \, ; и , в текстовых полях — иначе запятая в теме
+  // эфира ("...пептидная терапия, часть 2") ломает разбор SUMMARY в части календарей.
+  return String(s).replace(/\r?\n/g," ").replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,");
+}
 function generateICS(ev){
   var start = new Date(ev.event_date+"T"+(ev.event_time||"00:00")+":00");
   var end = new Date(start.getTime() + (ev.duration_min||60)*60000);
   function fmt(d){ return d.getFullYear()+pad2(d.getMonth()+1)+pad2(d.getDate())+"T"+pad2(d.getHours())+pad2(d.getMinutes())+"00"; }
-  var lines = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Dolgoletie LMS//RU","BEGIN:VEVENT","UID:"+ev.id+"@dolgoletie-lms","DTSTART:"+fmt(start),"DTEND:"+fmt(end),"SUMMARY:"+(ev.title||"Эфир").replace(/\r?\n/g," ")];
-  if(ev.description) lines.push("DESCRIPTION:"+ev.description.replace(/\r?\n/g," "));
-  if(ev.join_url) lines.push("LOCATION:"+ev.join_url);
+  var lines = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Dolgoletie LMS//RU","BEGIN:VEVENT","UID:"+ev.id+"@dolgoletie-lms","DTSTART:"+fmt(start),"DTEND:"+fmt(end),"SUMMARY:"+icsEscape(ev.title||"Эфир")];
+  if(ev.description) lines.push("DESCRIPTION:"+icsEscape(ev.description));
+  if(ev.join_url) lines.push("LOCATION:"+icsEscape(ev.join_url));
   lines.push("END:VEVENT","END:VCALENDAR");
   return lines.join("\r\n");
 }
