@@ -53,8 +53,8 @@ var changePasswordOpen = false;
 var previewMode = false;
 var previewReturnTab = "students";
 var tempPasswordResult = null; // {name, tempPassword} — показать один раз после сброса пароля
-var lessonEditor = { open:false, id:null, title:"", duration:"", html:"", hasDraft:false, publishedTitle:"", publishedDuration:"", publishedHtml:"", history:[], showHistory:false, showPreview:false };
-var quizEditor = { open:false, id:null, question:"", options:[], correct:0 };
+var lessonEditor = { open:false, isNew:false, id:null, title:"", duration:"", html:"", dripDays:null, hasDraft:false, publishedTitle:"", publishedDuration:"", publishedHtml:"", history:[], showHistory:false, showPreview:false };
+var quizEditor = { open:false, isNew:false, id:null, question:"", options:[], correct:0 };
 
 function pad2(n){ return (n<10?"0":"")+n; }
 function isoDate(d){ return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); }
@@ -107,7 +107,8 @@ var ICONS = {
   clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
   badge: '<circle cx="12" cy="9.5" r="5.5"/><path d="M9 14l-2 7 5-2.5L17 21l-2-7"/>',
   doctor: '<path d="M7 3.5v5a5 5 0 0 0 10 0v-5"/><path d="M17 8v2a5 5 0 0 1-10 0"/><circle cx="19" cy="5" r="2"/><path d="M12 15.5v3.5"/><circle cx="12" cy="20.5" r="1.3"/>',
-  chevron: '<path d="M6 9.5l6 6 6-6"/>'
+  chevron: '<path d="M6 9.5l6 6 6-6"/>',
+  trash: '<path d="M5 7h14"/><path d="M9 7V5.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5.5V7"/><path d="M7 7l1 12.5A1.5 1.5 0 0 0 9.5 21h5a1.5 1.5 0 0 0 1.5-1.5L17 7"/>'
 };
 function icon(name, cls){ return '<svg class="ic'+(cls?' '+cls:'')+'" viewBox="0 0 24 24">'+(ICONS[name]||'')+'</svg>'; }
 function brandMark(style){ return '<span class="mark"'+(style?' style="'+style+'"':'')+'>'+icon("doctor")+'</span>'; }
@@ -279,20 +280,22 @@ function render(){
 }
 
 function renderLessonEditorModal(){
-  var body = '<div class="drawer-head"><b style="font-size:16px;">Редактирование урока</b><button class="btn btn-ghost btn-sm" data-action="close-lesson-editor">Закрыть ✕</button></div>' +
+  var body = '<div class="drawer-head"><b style="font-size:16px;">'+(lessonEditor.isNew?"Новый урок":"Редактирование урока")+'</b><button class="btn btn-ghost btn-sm" data-action="close-lesson-editor">Закрыть ✕</button></div>' +
     '<div class="drawer-body">';
-  if(lessonEditor.id===null && !lessonEditor.title && !lessonEditor.html){
+  if(!lessonEditor.isNew && lessonEditor.id===null && !lessonEditor.title && !lessonEditor.html){
     body += '<div class="empty-state" style="padding:30px 10px;">Загрузка…</div>';
   } else {
     if(lessonEditor.hasDraft){
       body += '<div class="card" style="padding:12px 14px;margin-bottom:16px;background:var(--accent-tint);border-color:transparent;">' +
         '<b style="font-size:13px;">Есть несохранённый черновик</b> — врачи всё ещё видят опубликованную версию.</div>';
     }
-    body += '<div class="tabs" style="margin-bottom:14px;">' +
-      '<button type="button" class="tab'+(!lessonEditor.showHistory && !lessonEditor.showPreview?' active':'')+'" data-action="lesson-editor-mode" data-mode="edit">Редактирование</button>' +
-      '<button type="button" class="tab'+(lessonEditor.showPreview?' active':'')+'" data-action="lesson-editor-mode" data-mode="preview">Предпросмотр</button>' +
-      '<button type="button" class="tab'+(lessonEditor.showHistory?' active':'')+'" data-action="lesson-editor-mode" data-mode="history">История версий</button>' +
-    '</div>';
+    if(!lessonEditor.isNew){
+      body += '<div class="tabs" style="margin-bottom:14px;">' +
+        '<button type="button" class="tab'+(!lessonEditor.showHistory && !lessonEditor.showPreview?' active':'')+'" data-action="lesson-editor-mode" data-mode="edit">Редактирование</button>' +
+        '<button type="button" class="tab'+(lessonEditor.showPreview?' active':'')+'" data-action="lesson-editor-mode" data-mode="preview">Предпросмотр</button>' +
+        '<button type="button" class="tab'+(lessonEditor.showHistory?' active':'')+'" data-action="lesson-editor-mode" data-mode="history">История версий</button>' +
+      '</div>';
+    }
 
     if(lessonEditor.showHistory){
       if(!lessonEditor.history.length){
@@ -310,12 +313,15 @@ function renderLessonEditorModal(){
       body += '<form id="lessonEditorForm">' +
         '<div class="field"><label>Заголовок урока</label><input class="input" name="title" required value="'+escapeHtml(lessonEditor.title)+'"></div>' +
         '<div class="field"><label>Длительность</label><input class="input" name="duration" value="'+escapeHtml(lessonEditor.duration)+'" placeholder="Например, 5 мин"></div>' +
+        (!lessonEditor.isNew ? '<div class="field"><label>Открыть через дней после регистрации врача <span style="font-weight:400;color:var(--muted-2);">(пусто — сразу)</span></label><input class="input" type="number" min="0" id="lessonDripInput" value="'+(lessonEditor.dripDays===null||lessonEditor.dripDays===undefined?"":lessonEditor.dripDays)+'" style="max-width:120px;" placeholder="0"></div>' : '') +
         '<div class="field"><label>Содержимое (HTML)</label><textarea class="input" name="html" required style="height:260px;font-family:monospace;font-size:12.5px;">'+escapeHtml(lessonEditor.html)+'</textarea>' +
         '<p class="hint">Тот же формат, что и в исходном контенте: &lt;p&gt;, &lt;h4&gt;, &lt;ul&gt;&lt;li&gt;, а также видео через &lt;div class="video-wrap"&gt;&lt;iframe...&gt;. Опасные теги (script и т.п.) вырезаются автоматически.</p></div>' +
         '<div class="err-text" id="lessonEditorError" style="display:none;"></div>' +
         '<div style="display:flex;gap:10px;">' +
-          '<button class="btn btn-ghost" type="submit" data-submit-mode="draft">Сохранить черновик</button>' +
-          '<button class="btn btn-primary" type="submit" data-submit-mode="publish">Сохранить и опубликовать</button>' +
+          (lessonEditor.isNew
+            ? '<button class="btn btn-primary" type="submit" data-submit-mode="create">Добавить урок</button>'
+            : '<button class="btn btn-ghost" type="submit" data-submit-mode="draft">Сохранить черновик</button>' +
+              '<button class="btn btn-primary" type="submit" data-submit-mode="publish">Сохранить и опубликовать</button>') +
         '</div>' +
       '</form>';
     }
@@ -325,17 +331,19 @@ function renderLessonEditorModal(){
 }
 
 function renderQuizEditorModal(){
-  var body = '<div class="drawer-head"><b style="font-size:16px;">Редактирование вопроса</b><button class="btn btn-ghost btn-sm" data-action="close-quiz-editor">Закрыть ✕</button></div>' +
+  var body = '<div class="drawer-head"><b style="font-size:16px;">'+(quizEditor.isNew?"Новый вопрос":"Редактирование вопроса")+'</b><button class="btn btn-ghost btn-sm" data-action="close-quiz-editor">Закрыть ✕</button></div>' +
     '<div class="drawer-body"><form id="quizEditorForm">' +
       '<div class="field"><label>Текст вопроса</label><textarea class="input" name="question" required style="height:60px;">'+escapeHtml(quizEditor.question)+'</textarea></div>' +
       '<label>Варианты ответа — отметьте правильный</label>';
   quizEditor.options.forEach(function(opt,i){
     body += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">' +
       '<input type="radio" name="correct" value="'+i+'"'+(quizEditor.correct===i?' checked':'')+' style="accent-color:var(--primary);">' +
-      '<input class="input" name="opt'+i+'" value="'+escapeHtml(opt)+'" required></div>';
+      '<input class="input" name="opt'+i+'" value="'+escapeHtml(opt)+'" required>' +
+      '<button type="button" class="btn btn-sm btn-ghost" data-action="remove-quiz-option" data-idx="'+i+'" title="Убрать вариант">✕</button></div>';
   });
-  body += '<div class="err-text" id="quizEditorError" style="display:none;"></div>' +
-      '<button class="btn btn-primary btn-block" type="submit" style="margin-top:10px;">Сохранить вопрос</button>' +
+  body += '<button type="button" class="btn btn-sm btn-ghost" data-action="add-quiz-option" style="margin-bottom:10px;">+ Добавить вариант</button>' +
+      '<div class="err-text" id="quizEditorError" style="display:none;"></div>' +
+      '<button class="btn btn-primary btn-block" type="submit" style="margin-top:10px;">'+(quizEditor.isNew?"Добавить вопрос":"Сохранить вопрос")+'</button>' +
     '</form></div>';
   return el('<div class="overlay" data-action="overlay-close-quiz-editor"><div class="drawer" data-stop="1" style="width:min(520px,100%);">'+body+'</div></div>');
 }
@@ -918,7 +926,13 @@ var AUDIT_ACTION_LABELS = {
   "content.lesson_draft_saved": "Сохранён черновик урока",
   "content.lesson_published": "Опубликован урок",
   "content.lesson_restored": "Восстановлена версия урока",
+  "content.lesson_created": "Добавлен урок",
+  "content.lesson_deleted": "Удалён урок",
+  "content.lessons_reordered": "Изменён порядок уроков",
   "content.quiz_edited": "Отредактирован вопрос теста",
+  "content.quiz_created": "Добавлен вопрос теста",
+  "content.quiz_deleted": "Удалён вопрос теста",
+  "content.quiz_reordered": "Изменён порядок вопросов теста",
   "stream.create": "Создан поток",
   "stream.delete": "Удалён поток",
   "event.create": "Создан эфир",
@@ -964,15 +978,25 @@ function renderAuditLogTab(){
 
 function renderMaterialsTab(){
   var canEdit = me.role==="admin" || me.role==="super_admin";
-  var html = '<div class="card" style="padding:18px 20px;margin-top:6px;">' +
-    '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Доступность материалов демо-курса</b>' +
+  var html = '<div>' +
+    '<div class="card" style="padding:18px 20px;margin-top:6px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:10px;">' +
+      '<b style="font-size:14.5px;">Доступность материалов демо-курса</b>' +
+      (canEdit ? '<button class="btn btn-sm btn-primary" data-action="open-lesson-creator">+ Добавить урок</button>' : '') +
+    '</div>' +
     '<p style="font-size:12.5px;color:var(--muted);margin:0 0 16px;">Скройте урок или тест от конкретных врачей или от всех сразу. Прогресс, который врачи уже прошли, сохранится.</p>';
   staffState.materials.forEach(function(l,i){
     var hiddenCount = (courseVisibility[l.id]||[]).length;
+    var isFirst = i===0, isLast = i===staffState.materials.length-1;
     html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);">' +
-      '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+(i+1)+'. '+escapeHtml(l.title)+(l.has_draft?' '+magnet("attention","черновик"):'')+'</b><span style="font-size:12px;color:var(--muted);">'+(hiddenCount?'Скрыт от '+hiddenCount+' врачей':'Виден всем')+'</span></div>' +
+      (canEdit ? '<div style="display:flex;flex-direction:column;gap:2px;">' +
+        '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-lesson" data-id="'+l.id+'" data-dir="up"'+(isFirst?' disabled':'')+' title="Выше">↑</button>' +
+        '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-lesson" data-id="'+l.id+'" data-dir="down"'+(isLast?' disabled':'')+' title="Ниже">↓</button></div>' : '') +
+      '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+(i+1)+'. '+escapeHtml(l.title)+(l.has_draft?' '+magnet("attention","черновик"):'')+'</b><span style="font-size:12px;color:var(--muted);">'+(hiddenCount?'Скрыт от '+hiddenCount+' врачей':'Виден всем')+(l.drip_days?' · открывается через '+l.drip_days+' дн. после регистрации':'')+'</span></div>' +
       (canEdit ? '<button class="btn btn-sm btn-ghost" data-action="open-lesson-editor" data-id="'+l.id+'">Редактировать</button>' : '') +
-      '<button class="btn btn-sm '+(hiddenCount?'btn-primary':'btn-ghost')+'" data-action="open-materials-picker" data-id="'+l.id+'" data-title="'+escapeHtml(l.title)+'">Настроить видимость</button></div>';
+      '<button class="btn btn-sm '+(hiddenCount?'btn-primary':'btn-ghost')+'" data-action="open-materials-picker" data-id="'+l.id+'" data-title="'+escapeHtml(l.title)+'">Настроить видимость</button>' +
+      (canEdit ? '<button class="btn btn-sm btn-ghost" data-action="delete-lesson" data-id="'+l.id+'" data-title="'+escapeHtml(l.title)+'" title="Удалить урок">'+icon("trash","ic-sm")+'</button>' : '') +
+    '</div>';
   });
   var quizHiddenCount = (courseVisibility.quiz||[]).length;
   html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;">' +
@@ -982,15 +1006,24 @@ function renderMaterialsTab(){
 
   if(canEdit){
     html += '<div class="card" style="padding:18px 20px;margin-top:16px;">' +
-      '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Вопросы итогового теста</b>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:10px;">' +
+        '<b style="font-size:14.5px;">Вопросы итогового теста</b>' +
+        '<button class="btn btn-sm btn-primary" data-action="open-quiz-creator">+ Добавить вопрос</button>' +
+      '</div>' +
       '<p style="font-size:12.5px;color:var(--muted);margin:0 0 16px;">Изменение текста, вариантов ответа или правильного варианта.</p>';
     staffState.quizAdmin.forEach(function(q,i){
+      var qIsFirst = i===0, qIsLast = i===staffState.quizAdmin.length-1;
       html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);">' +
+        '<div style="display:flex;flex-direction:column;gap:2px;">' +
+          '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-quiz-question" data-id="'+q.id+'" data-dir="up"'+(qIsFirst?' disabled':'')+' title="Выше">↑</button>' +
+          '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-quiz-question" data-id="'+q.id+'" data-dir="down"'+(qIsLast?' disabled':'')+' title="Ниже">↓</button></div>' +
         '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+(i+1)+'. '+escapeHtml(q.question)+'</b><span style="font-size:12px;color:var(--muted);">'+q.options.length+' варианта, правильный: «'+escapeHtml(q.options[q.correct]||"")+'»</span></div>' +
-        '<button class="btn btn-sm btn-ghost" data-action="open-quiz-editor" data-id="'+q.id+'">Редактировать</button></div>';
+        '<button class="btn btn-sm btn-ghost" data-action="open-quiz-editor" data-id="'+q.id+'">Редактировать</button>' +
+        '<button class="btn btn-sm btn-ghost" data-action="delete-quiz-question" data-id="'+q.id+'" title="Удалить вопрос">'+icon("trash","ic-sm")+'</button></div>';
     });
     html += '</div>';
   }
+  html += '</div>';
   return el(html);
 }
 
@@ -1698,7 +1731,7 @@ function wireEvents(root){
     if(action==="close-temp-password"){ tempPasswordResult=null; render(); return; }
 
     if(action==="open-lesson-editor"){
-      lessonEditor = { open:true, id:t.getAttribute("data-id"), title:"", duration:"", html:"", hasDraft:false, publishedTitle:"", publishedDuration:"", publishedHtml:"", history:[], showHistory:false, showPreview:false };
+      lessonEditor = { open:true, isNew:false, id:t.getAttribute("data-id"), title:"", duration:"", html:"", dripDays:null, hasDraft:false, publishedTitle:"", publishedDuration:"", publishedHtml:"", history:[], showHistory:false, showPreview:false };
       render();
       try{
         var le=await api("/course/lessons/"+lessonEditor.id);
@@ -1708,11 +1741,33 @@ function wireEvents(root){
         lessonEditor.title = l.has_draft ? l.draft_title : l.title;
         lessonEditor.duration = l.has_draft ? (l.draft_duration||"") : (l.duration||"");
         lessonEditor.html = l.has_draft ? l.draft_html : l.html;
+        lessonEditor.dripDays = (typeof l.drip_days==="number") ? l.drip_days : null;
       }catch(err){ showToast(err.message); lessonEditor.open=false; }
+      render(); return;
+    }
+    if(action==="open-lesson-creator"){
+      lessonEditor = { open:true, isNew:true, id:null, title:"", duration:"", html:"<p></p>", dripDays:null, hasDraft:false, publishedTitle:"", publishedDuration:"", publishedHtml:"", history:[], showHistory:false, showPreview:false };
       render(); return;
     }
     if(action==="close-lesson-editor"){ lessonEditor.open=false; render(); return; }
     if(action==="overlay-close-lesson-editor" && !e.target.closest("[data-stop]")){ lessonEditor.open=false; render(); return; }
+    if(action==="delete-lesson"){
+      if(!confirm('Удалить урок «'+t.getAttribute("data-title")+'»? Действие можно откатить в журнале.')) return;
+      try{ await api("/course/lessons/"+t.getAttribute("data-id"), { method:"DELETE" }); showToast("Урок удалён"); await loadStaffData(); }
+      catch(err){ showToast(err.message); }
+      render(); return;
+    }
+    if(action==="move-lesson"){
+      var mlId=t.getAttribute("data-id"); var mlDir=t.getAttribute("data-dir");
+      var mlIds=staffState.materials.map(function(x){ return x.id; });
+      var mlIdx=mlIds.indexOf(mlId);
+      var mlSwap = mlDir==="up" ? mlIdx-1 : mlIdx+1;
+      if(mlIdx===-1 || mlSwap<0 || mlSwap>=mlIds.length) return;
+      var tmp=mlIds[mlIdx]; mlIds[mlIdx]=mlIds[mlSwap]; mlIds[mlSwap]=tmp;
+      try{ await api("/course/lessons/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: mlIds }) }); await loadStaffData(); }
+      catch(err){ showToast(err.message); }
+      render(); return;
+    }
     if(action==="lesson-editor-mode"){
       var frm = document.getElementById("lessonEditorForm");
       if(frm){
@@ -1742,11 +1797,51 @@ function wireEvents(root){
     if(action==="open-quiz-editor"){
       var q=staffState.quizAdmin.find(function(x){ return x.id===t.getAttribute("data-id"); });
       if(!q) return;
-      quizEditor = { open:true, id:q.id, question:q.question, options:q.options.slice(), correct:q.correct };
+      quizEditor = { open:true, isNew:false, id:q.id, question:q.question, options:q.options.slice(), correct:q.correct };
+      render(); return;
+    }
+    if(action==="open-quiz-creator"){
+      quizEditor = { open:true, isNew:true, id:null, question:"", options:["",""], correct:0 };
       render(); return;
     }
     if(action==="close-quiz-editor"){ quizEditor.open=false; render(); return; }
     if(action==="overlay-close-quiz-editor" && !e.target.closest("[data-stop]")){ quizEditor.open=false; render(); return; }
+    if(action==="delete-quiz-question"){
+      if(!confirm("Удалить этот вопрос теста? Действие можно откатить в журнале.")) return;
+      try{ await api("/course/quiz-admin/"+t.getAttribute("data-id"), { method:"DELETE" }); showToast("Вопрос удалён"); await loadStaffData(); }
+      catch(err){ showToast(err.message); }
+      render(); return;
+    }
+    if(action==="move-quiz-question"){
+      var mqId=t.getAttribute("data-id"); var mqDir=t.getAttribute("data-dir");
+      var mqIds=staffState.quizAdmin.map(function(x){ return x.id; });
+      var mqIdx=mqIds.indexOf(mqId);
+      var mqSwap = mqDir==="up" ? mqIdx-1 : mqIdx+1;
+      if(mqIdx===-1 || mqSwap<0 || mqSwap>=mqIds.length) return;
+      var tmpq=mqIds[mqIdx]; mqIds[mqIdx]=mqIds[mqSwap]; mqIds[mqSwap]=tmpq;
+      try{ await api("/course/quiz-admin/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: mqIds }) }); await loadStaffData(); }
+      catch(err){ showToast(err.message); }
+      render(); return;
+    }
+    if(action==="add-quiz-option" || action==="remove-quiz-option"){
+      var qFrm=document.getElementById("quizEditorForm");
+      if(qFrm){
+        quizEditor.question=qFrm.question.value;
+        quizEditor.options=quizEditor.options.map(function(_,i){ var f=qFrm["opt"+i]; return f?f.value:""; });
+        var checkedRadio=qFrm.querySelector('input[name="correct"]:checked');
+        if(checkedRadio) quizEditor.correct=parseInt(checkedRadio.value,10);
+      }
+      if(action==="add-quiz-option"){
+        quizEditor.options.push("");
+      } else {
+        var roIdx=parseInt(t.getAttribute("data-idx"),10);
+        if(quizEditor.options.length<=2){ showToast("Минимум 2 варианта ответа"); return; }
+        quizEditor.options.splice(roIdx,1);
+        if(quizEditor.correct===roIdx) quizEditor.correct=0;
+        else if(quizEditor.correct>roIdx) quizEditor.correct--;
+      }
+      render(); return;
+    }
 
     if(action==="toggle-stream-form"){ calendarState.showStreamForm=!calendarState.showStreamForm; render(); return; }
     if(action==="delete-stream"){
@@ -1915,16 +2010,27 @@ function wireEvents(root){
       var btnsLe = e.target.querySelectorAll("button[type=submit]"); btnsLe.forEach(function(b){ b.disabled=true; });
       var payload = { title:fdle.get("title"), duration:fdle.get("duration"), html:fdle.get("html") };
       try{
-        await api("/course/lessons/"+lessonEditor.id+"/draft", { method:"PUT", body: JSON.stringify(payload) });
-        if(submitMode==="publish"){
-          await api("/course/lessons/"+lessonEditor.id+"/publish", { method:"POST" });
-          var m=staffState.materials.find(function(x){return x.id===lessonEditor.id;}); if(m){ m.title=payload.title; m.has_draft=false; }
+        if(submitMode==="create"){
+          await api("/course/lessons", { method:"POST", body: JSON.stringify(payload) });
           lessonEditor.open=false;
-          showToast("Урок опубликован");
+          showToast("Урок добавлен");
         } else {
-          var m2=staffState.materials.find(function(x){return x.id===lessonEditor.id;}); if(m2) m2.has_draft=true;
-          lessonEditor.open=false;
-          showToast("Черновик сохранён — врачи пока видят прежнюю версию");
+          var dripInput=document.getElementById("lessonDripInput");
+          if(dripInput){
+            var dripVal = dripInput.value==="" ? null : parseInt(dripInput.value,10);
+            await api("/course/lessons/"+lessonEditor.id+"/drip", { method:"PUT", body: JSON.stringify({ dripDays: dripVal }) });
+          }
+          await api("/course/lessons/"+lessonEditor.id+"/draft", { method:"PUT", body: JSON.stringify(payload) });
+          if(submitMode==="publish"){
+            await api("/course/lessons/"+lessonEditor.id+"/publish", { method:"POST" });
+            var m=staffState.materials.find(function(x){return x.id===lessonEditor.id;}); if(m){ m.title=payload.title; m.has_draft=false; }
+            lessonEditor.open=false;
+            showToast("Урок опубликован");
+          } else {
+            var m2=staffState.materials.find(function(x){return x.id===lessonEditor.id;}); if(m2) m2.has_draft=true;
+            lessonEditor.open=false;
+            showToast("Черновик сохранён — врачи пока видят прежнюю версию");
+          }
         }
         await loadStaffData();
       }catch(err){
@@ -1941,10 +2047,16 @@ function wireEvents(root){
       var opts=quizEditor.options.map(function(_,i){ return fdqe.get("opt"+i); });
       var correctVal=parseInt(fdqe.get("correct"),10);
       try{
-        await api("/course/quiz-admin/"+quizEditor.id, { method:"PUT", body: JSON.stringify({ question:fdqe.get("question"), options:opts, correct:correctVal }) });
-        var qi=staffState.quizAdmin.find(function(x){return x.id===quizEditor.id;});
-        if(qi){ qi.question=fdqe.get("question"); qi.options=opts; qi.correct=correctVal; }
-        quizEditor.open=false; showToast("Вопрос сохранён");
+        if(quizEditor.isNew){
+          await api("/course/quiz-admin", { method:"POST", body: JSON.stringify({ question:fdqe.get("question"), options:opts, correct:correctVal }) });
+          quizEditor.open=false; showToast("Вопрос добавлен");
+        } else {
+          await api("/course/quiz-admin/"+quizEditor.id, { method:"PUT", body: JSON.stringify({ question:fdqe.get("question"), options:opts, correct:correctVal }) });
+          var qi=staffState.quizAdmin.find(function(x){return x.id===quizEditor.id;});
+          if(qi){ qi.question=fdqe.get("question"); qi.options=opts; qi.correct=correctVal; }
+          quizEditor.open=false; showToast("Вопрос сохранён");
+        }
+        await loadStaffData();
       }catch(err){ errQe.textContent=err.message; errQe.style.display="block"; btnQe.disabled=false; btnQe.textContent="Сохранить вопрос"; }
       render(); return;
     }

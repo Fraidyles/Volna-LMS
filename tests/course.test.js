@@ -177,4 +177,132 @@ describe("Курс врача", () => {
     const check = await pool.query("SELECT certificate_status FROM progress WHERE user_id=$1", [passed.id]);
     expect(check.rows[0].certificate_status).toBe("issued");
   });
+
+  // Ниже — конструктор курса. Роуты резолвят "курс" через `SELECT id FROM courses LIMIT 1`
+  // (в проде курс всегда один, так и останется), поэтому тесты сами один раз узнают,
+  // на какой courses.id это разрешится в этом прогоне, и дальше работают только с ним —
+  // без предположений о том, что это обязательно course.courseId из seedCourse() этого файла.
+  // Ставим эти тесты последними в файле: они удаляют уроки/вопросы вплоть до последнего,
+  // так что ничего более раннего в этом файле их не переживёт.
+  describe("Конструктор курса (админ/супер-админ)", () => {
+    test("урок: можно добавить, переставить порядок и удалить", async () => {
+      const admin = await createUser({ role: "super_admin" });
+      const cookie = await loginAs(admin);
+      const targetCourseId = (await pool.query("SELECT id FROM courses LIMIT 1")).rows[0].id;
+
+      const createRes = await request(app).post("/api/course/lessons").set("Cookie", cookie)
+        .send({ title: "Новый урок", duration: "4 мин", html: "<p>Текст нового урока</p>" });
+      expect(createRes.status).toBe(200);
+      const newId = createRes.body.id;
+
+      const afterCreate = await pool.query("SELECT id, idx FROM lessons WHERE course_id=$1 ORDER BY idx", [targetCourseId]);
+      expect(afterCreate.rows.find((r) => r.id === newId)).toBeTruthy();
+
+      const reversedOrder = afterCreate.rows.map((r) => r.id).reverse();
+      const reorderRes = await request(app).put("/api/course/lessons/reorder").set("Cookie", cookie)
+        .send({ orderedIds: reversedOrder });
+      expect(reorderRes.status).toBe(200);
+      const afterReorder = await pool.query("SELECT id FROM lessons WHERE course_id=$1 ORDER BY idx", [targetCourseId]);
+      expect(afterReorder.rows.map((r) => r.id)).toEqual(reversedOrder);
+
+      const deleteRes = await request(app).delete(`/api/course/lessons/${newId}`).set("Cookie", cookie);
+      expect(deleteRes.status).toBe(200);
+      const afterDelete = await pool.query("SELECT id FROM lessons WHERE id=$1", [newId]);
+      expect(afterDelete.rowCount).toBe(0);
+    });
+
+    test("урок: удалённый через откат в журнале восстанавливается", async () => {
+      const admin = await createUser({ role: "super_admin" });
+      const cookie = await loginAs(admin);
+
+      const createRes = await request(app).post("/api/course/lessons").set("Cookie", cookie)
+        .send({ title: "Урок для отката", duration: "3 мин", html: "<p>Контент</p>" });
+      const lessonId = createRes.body.id;
+
+      const deleteRes = await request(app).delete(`/api/course/lessons/${lessonId}`).set("Cookie", cookie);
+      expect(deleteRes.status).toBe(200);
+
+      const logRow = await pool.query(
+        "SELECT id FROM audit_log WHERE action='content.lesson_deleted' AND target_id=$1 ORDER BY created_at DESC LIMIT 1",
+        [lessonId]
+      );
+      expect(logRow.rowCount).toBe(1);
+
+      const revertRes = await request(app).post(`/api/staff/audit-log/${logRow.rows[0].id}/revert`).set("Cookie", cookie);
+      expect(revertRes.status).toBe(200);
+
+      const restored = await pool.query("SELECT title FROM lessons WHERE id=$1", [lessonId]);
+      expect(restored.rowCount).toBe(1);
+      expect(restored.rows[0].title).toBe("Урок для отката");
+    });
+
+    test("урок: нельзя удалить последний оставшийся в курсе", async () => {
+      const admin = await createUser({ role: "super_admin" });
+      const cookie = await loginAs(admin);
+      const targetCourseId = (await pool.query("SELECT id FROM courses LIMIT 1")).rows[0].id;
+
+      let remaining = (await pool.query("SELECT id FROM lessons WHERE course_id=$1 ORDER BY idx", [targetCourseId])).rows.map((r) => r.id);
+      // Съедаем все, кроме одного — оставшиеся удаления должны проходить успешно.
+      while (remaining.length > 1) {
+        const res = await request(app).delete(`/api/course/lessons/${remaining[0]}`).set("Cookie", cookie);
+        expect(res.status).toBe(200);
+        remaining.shift();
+      }
+      const lastAttempt = await request(app).delete(`/api/course/lessons/${remaining[0]}`).set("Cookie", cookie);
+      expect(lastAttempt.status).toBe(400);
+      expect(lastAttempt.body.error).toBe("last_lesson");
+    });
+
+    test("тест: можно добавить, переставить и удалить вопрос; нельзя удалить последний", async () => {
+      const admin = await createUser({ role: "super_admin" });
+      const cookie = await loginAs(admin);
+      const targetCourseId = (await pool.query("SELECT id FROM courses LIMIT 1")).rows[0].id;
+
+      const createRes = await request(app).post("/api/course/quiz-admin").set("Cookie", cookie)
+        .send({ question: "Новый вопрос?", options: ["А", "Б"], correct: 0 });
+      expect(createRes.status).toBe(200);
+      const newQId = createRes.body.id;
+
+      const afterCreate = await pool.query("SELECT id FROM quiz_questions WHERE course_id=$1 ORDER BY idx", [targetCourseId]);
+      const reversedOrder = afterCreate.rows.map((r) => r.id).reverse();
+      const reorderRes = await request(app).put("/api/course/quiz-admin/reorder").set("Cookie", cookie)
+        .send({ orderedIds: reversedOrder });
+      expect(reorderRes.status).toBe(200);
+
+      let remaining = reversedOrder.slice();
+      while (remaining.length > 1) {
+        const res = await request(app).delete(`/api/course/quiz-admin/${remaining[0]}`).set("Cookie", cookie);
+        expect(res.status).toBe(200);
+        remaining.shift();
+      }
+      const lastAttempt = await request(app).delete(`/api/course/quiz-admin/${remaining[0]}`).set("Cookie", cookie);
+      expect(lastAttempt.status).toBe(400);
+      expect(lastAttempt.body.error).toBe("last_question");
+    });
+
+    test("дрип: можно назначить и снять задержку открытия урока", async () => {
+      const admin = await createUser({ role: "super_admin" });
+      const cookie = await loginAs(admin);
+      const targetCourseId = (await pool.query("SELECT id FROM courses LIMIT 1")).rows[0].id;
+      const anyLesson = (await pool.query("SELECT id FROM lessons WHERE course_id=$1 LIMIT 1", [targetCourseId])).rows[0].id;
+
+      const setRes = await request(app).put(`/api/course/lessons/${anyLesson}/drip`).set("Cookie", cookie).send({ dripDays: 7 });
+      expect(setRes.status).toBe(200);
+      const check1 = await pool.query("SELECT drip_days FROM lessons WHERE id=$1", [anyLesson]);
+      expect(check1.rows[0].drip_days).toBe(7);
+
+      const clearRes = await request(app).put(`/api/course/lessons/${anyLesson}/drip`).set("Cookie", cookie).send({ dripDays: null });
+      expect(clearRes.status).toBe(200);
+      const check2 = await pool.query("SELECT drip_days FROM lessons WHERE id=$1", [anyLesson]);
+      expect(check2.rows[0].drip_days).toBeNull();
+    });
+
+    test("куратор не может пользоваться конструктором курса (403)", async () => {
+      const curator = await createUser({ role: "curator" });
+      const cookie = await loginAs(curator);
+      const res = await request(app).post("/api/course/lessons").set("Cookie", cookie)
+        .send({ title: "x", duration: "1 мин", html: "<p>x</p>" });
+      expect(res.status).toBe(403);
+    });
+  });
 });

@@ -192,3 +192,43 @@ CREATE TABLE IF NOT EXISTS student_notes (
 );
 CREATE INDEX IF NOT EXISTS idx_student_notes_student ON student_notes(student_id, created_at DESC);
 
+-- ---------- Этап 7: конструктор курса, дрип-открытие, коммьюнити потока, уведомления, геймификация ----------
+
+-- Дрип: урок открывается автоматически через N дней после регистрации врача (NULL — сразу).
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS drip_days INT;
+
+-- Точка отсчёта "когда врач начал курс" — раньше не хранилась отдельно от created_at пользователя.
+ALTER TABLE progress ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
+-- Геймификация: серия дней подряд с активностью + очки считаются на лету из прогресса, не хранятся.
+ALTER TABLE progress ADD COLUMN IF NOT EXISTS current_streak INT NOT NULL DEFAULT 0;
+ALTER TABLE progress ADD COLUMN IF NOT EXISTS longest_streak INT NOT NULL DEFAULT 0;
+ALTER TABLE progress ADD COLUMN IF NOT EXISTS last_streak_date DATE;
+
+-- Онбординг-чеклист: врач может закрыть карточку вручную, не дожидаясь выполнения всех пунктов.
+ALTER TABLE progress ADD COLUMN IF NOT EXISTS onboarding_dismissed BOOLEAN NOT NULL DEFAULT false;
+
+-- Общение внутри потока (когорты): видно всем врачам этого потока + персоналу.
+CREATE TABLE IF NOT EXISTS stream_messages (
+  id            TEXT PRIMARY KEY,
+  stream_id     TEXT NOT NULL REFERENCES streams(id) ON DELETE CASCADE,
+  author_id     TEXT,
+  author_name   TEXT NOT NULL,
+  author_role   TEXT NOT NULL,
+  body          TEXT NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_stream_messages_stream ON stream_messages(stream_id, created_at);
+
+-- Центр уведомлений врача.
+CREATE TABLE IF NOT EXISTS notifications (
+  id            TEXT PRIMARY KEY,
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type          TEXT NOT NULL,
+  title         TEXT NOT NULL,
+  body          TEXT,
+  read_at       TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, created_at DESC);
+

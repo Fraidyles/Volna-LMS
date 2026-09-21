@@ -87,6 +87,30 @@ const HANDLERS = {
       [b.name, b.phone, b.workplace, b.specialization, log.target_id]
     );
   },
+  "content.lesson_created": async (log) => {
+    await pool.query("DELETE FROM lessons WHERE id=$1", [log.target_id]);
+  },
+  "content.lesson_deleted": async (log) => {
+    const b = requireBefore(log);
+    const course = await pool.query("SELECT id FROM courses LIMIT 1");
+    if (!course.rowCount) throw new Error("Курс не найден");
+    await pool.query(
+      "INSERT INTO lessons (id, course_id, idx, title, duration, html, drip_days) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+      [log.target_id, course.rows[0].id, b.idx, b.title, b.duration, b.html, b.dripDays]
+    );
+  },
+  "content.quiz_created": async (log) => {
+    await pool.query("DELETE FROM quiz_questions WHERE id=$1", [log.target_id]);
+  },
+  "content.quiz_deleted": async (log) => {
+    const b = requireBefore(log);
+    const course = await pool.query("SELECT id FROM courses LIMIT 1");
+    if (!course.rowCount) throw new Error("Курс не найден");
+    await pool.query(
+      "INSERT INTO quiz_questions (id, course_id, idx, question, options, correct) VALUES ($1,$2,$3,$4,$5,$6)",
+      [log.target_id, course.rows[0].id, b.idx, b.question, JSON.stringify(b.options), b.correct]
+    );
+  },
   "invite.create": async (log) => {
     await pool.query("DELETE FROM invites WHERE email=$1", [log.target_id]);
   },

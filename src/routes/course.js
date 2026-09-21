@@ -213,7 +213,7 @@ router.get("/materials", authRequired, requireRole("curator", "admin", "super_ad
   const course = await pool.query("SELECT id, title FROM courses LIMIT 1");
   if (!course.rowCount) return res.json({ lessons: [] });
   const lessons = await pool.query(
-    "SELECT id, idx, title, has_draft FROM lessons WHERE course_id=$1 ORDER BY idx",
+    "SELECT id, idx, title, has_draft, drip_days FROM lessons WHERE course_id=$1 ORDER BY idx",
     [course.rows[0].id]
   );
   res.json({ lessons: lessons.rows });
@@ -264,11 +264,85 @@ router.put("/visibility/:targetId", authRequired, requireRole("curator", "admin"
 
 router.get("/lessons/:id", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
   const result = await pool.query(
-    "SELECT id, idx, title, duration, html, draft_title, draft_duration, draft_html, has_draft FROM lessons WHERE id=$1",
+    "SELECT id, idx, title, duration, html, drip_days, draft_title, draft_duration, draft_html, has_draft FROM lessons WHERE id=$1",
     [req.params.id]
   );
   if (!result.rowCount) return res.status(404).json({ error: "not_found" });
   res.json({ lesson: result.rows[0] });
+});
+
+/* ---------- Конструктор курса: добавить/удалить/переставить урок (только администраторы) ---------- */
+
+router.post("/lessons", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const { title, duration, html } = req.body || {};
+  if (!title || !title.trim() || !html || !html.trim()) {
+    return res.status(400).json({ error: "invalid_input", message: "Заполните заголовок и содержимое урока" });
+  }
+  const course = await pool.query("SELECT id FROM courses LIMIT 1");
+  if (!course.rowCount) return res.status(404).json({ error: "no_course" });
+  const courseId = course.rows[0].id;
+
+  const maxIdx = await pool.query("SELECT COALESCE(MAX(idx), -1) AS m FROM lessons WHERE course_id=$1", [courseId]);
+  const id = crypto.randomUUID();
+  const clean = sanitizeLessonHtml(html);
+  await pool.query(
+    "INSERT INTO lessons (id, course_id, idx, title, duration, html) VALUES ($1,$2,$3,$4,$5,$6)",
+    [id, courseId, maxIdx.rows[0].m + 1, title.trim(), duration || "", clean]
+  );
+  await logAction(req.user, "content.lesson_created", "lesson", id, title.trim(), {}, true);
+  res.json({ ok: true, id });
+});
+
+router.delete("/lessons/:id", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const before = await pool.query("SELECT * FROM lessons WHERE id=$1", [req.params.id]);
+  if (!before.rowCount) return res.status(404).json({ error: "not_found" });
+  const l = before.rows[0];
+
+  const count = await pool.query("SELECT COUNT(*)::int AS c FROM lessons WHERE course_id=$1", [l.course_id]);
+  if (count.rows[0].c <= 1) {
+    return res.status(400).json({ error: "last_lesson", message: "В курсе должен остаться хотя бы один урок" });
+  }
+
+  // Урок мог быть скрыт от кого-то персонально — снимаем эту запись, чтобы не копить мусор в JSON-карте.
+  const hiddenMap = await getHiddenForMap(l.course_id);
+  if (hiddenMap[l.id]) { delete hiddenMap[l.id]; await pool.query(
+    "UPDATE course_visibility SET hidden_for=$1 WHERE course_id=$2", [JSON.stringify(hiddenMap), l.course_id]
+  ); }
+
+  await pool.query("DELETE FROM lessons WHERE id=$1", [req.params.id]);
+  await logAction(req.user, "content.lesson_deleted", "lesson", l.id, l.title, {
+    before: { idx: l.idx, title: l.title, duration: l.duration, html: l.html, dripDays: l.drip_days }
+  }, true);
+  res.json({ ok: true });
+});
+
+router.put("/lessons/reorder", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const ids = (req.body && req.body.orderedIds) || [];
+  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "invalid_input" });
+  const course = await pool.query("SELECT id FROM courses LIMIT 1");
+  if (!course.rowCount) return res.status(404).json({ error: "no_course" });
+  const existing = await pool.query("SELECT id FROM lessons WHERE course_id=$1", [course.rows[0].id]);
+  const existingIds = existing.rows.map((r) => r.id);
+  if (ids.length !== existingIds.length || !existingIds.every((id) => ids.includes(id))) {
+    return res.status(400).json({ error: "invalid_input", message: "Список должен содержать все уроки курса ровно один раз" });
+  }
+  for (let i = 0; i < ids.length; i++) {
+    await pool.query("UPDATE lessons SET idx=$1 WHERE id=$2", [i, ids[i]]);
+  }
+  await logAction(req.user, "content.lessons_reordered", "course", course.rows[0].id, null, { order: ids });
+  res.json({ ok: true });
+});
+
+// Дрип: через сколько дней после регистрации врача урок открывается сам (null — сразу).
+router.put("/lessons/:id/drip", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const raw = req.body && req.body.dripDays;
+  const dripDays = raw === null || raw === "" || raw === undefined ? null : parseInt(raw, 10);
+  if (dripDays !== null && (isNaN(dripDays) || dripDays < 0)) {
+    return res.status(400).json({ error: "invalid_input" });
+  }
+  const result = await pool.query("UPDATE lessons SET drip_days=$1 WHERE id=$2 RETURNING id", [dripDays, req.params.id]);
+  if (!result.rowCount) return res.status(404).json({ error: "not_found" });
+  res.json({ ok: true, dripDays });
 });
 
 // Сохранить черновик — врачи его не видят, пока не будет опубликован
@@ -347,6 +421,25 @@ router.get("/quiz-admin", authRequired, requireRole("admin", "super_admin"), asy
   res.json({ quiz: quiz.rows });
 });
 
+// Роут reorder ДОЛЖЕН быть объявлен раньше "/quiz-admin/:id" — иначе Express матчит его
+// первым попавшимся PUT "/quiz-admin/:id" (с id="reorder") и запрос никогда сюда не доходит.
+router.put("/quiz-admin/reorder", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const ids = (req.body && req.body.orderedIds) || [];
+  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "invalid_input" });
+  const course = await pool.query("SELECT id FROM courses LIMIT 1");
+  if (!course.rowCount) return res.status(404).json({ error: "no_course" });
+  const existing = await pool.query("SELECT id FROM quiz_questions WHERE course_id=$1", [course.rows[0].id]);
+  const existingIds = existing.rows.map((r) => r.id);
+  if (ids.length !== existingIds.length || !existingIds.every((id) => ids.includes(id))) {
+    return res.status(400).json({ error: "invalid_input", message: "Список должен содержать все вопросы ровно один раз" });
+  }
+  for (let i = 0; i < ids.length; i++) {
+    await pool.query("UPDATE quiz_questions SET idx=$1 WHERE id=$2", [i, ids[i]]);
+  }
+  await logAction(req.user, "content.quiz_reordered", "course", course.rows[0].id, null, { order: ids });
+  res.json({ ok: true });
+});
+
 router.put("/quiz-admin/:id", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
   const { question, options, correct } = req.body || {};
   if (!question || !question.trim() || !Array.isArray(options) || options.length < 2) {
@@ -365,6 +458,45 @@ router.put("/quiz-admin/:id", authRequired, requireRole("admin", "super_admin"),
   if (!result.rowCount) return res.status(404).json({ error: "not_found" });
   await logAction(req.user, "content.quiz_edited", "quiz_question", req.params.id, question.trim(), {
     before: { question: before.rows[0].question, options: before.rows[0].options, correct: before.rows[0].correct }
+  }, true);
+  res.json({ ok: true });
+});
+
+router.post("/quiz-admin", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const { question, options, correct } = req.body || {};
+  if (!question || !question.trim() || !Array.isArray(options) || options.length < 2) {
+    return res.status(400).json({ error: "invalid_input", message: "Заполните вопрос и минимум 2 варианта ответа" });
+  }
+  const correctIdx = parseInt(correct, 10);
+  if (isNaN(correctIdx) || correctIdx < 0 || correctIdx >= options.length) {
+    return res.status(400).json({ error: "invalid_input", message: "Укажите корректный правильный вариант" });
+  }
+  const course = await pool.query("SELECT id FROM courses LIMIT 1");
+  if (!course.rowCount) return res.status(404).json({ error: "no_course" });
+  const courseId = course.rows[0].id;
+
+  const maxIdx = await pool.query("SELECT COALESCE(MAX(idx), -1) AS m FROM quiz_questions WHERE course_id=$1", [courseId]);
+  const id = crypto.randomUUID();
+  await pool.query(
+    "INSERT INTO quiz_questions (id, course_id, idx, question, options, correct) VALUES ($1,$2,$3,$4,$5,$6)",
+    [id, courseId, maxIdx.rows[0].m + 1, question.trim(), JSON.stringify(options), correctIdx]
+  );
+  await logAction(req.user, "content.quiz_created", "quiz_question", id, question.trim(), {}, true);
+  res.json({ ok: true, id });
+});
+
+router.delete("/quiz-admin/:id", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const before = await pool.query("SELECT * FROM quiz_questions WHERE id=$1", [req.params.id]);
+  if (!before.rowCount) return res.status(404).json({ error: "not_found" });
+  const q = before.rows[0];
+
+  const count = await pool.query("SELECT COUNT(*)::int AS c FROM quiz_questions WHERE course_id=$1", [q.course_id]);
+  if (count.rows[0].c <= 1) {
+    return res.status(400).json({ error: "last_question", message: "В тесте должен остаться хотя бы один вопрос" });
+  }
+  await pool.query("DELETE FROM quiz_questions WHERE id=$1", [req.params.id]);
+  await logAction(req.user, "content.quiz_deleted", "quiz_question", q.id, q.question, {
+    before: { idx: q.idx, question: q.question, options: q.options, correct: q.correct }
   }, true);
   res.json({ ok: true });
 });
