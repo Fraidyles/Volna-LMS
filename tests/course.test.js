@@ -131,6 +131,64 @@ describe("Курс врача", () => {
     }
   });
 
+  test("геймификация: первая активность за день ставит стрик=1, повторная в тот же день не меняет его", async () => {
+    const user = await createUser({ role: "student", courseId: course.courseId });
+    const cookie = await loginAs(user);
+
+    const r1 = await request(app).post("/api/course/lesson-done").set("Cookie", cookie).send({ lessonId: course.lessonIds[0] });
+    expect(r1.body.gamification.currentStreak).toBe(1);
+
+    const r2 = await request(app).post("/api/course/lesson-done").set("Cookie", cookie).send({ lessonId: course.lessonIds[1] });
+    expect(r2.body.gamification.currentStreak).toBe(1); // тот же день — не задваиваем
+
+    const getRes = await request(app).get("/api/course").set("Cookie", cookie);
+    expect(getRes.body.gamification.currentStreak).toBe(1);
+    expect(getRes.body.gamification.longestStreak).toBe(1);
+  });
+
+  test("геймификация: активность вчера + сегодня продлевает стрик, разрыв в днях сбрасывает его", async () => {
+    const user = await createUser({ role: "student", courseId: course.courseId });
+    await pool.query(
+      "UPDATE progress SET current_streak=3, longest_streak=3, last_streak_date=(now() - interval '1 day')::date WHERE user_id=$1",
+      [user.id]
+    );
+    const cookie = await loginAs(user);
+    const r1 = await request(app).post("/api/course/lesson-done").set("Cookie", cookie).send({ lessonId: course.lessonIds[0] });
+    expect(r1.body.gamification.currentStreak).toBe(4);
+    expect(r1.body.gamification.longestStreak).toBe(4);
+
+    const user2 = await createUser({ role: "student", courseId: course.courseId });
+    await pool.query(
+      "UPDATE progress SET current_streak=5, longest_streak=5, last_streak_date=(now() - interval '3 days')::date WHERE user_id=$1",
+      [user2.id]
+    );
+    const cookie2 = await loginAs(user2);
+    const r2 = await request(app).post("/api/course/lesson-done").set("Cookie", cookie2).send({ lessonId: course.lessonIds[0] });
+    expect(r2.body.gamification.currentStreak).toBe(1);
+    expect(r2.body.gamification.longestStreak).toBe(5); // рекорд не уменьшается
+  });
+
+  test("геймификация: lesson-done тоже возвращает актуальные очки (не только GET /course)", async () => {
+    const user = await createUser({ role: "student", courseId: course.courseId });
+    const cookie = await loginAs(user);
+    const r1 = await request(app).post("/api/course/lesson-done").set("Cookie", cookie).send({ lessonId: course.lessonIds[0] });
+    // 1 урок * 20 + стрик 1*5 = 25
+    expect(r1.body.gamification.points).toBe(25);
+  });
+
+  test("геймификация: очки в GET /course считаются из уроков, теста, сертификата и стрика", async () => {
+    const user = await createUser({ role: "student", courseId: course.courseId });
+    await pool.query(
+      `UPDATE progress SET completed_lessons=$1, completed=true, quiz_score=80,
+       certificate_status='issued', current_streak=2 WHERE user_id=$2`,
+      [JSON.stringify([course.lessonIds[0], course.lessonIds[1]]), user.id]
+    );
+    const cookie = await loginAs(user);
+    const res = await request(app).get("/api/course").set("Cookie", cookie);
+    // 2 урока * 20 + тест 80 + сертификат 100 + стрик 2*5 = 230
+    expect(res.body.gamification.points).toBe(230);
+  });
+
   test("HTML урока при сохранении черновика очищается от <script> (XSS)", async () => {
     const admin = await createUser({ role: "super_admin" });
     const cookie = await loginAs(admin);

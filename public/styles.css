@@ -186,8 +186,12 @@ label{font-size:13px;font-weight:500;color:var(--muted);display:block;margin-bot
 .status-track .slot.done{background:var(--status-done);}
 .status-track .slot.current{background:var(--primary);animation:fadeUp .3s cubic-bezier(.16,1,.3,1);}
 .progress-label{font-size:13px;color:var(--muted);margin-bottom:20px;}
-.board-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px;}
+.board-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:16px;}
 @media (max-width:800px){.board-strip{grid-template-columns:1fr;}}
+
+.progress-ring{width:60px;height:60px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.progress-ring-inner{width:47px;height:47px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;font-size:12.5px;}
+.streak-flame{color:var(--accent);}
 
 /* ---------------- Плеер урока ---------------- */
 .player{display:grid;grid-template-columns:270px 1fr;border-radius:var(--radius-m);overflow:hidden;background:var(--surface);box-shadow:var(--shadow);border:var(--border-hairline);}

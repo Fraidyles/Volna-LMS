@@ -32,6 +32,31 @@ async function getHiddenForMap(courseId) {
   return row.rowCount ? row.rows[0].hidden_for : {};
 }
 
+// Стрик считается по календарным дням (не по 24-часовым окнам): активность сегодня,
+// если вчера тоже была активность — стрик растёт, если сегодня уже засчитан — не трогаем,
+// иначе (пропуск дня и больше) начинаем заново с 1.
+function nextStreak(pr) {
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const lastIso = pr.last_streak_date ? new Date(pr.last_streak_date).toISOString().slice(0, 10) : null;
+  if (lastIso === todayIso) {
+    return { currentStreak: pr.current_streak, longestStreak: pr.longest_streak, lastStreakDate: lastIso };
+  }
+  const yesterdayIso = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const currentStreak = lastIso === yesterdayIso ? pr.current_streak + 1 : 1;
+  const longestStreak = Math.max(pr.longest_streak, currentStreak);
+  return { currentStreak, longestStreak, lastStreakDate: todayIso };
+}
+
+// Очки считаются на лету из уже имеющихся данных прогресса, а не хранятся отдельно —
+// это исключает рассинхронизацию между "истинным" прогрессом и накопленным счётом.
+function computePoints(pr) {
+  const lessonsPoints = (pr.completed_lessons || []).length * 20;
+  const quizPoints = pr.completed ? (pr.quiz_score || 0) : 0;
+  const certPoints = pr.certificate_status === "issued" ? 100 : 0;
+  const streakPoints = (pr.current_streak || 0) * 5;
+  return lessonsPoints + quizPoints + certPoints + streakPoints;
+}
+
 // Курс с уроками (без правильных ответов теста) + текущий прогресс врача +
 // какие блоки скрыты именно от него + заблокирован ли у него доступ.
 // Курс определяется по progress.course_id ЭТОГО врача, а не "первым попавшимся" —
@@ -79,7 +104,12 @@ router.get("/", authRequired, requireRole("student"), async (req, res) => {
     quizHiddenForMe: (hiddenFor.quiz || []).indexOf(req.user.id) !== -1,
     progress: pr,
     unreadMessages: unread.rows[0].cnt,
-    locked: computeLocked(pr)
+    locked: computeLocked(pr),
+    gamification: {
+      points: computePoints(pr),
+      currentStreak: pr.current_streak,
+      longestStreak: pr.longest_streak
+    }
   });
 });
 
@@ -107,11 +137,14 @@ router.post("/lesson-done", authRequired, requireRole("student"), async (req, re
   const list = pr.completed_lessons || [];
   if (!list.includes(lessonId)) list.push(lessonId);
 
+  const streak = nextStreak(pr);
   await pool.query(
-    "UPDATE progress SET completed_lessons=$1, last_active_at=now() WHERE user_id=$2",
-    [JSON.stringify(list), req.user.id]
+    `UPDATE progress SET completed_lessons=$1, last_active_at=now(),
+     current_streak=$2, longest_streak=$3, last_streak_date=$4 WHERE user_id=$5`,
+    [JSON.stringify(list), streak.currentStreak, streak.longestStreak, streak.lastStreakDate, req.user.id]
   );
-  res.json({ ok: true, completedLessons: list });
+  const points = computePoints({ ...pr, completed_lessons: list, current_streak: streak.currentStreak });
+  res.json({ ok: true, completedLessons: list, gamification: { currentStreak: streak.currentStreak, longestStreak: streak.longestStreak, points } });
 });
 
 router.post("/quiz-submit", authRequired, requireRole("student"), async (req, res) => {
@@ -140,13 +173,16 @@ router.post("/quiz-submit", authRequired, requireRole("student"), async (req, re
   const certificateStatus =
     completed && pr.certificate_status !== "issued" ? "pending" : pr.certificate_status;
 
+  const streak = nextStreak(pr);
   await pool.query(
-    `UPDATE progress SET quiz_answers=$1, quiz_score=$2, completed=$3, certificate_status=$4, last_active_at=now()
-     WHERE user_id=$5`,
-    [JSON.stringify(answers), score, completed, certificateStatus, req.user.id]
+    `UPDATE progress SET quiz_answers=$1, quiz_score=$2, completed=$3, certificate_status=$4, last_active_at=now(),
+     current_streak=$5, longest_streak=$6, last_streak_date=$7
+     WHERE user_id=$8`,
+    [JSON.stringify(answers), score, completed, certificateStatus,
+      streak.currentStreak, streak.longestStreak, streak.lastStreakDate, req.user.id]
   );
 
-  res.json({ score, completed, certificateStatus });
+  res.json({ score, completed, certificateStatus, gamification: { currentStreak: streak.currentStreak, longestStreak: streak.longestStreak } });
 });
 
 // Личная заметка врача к уроку — видна только ему самому, хранится в progress.lesson_notes.

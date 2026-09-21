@@ -112,7 +112,8 @@ var ICONS = {
   doctor: '<path d="M7 3.5v5a5 5 0 0 0 10 0v-5"/><path d="M17 8v2a5 5 0 0 1-10 0"/><circle cx="19" cy="5" r="2"/><path d="M12 15.5v3.5"/><circle cx="12" cy="20.5" r="1.3"/>',
   chevron: '<path d="M6 9.5l6 6 6-6"/>',
   trash: '<path d="M5 7h14"/><path d="M9 7V5.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5.5V7"/><path d="M7 7l1 12.5A1.5 1.5 0 0 0 9.5 21h5a1.5 1.5 0 0 0 1.5-1.5L17 7"/>',
-  bell: '<path d="M6 10.5a6 6 0 0 1 12 0v4l1.8 3H4.2L6 14.5v-4Z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>'
+  bell: '<path d="M6 10.5a6 6 0 0 1 12 0v4l1.8 3H4.2L6 14.5v-4Z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
+  flame: '<path d="M12 2.5s-5.5 5-5.5 10a5.5 5.5 0 0 0 11 0c0-1.6-.7-2.7-1.4-3.7.1 1.6-.6 2.6-1.4 2.6-1.1 0-1.2-1-1-2 .3-1.7-.2-3.6-1.7-4.9-.1 1.4-.6 2.5-1.5 3.4-1.1 1.1-1.5 2.4-1.5 3.6a3 3 0 0 0 3 3"/>'
 };
 function icon(name, cls){ return '<svg class="ic'+(cls?' '+cls:'')+'" viewBox="0 0 24 24">'+(ICONS[name]||'')+'</svg>'; }
 function brandMark(style){ return '<span class="mark"'+(style?' style="'+style+'"':'')+'>'+icon("doctor")+'</span>'; }
@@ -639,9 +640,13 @@ function renderStudentHome(){
     slots += '<div class="slot'+(quizDone?' done':(quizCurrent?' current':''))+'" title="Итоговый тест"></div>';
     slots += '</div>';
 
+    var pct = Math.round((done + (quizDone?1:0)) / (total+1) * 100);
     html += '<div class="card course-hero">' +
-      '<h2>'+escapeHtml(course.course.title)+'</h2>' +
-      '<p>5 коротких уроков и итоговый тест. По завершении — сертификат и возможность оставить заявку на полную программу обучения.</p>' +
+      '<div style="display:flex;align-items:center;gap:16px;">' +
+        '<div class="progress-ring" style="background:conic-gradient(var(--primary) '+pct+'%, var(--line-2) 0);"><div class="progress-ring-inner">'+pct+'%</div></div>' +
+        '<div><h2 style="margin:0;">'+escapeHtml(course.course.title)+'</h2>' +
+        '<p style="margin:4px 0 0;">5 коротких уроков и итоговый тест. По завершении — сертификат и возможность оставить заявку на полную программу обучения.</p></div>' +
+      '</div>' +
       slots +
       '<div class="progress-label">'+done+' / '+total+' уроков'+(pr.completed?' · тест '+pr.quiz_score+'%':'')+'</div>' +
       '<button class="btn btn-primary" data-action="open-course">'+(done>0?'Продолжить курс':'Начать курс')+'</button>' +
@@ -694,6 +699,21 @@ function renderStudentHome(){
     magnet("neutral","Куратор") +
     '<p style="font-size:13px;color:var(--muted);margin:10px 0 12px;line-height:1.4;">Вопрос по курсу или доступу — куратор ответит в чате.</p>' +
     '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="messages">Открыть чат →</button>' +
+  '</div>';
+
+  var gam = course.gamification || { points:0, currentStreak:0, longestStreak:0 };
+  html += '<div class="card" style="padding:18px;">' +
+    magnet("neutral","Прогресс") +
+    '<div style="display:flex;align-items:baseline;gap:6px;margin-top:10px;">' +
+      icon("flame","ic-sm streak-flame") +
+      '<span style="font-family:var(--display);font-weight:800;font-size:22px;letter-spacing:-.02em;">'+(gam.currentStreak||0)+'</span>' +
+      '<span style="font-size:12px;color:var(--muted);">'+(gam.currentStreak===1?"день подряд":"дней подряд")+'</span>' +
+    '</div>' +
+    '<span style="font-size:12px;color:var(--muted);display:block;margin-top:2px;">рекорд: '+(gam.longestStreak||0)+'</span>' +
+    '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2);">' +
+      '<span style="font-family:var(--display);font-weight:800;font-size:18px;">'+(gam.points||0)+'</span>' +
+      '<span style="font-size:12px;color:var(--muted);"> очков</span>' +
+    '</div>' +
   '</div>';
 
   html += '</div>';
@@ -1768,7 +1788,7 @@ function wireEvents(root){
     if(action==="next-lesson"){
       var lid = course.lessons[studentState.lessonIndex].id;
       if(!previewMode){
-        try{ var r = await api("/course/lesson-done", { method:"POST", body: JSON.stringify({lessonId:lid}) }); course.progress.completed_lessons = r.completedLessons; }catch(err){ showToast(err.message); }
+        try{ var r = await api("/course/lesson-done", { method:"POST", body: JSON.stringify({lessonId:lid}) }); course.progress.completed_lessons = r.completedLessons; if(r.gamification) course.gamification = Object.assign({}, course.gamification, r.gamification); }catch(err){ showToast(err.message); }
       } else {
         course.progress.completed_lessons.push(lid);
       }
@@ -2299,6 +2319,7 @@ function wireEvents(root){
       try{
         var r3=await api("/course/quiz-submit", { method:"POST", body: JSON.stringify({answers:answers}) });
         course.progress.quiz_score=r3.score; course.progress.completed=r3.completed; course.progress.certificate_status=r3.certificateStatus;
+        await loadCourse(); // очки/стрик пересчитываются на сервере из всего прогресса разом — проще перезагрузить, чем дублировать формулу на клиенте
         studentState.quizSubmitted=true;
       }catch(err){ showToast(err.message); }
       render(); return;
