@@ -26,6 +26,8 @@ var profileEditor = { open:false };
 var calendarState = { monthDate:new Date(), streams:[], events:[], showStreamForm:false, eventModalMode:null, eventModalDate:null, eventModalId:null, recurring:false };
 var materialsPicker = { open:false, targetId:null, targetTitle:"", search:"", selectedIds:[] };
 var streamChat = { open:false, streamId:null, streamName:"" };
+var notifState = { open:false, items:[], unreadCount:0 };
+var notifPollTimer = null;
 var courseVisibility = {}; // {lessonId|"quiz": [uid,...]} — для вкладки «Материалы» у персонала
 var directory = []; // все сотрудники (admin+curator+super_admin) — для фильтра/назначения куратора
 var dashboardState = { periodFrom:"", periodTo:"", specializations:[], streams:[], stages:[], products:[], certStatuses:[], paymentStatuses:[], demoStatuses:[], accessStatuses:[], curatorIds:[], openFilterMenu:null };
@@ -109,7 +111,8 @@ var ICONS = {
   badge: '<circle cx="12" cy="9.5" r="5.5"/><path d="M9 14l-2 7 5-2.5L17 21l-2-7"/>',
   doctor: '<path d="M7 3.5v5a5 5 0 0 0 10 0v-5"/><path d="M17 8v2a5 5 0 0 1-10 0"/><circle cx="19" cy="5" r="2"/><path d="M12 15.5v3.5"/><circle cx="12" cy="20.5" r="1.3"/>',
   chevron: '<path d="M6 9.5l6 6 6-6"/>',
-  trash: '<path d="M5 7h14"/><path d="M9 7V5.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5.5V7"/><path d="M7 7l1 12.5A1.5 1.5 0 0 0 9.5 21h5a1.5 1.5 0 0 0 1.5-1.5L17 7"/>'
+  trash: '<path d="M5 7h14"/><path d="M9 7V5.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5.5V7"/><path d="M7 7l1 12.5A1.5 1.5 0 0 0 9.5 21h5a1.5 1.5 0 0 0 1.5-1.5L17 7"/>',
+  bell: '<path d="M6 10.5a6 6 0 0 1 12 0v4l1.8 3H4.2L6 14.5v-4Z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>'
 };
 function icon(name, cls){ return '<svg class="ic'+(cls?' '+cls:'')+'" viewBox="0 0 24 24">'+(ICONS[name]||'')+'</svg>'; }
 function brandMark(style){ return '<span class="mark"'+(style?' style="'+style+'"':'')+'>'+icon("doctor")+'</span>'; }
@@ -163,6 +166,8 @@ async function routeAfterLogin(){
     view = "student";
     await loadCourse();
     await loadCalendarData();
+    await loadNotifications();
+    startNotificationPolling();
   } else {
     view = "staff";
     await loadStaffData();
@@ -170,6 +175,19 @@ async function routeAfterLogin(){
   }
   render();
 }
+
+async function loadNotifications(){
+  try{
+    var data = await api("/notifications");
+    notifState.items = data.notifications;
+    notifState.unreadCount = data.unreadCount;
+  }catch(e){}
+}
+function startNotificationPolling(){
+  stopNotificationPolling();
+  notifPollTimer = setInterval(async function(){ await loadNotifications(); render(); }, 30000);
+}
+function stopNotificationPolling(){ if(notifPollTimer){ clearInterval(notifPollTimer); notifPollTimer=null; } }
 
 async function loadCourse(){
   try{
@@ -440,9 +458,10 @@ function renderTopbar(){
   var roleText = previewMode ? "Просмотр" : (view === "staff" ? roleLabel(me.role) : "Демо-курс");
   var isDark = getTheme()==="dark";
   var themeBtn = '<button class="btn btn-sm btn-ghost" data-action="toggle-theme" title="Переключить тему">'+icon(isDark?"sun":"moon")+'</button>';
+  var bellBtn = (view==="student" && !previewMode) ? renderNotifBell() : "";
   var rightControls = previewMode
     ? themeBtn + '<button class="btn btn-sm btn-ghost" data-action="exit-preview">Вернуться в панель</button>'
-    : themeBtn + '<button class="btn btn-sm btn-ghost" data-action="open-profile-editor">Профиль</button>' +
+    : bellBtn + themeBtn + '<button class="btn btn-sm btn-ghost" data-action="open-profile-editor">Профиль</button>' +
       '<button class="btn btn-sm btn-ghost" data-action="open-change-password">Сменить пароль</button>' +
       '<button class="btn btn-sm btn-ghost" data-action="logout">Выйти</button>';
   return el(
@@ -452,6 +471,56 @@ function renderTopbar(){
       rightControls + '</div>' +
     '</div></div>'
   );
+}
+
+// Напоминания об эфирах считаем на лету из уже загруженного календаря — они не
+// хранятся в базе (нет кронджоба, который бы их "погасил"), поэтому просто
+// подмешиваем их в выпадающий список рядом с настоящими уведомлениями.
+function upcomingEventReminders(){
+  var mySid = me.stream_id || "";
+  var now = new Date();
+  var reminders = [];
+  (calendarState.events||[]).forEach(function(ev){
+    if(ev.stream_id && ev.stream_id!==mySid) return;
+    var start = new Date(ev.event_date+"T"+(ev.event_time||"00:00")+":00");
+    var minsLeft = (start.getTime()-now.getTime())/60000;
+    if(minsLeft>0 && minsLeft<=30){
+      reminders.push({ id:"ev-"+ev.id, synthetic:true, title:"До эфира «"+ev.title+"» "+Math.round(minsLeft)+" мин", body:null, created_at:now.toISOString() });
+    }
+  });
+  return reminders;
+}
+
+function renderNotifBell(){
+  var reminders = upcomingEventReminders();
+  var totalUnread = notifState.unreadCount + reminders.length;
+  var html = '<div class="notif-bell-wrap" data-stop="1" style="position:relative;">' +
+    '<button class="btn btn-sm btn-ghost" data-action="toggle-notif-bell" title="Уведомления" style="position:relative;">'+icon("bell")+
+    (totalUnread?'<span class="tab-badge" style="position:absolute;top:2px;right:2px;">'+(totalUnread>9?"9+":totalUnread)+'</span>':'')+
+    '</button>';
+  if(notifState.open){
+    html += '<div class="dash-menu" style="right:0;left:auto;top:calc(100% + 6px);width:320px;max-width:320px;max-height:400px;overflow-y:auto;">';
+    var items = reminders.concat(notifState.items);
+    if(!items.length){
+      html += '<div class="dash-menu-empty">Пока нет уведомлений</div>';
+    } else {
+      items.forEach(function(n){
+        var unread = n.synthetic || !n.read_at;
+        html += '<div class="'+(n.synthetic?'':'notif-item')+'" '+(n.synthetic?'':'data-action="mark-notif-read" data-id="'+n.id+'"')+
+          ' style="padding:10px 12px;border-bottom:1px solid var(--line-2);cursor:'+(n.synthetic?'default':'pointer')+';'+(unread?'':'opacity:.55;')+'">' +
+          '<b style="font-size:12.5px;display:block;">'+escapeHtml(n.title)+'</b>' +
+          (n.body?'<span style="font-size:11.5px;color:var(--muted);display:block;margin-top:2px;">'+escapeHtml(n.body)+'</span>':'') +
+          (n.created_at&&!n.synthetic?'<span style="font-size:10.5px;color:var(--muted-2);display:block;margin-top:3px;">'+fmtTime(n.created_at)+'</span>':'') +
+        '</div>';
+      });
+    }
+    if(notifState.unreadCount>0){
+      html += '<button class="btn btn-sm btn-ghost" style="width:100%;border-radius:0;" data-action="mark-all-notifs-read">Пометить всё прочитанным</button>';
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
 }
 
 // Тёмная тема — дефолт продукта (не только системная), можно переключить вручную.
@@ -1582,14 +1651,40 @@ function wireEvents(root){
     if(dashboardState.openFilterMenu && !e.target.closest(".dash-field")){
       dashboardState.openFilterMenu = null; render();
     }
+    if(notifState.open && !e.target.closest(".notif-bell-wrap")){
+      notifState.open = false; render();
+    }
     var t = e.target.closest("[data-action]");
     if(!t) return;
     var action = t.getAttribute("data-action");
 
     if(action==="go-register"){ view="register"; render(); return; }
     if(action==="go-login"){ view="login"; render(); return; }
-    if(action==="logout"){ await api("/auth/logout", { method:"POST" }); me=null; course=null; view="login"; render(); return; }
+    if(action==="logout"){ stopNotificationPolling(); await api("/auth/logout", { method:"POST" }); me=null; course=null; view="login"; render(); return; }
     if(action==="toggle-theme"){ toggleTheme(); render(); return; }
+    if(action==="toggle-notif-bell"){
+      notifState.open = !notifState.open;
+      if(notifState.open) await loadNotifications();
+      render(); return;
+    }
+    if(action==="mark-notif-read"){
+      var nid=t.getAttribute("data-id");
+      var n = notifState.items.find(function(x){ return x.id===nid; });
+      if(n && !n.read_at){
+        n.read_at = new Date().toISOString();
+        notifState.unreadCount = Math.max(0, notifState.unreadCount-1);
+        render();
+        api("/notifications/"+nid+"/read", { method:"POST" }).catch(function(){});
+      }
+      return;
+    }
+    if(action==="mark-all-notifs-read"){
+      notifState.items.forEach(function(n){ n.read_at = n.read_at || new Date().toISOString(); });
+      notifState.unreadCount = 0;
+      render();
+      api("/notifications/read-all", { method:"POST" }).catch(function(){});
+      return;
+    }
     if(action==="revert-log"){
       if(!confirm('Откатить действие «'+t.getAttribute("data-label")+'»? Это вернёт состояние к тому, что было до этого изменения.')) return;
       t.disabled=true; t.textContent="Откатываем…";

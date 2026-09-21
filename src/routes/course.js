@@ -4,6 +4,7 @@ const pool = require("../db");
 const { authRequired, requireRole } = require("../middleware/auth");
 const { logAction } = require("../audit");
 const { sanitizeLessonHtml } = require("../sanitize");
+const { notify, notifyAllStudents } = require("../notifications");
 
 const router = express.Router();
 
@@ -189,6 +190,7 @@ router.post(
         certificateIssuedBy: before.rows[0].certificate_issued_by
       }
     }, true);
+    await notify(req.params.studentId, "certificate_issued", "Сертификат готов", "Ваш сертификат о прохождении демо-курса выдан.");
     res.json({ ok: true });
   }
 );
@@ -220,6 +222,7 @@ router.post("/certificate/bulk-issue", authRequired, requireRole("curator", "adm
         certificateIssuedBy: before.rows[0].certificate_issued_by
       }
     }, true);
+    await notify(studentId, "certificate_issued", "Сертификат готов", "Ваш сертификат о прохождении демо-курса выдан.");
     issued++;
   }
   res.json({ ok: true, issued });
@@ -254,14 +257,17 @@ router.put("/visibility/:targetId", authRequired, requireRole("curator", "admin"
   // станет больше одного, LIMIT 1 без ORDER BY может вернуть не тот курс, которому
   // принадлежит urok, и видимость молча запишется не туда.
   let courseId;
+  let targetTitle;
   if (req.params.targetId === "quiz") {
     const course = await pool.query("SELECT id FROM courses LIMIT 1");
     if (!course.rowCount) return res.status(404).json({ error: "no_course" });
     courseId = course.rows[0].id;
+    targetTitle = "Итоговый тест";
   } else {
-    const lesson = await pool.query("SELECT course_id FROM lessons WHERE id=$1", [req.params.targetId]);
+    const lesson = await pool.query("SELECT course_id, title FROM lessons WHERE id=$1", [req.params.targetId]);
     if (!lesson.rowCount) return res.status(404).json({ error: "not_found" });
     courseId = lesson.rows[0].course_id;
+    targetTitle = lesson.rows[0].title;
   }
 
   const map = await getHiddenForMap(courseId);
@@ -275,6 +281,13 @@ router.put("/visibility/:targetId", authRequired, requireRole("curator", "admin"
   );
   await logAction(req.user, "content.visibility_change", "lesson", req.params.targetId, req.params.targetId,
     { hiddenCount: ids.length, before: { ids: beforeIds } }, true);
+
+  // Уведомляем только тех, у кого материал именно ОТКРЫЛСЯ (был в скрытых, стал видимым) —
+  // а не всех, кого затронуло изменение списка, иначе про каждое скрытие тоже прилетало бы уведомление.
+  const justUnhidden = beforeIds.filter((id) => !ids.includes(id));
+  for (const studentId of justUnhidden) {
+    await notify(studentId, "content_unlocked", "Материал открыт", `Куратор снял ограничение доступа к материалу «${targetTitle}».`);
+  }
   res.json({ ok: true });
 });
 
@@ -308,6 +321,7 @@ router.post("/lessons", authRequired, requireRole("admin", "super_admin"), async
     [id, courseId, maxIdx.rows[0].m + 1, title.trim(), duration || "", clean]
   );
   await logAction(req.user, "content.lesson_created", "lesson", id, title.trim(), {}, true);
+  await notifyAllStudents("new_lesson", "Новый урок", `Появился новый урок: «${title.trim()}».`);
   res.json({ ok: true, id });
 });
 

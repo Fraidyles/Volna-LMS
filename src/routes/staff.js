@@ -6,6 +6,7 @@ const { authRequired, requireRole } = require("../middleware/auth");
 const { logAction } = require("../audit");
 const { revertLogEntry } = require("../revert");
 const { generateTempPassword } = require("../util");
+const { notify } = require("../notifications");
 
 const router = express.Router();
 
@@ -138,6 +139,9 @@ router.patch("/students/:id/access/block", authRequired, requireRole("curator", 
   const u = await pool.query("SELECT name FROM users WHERE id=$1", [req.params.id]);
   await logAction(req.user, blocked ? "access.block" : "access.unblock", "student", req.params.id, u.rows[0] && u.rows[0].name,
     { before: { accessBlocked: before.rows[0].access_blocked } }, true);
+  if (!blocked) {
+    await notify(req.params.id, "access_unblocked", "Доступ восстановлен", "Куратор снял ограничение доступа к курсу — можно продолжать обучение.");
+  }
   res.json({ ok: true, blocked });
 });
 
