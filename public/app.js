@@ -393,6 +393,25 @@ function renderChangePasswordModal(){
   return el('<div class="overlay" data-action="overlay-close-password"><div class="drawer" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
 }
 
+// Врач раньше не видел вообще, за какой продукт и как оплачено — только персонал
+// это редактировал. Показываем ему то же самое как read-only, без права правки.
+function renderMyProductBlock(){
+  var payStatus = me.payment_status || "unpaid";
+  var payKind = payStatus==="paid" ? "done" : (payStatus==="partial" ? "attention" : "neutral");
+  return '<div style="padding:16px 20px;border-top:1px solid var(--line);margin-top:4px;">' +
+    '<b style="font-size:13px;display:block;margin-bottom:10px;">Ваш продукт и оплата</b>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+      '<span style="font-size:13px;color:var(--muted);">Продукт</span>' +
+      '<span style="font-size:13px;font-weight:600;">'+escapeHtml(PRODUCTS[me.product||"longevity"]||me.product)+'</span>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+      '<span style="font-size:13px;color:var(--muted);">Оплата</span>' +
+      magnet(payKind, PAYMENT_LABELS[payStatus]||payStatus) +
+    '</div>' +
+    '<p class="hint" style="margin-top:10px;">Вопрос по оплате — обратитесь к куратору в чате.</p>' +
+  '</div>';
+}
+
 function renderProfileModal(){
   var isStudent = me.role === "student";
   var body = '<div class="drawer-head"><b style="font-size:16px;">Профиль</b><button class="btn btn-ghost btn-sm" data-action="close-profile-editor">Закрыть ✕</button></div>' +
@@ -404,7 +423,9 @@ function renderProfileModal(){
       '<div class="field"><label>Email</label><div class="input" style="background:var(--line-2);color:var(--muted);">'+escapeHtml(me.email||"")+'</div><p class="hint">Email нельзя изменить самостоятельно — обратитесь к куратору.</p></div>' +
       '<div class="err-text" id="profileEditorError" style="display:none;"></div>' +
       '<button class="btn btn-primary btn-block" type="submit">Сохранить</button>' +
-    '</form></div>';
+    '</form>' +
+    (isStudent ? renderMyProductBlock() : '') +
+    '</div>';
   return el('<div class="overlay" data-action="overlay-close-profile-editor"><div class="drawer" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
 }
 

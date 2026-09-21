@@ -97,7 +97,7 @@ router.post("/register", authLimiter, async (req, res) => {
   const profileOut = {
     id, email, name: name.trim(), role,
     specialization: specialization || null, workplace: workplace || null, phone: phone || null,
-    referral_code: referralCode
+    referral_code: referralCode, product: "longevity", payment_status: "unpaid"
   };
   res.json({ user: profileOut, invitedBy: invite.rowCount ? invite.rows[0].invited_by : null });
 });
@@ -128,7 +128,8 @@ router.post("/login", authLimiter, async (req, res) => {
     user: {
       id: row.id, email: row.email, name: row.name, role: row.role,
       specialization: row.specialization, workplace: row.workplace, phone: row.phone,
-      stream_id: row.stream_id, referral_code: row.referral_code, created_at: row.created_at
+      stream_id: row.stream_id, referral_code: row.referral_code, created_at: row.created_at,
+      product: row.product, payment_status: row.payment_status
     }
   });
 });
@@ -148,7 +149,7 @@ router.post("/logout-everywhere", authRequired, async (req, res) => {
 
 router.get("/me", authRequired, async (req, res) => {
   const result = await pool.query(
-    "SELECT id, email, name, role, specialization, workplace, phone, stream_id, referral_code, created_at FROM users WHERE id=$1",
+    "SELECT id, email, name, role, specialization, workplace, phone, stream_id, referral_code, created_at, product, payment_status FROM users WHERE id=$1",
     [req.user.id]
   );
   if (!result.rowCount) return res.status(404).json({ error: "not_found" });
@@ -176,7 +177,7 @@ router.patch("/me", authRequired, async (req, res) => {
   await pool.query(`UPDATE users SET ${sets.join(", ")} WHERE id=$${values.length}`, values);
 
   const result = await pool.query(
-    "SELECT id, email, name, role, specialization, workplace, phone, stream_id, referral_code, token_version, created_at FROM users WHERE id=$1",
+    "SELECT id, email, name, role, specialization, workplace, phone, stream_id, referral_code, token_version, created_at, product, payment_status FROM users WHERE id=$1",
     [req.user.id]
   );
   const row = result.rows[0];
@@ -184,7 +185,7 @@ router.patch("/me", authRequired, async (req, res) => {
   // (например, в журнале аудита) снова фигурировало актуальное имя, а не старое из JWT.
   const user = { id: row.id, email: row.email, name: row.name, role: row.role, tokenVersion: row.token_version };
   res.cookie("token", signToken(user), COOKIE_OPTS);
-  res.json({ user: { id: row.id, email: row.email, name: row.name, role: row.role, specialization: row.specialization, workplace: row.workplace, phone: row.phone, stream_id: row.stream_id, referral_code: row.referral_code, created_at: row.created_at } });
+  res.json({ user: { id: row.id, email: row.email, name: row.name, role: row.role, specialization: row.specialization, workplace: row.workplace, phone: row.phone, stream_id: row.stream_id, referral_code: row.referral_code, created_at: row.created_at, product: row.product, payment_status: row.payment_status } });
 });
 
 router.post("/change-password", authRequired, async (req, res) => {

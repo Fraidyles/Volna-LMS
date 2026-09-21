@@ -55,6 +55,20 @@ describe("Аутентификация", () => {
     expect(res.body.user.id).toBe(user.id);
   });
 
+  test("врач видит свой продукт и статус оплаты через /auth/me и /auth/login", async () => {
+    const user = await createUser({ role: "student" });
+    await pool.query("UPDATE users SET product='peptide', payment_status='paid' WHERE id=$1", [user.id]);
+
+    const loginRes = await request(app).post("/api/auth/login").send({ email: user.email, password: user.password });
+    expect(loginRes.body.user.product).toBe("peptide");
+    expect(loginRes.body.user.payment_status).toBe("paid");
+
+    const cookie = await loginAs(user);
+    const meRes = await request(app).get("/api/auth/me").set("Cookie", cookie);
+    expect(meRes.body.user.product).toBe("peptide");
+    expect(meRes.body.user.payment_status).toBe("paid");
+  });
+
   test("PATCH /auth/me — врач может поправить телефон, место работы, специализацию", async () => {
     const user = await createUser({ role: "student" });
     const cookie = await loginAs(user);
