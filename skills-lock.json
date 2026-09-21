@@ -7,12 +7,6 @@
       "skillPath": "skills/ab-testing/SKILL.md",
       "computedHash": "c42af0107540e71dfe9605eca51b5100d96730d0bddf51085fc0c9429e40083c"
     },
-    "emilkowalski-motion": {
-      "source": "nexu-io/open-design",
-      "sourceType": "github",
-      "skillPath": "skills/emilkowalski-motion/SKILL.md",
-      "computedHash": "1478b70162dfe62a2088c2a98d7bf8fd071439c6decf044b9b69a02a3b14753f"
-    },
     "ad-creative": {
       "source": "coreyhaines31/marketingskills",
       "sourceType": "github",
@@ -151,6 +145,12 @@
       "skillPath": "skills/emails/SKILL.md",
       "computedHash": "261d986c2a1f1f5f823f8c889e16db723edb8a9d0fa5ede8412f981594715c49"
     },
+    "emilkowalski-motion": {
+      "source": "nexu-io/open-design",
+      "sourceType": "github",
+      "skillPath": "skills/emilkowalski-motion/SKILL.md",
+      "computedHash": "1478b70162dfe62a2088c2a98d7bf8fd071439c6decf044b9b69a02a3b14753f"
+    },
     "enhance-prompt": {
       "source": "google-labs-code/stitch-skills",
       "sourceType": "github",
@@ -223,6 +223,12 @@
       "sourceType": "github",
       "skillPath": "skills/imagegen-frontend-web/SKILL.md",
       "computedHash": "65f5ae59fa317567809438310b1c54f78cd133426deb43e4d3d4ca4c8f541628"
+    },
+    "impeccable": {
+      "source": "pbakaus/impeccable",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/impeccable/SKILL.md",
+      "computedHash": "d4cfdc3b7a18041ff02e1ad4b6377450e978e10928ba7e96377ff7d66994b490"
     },
     "industrial-brutalist-ui": {
       "source": "Leonxlnx/taste-skill",
