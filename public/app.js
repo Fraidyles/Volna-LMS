@@ -651,17 +651,19 @@ function renderCoursePlayer(){
   var nav = '<div class="lesson-nav">';
   course.lessons.forEach(function(l,i){
     var isDone = doneIds.indexOf(l.id)!==-1;
-    var isLocked = l.hiddenForMe;
+    var isLocked = l.hiddenForMe || l.dripLockedForMe;
+    var lockLabel = l.hiddenForMe ? 'Временно недоступен' : (l.dripLockedForMe ? 'Откроется '+fmtDate(l.availableAt) : escapeHtml(l.duration||""));
     nav += '<div class="lesson-item'+(i===idx?' active':'')+(isDone?' done':'')+'" data-action="goto-lesson" data-idx="'+i+'"'+(isLocked?' style="opacity:.45;cursor:not-allowed;"':'')+'>' +
-      '<span class="lesson-num">'+(isLocked?icon("lock","ic-sm"):(isDone?icon("check","ic-sm"):(i+1)))+'</span><div><b>'+escapeHtml(l.title)+'</b><span>'+(isLocked?'Временно недоступен':escapeHtml(l.duration||""))+'</span></div></div>';
+      '<span class="lesson-num">'+(isLocked?icon("lock","ic-sm"):(isDone?icon("check","ic-sm"):(i+1)))+'</span><div><b>'+escapeHtml(l.title)+'</b><span>'+lockLabel+'</span></div></div>';
   });
   nav += '<div class="lesson-item'+(studentState.quizMode?' active':'')+'" data-action="goto-quiz"'+(course.quizHiddenForMe?' style="opacity:.45;cursor:not-allowed;"':'')+'>' +
     '<span class="lesson-num">'+(course.quizHiddenForMe?icon("lock","ic-sm"):(course.progress && course.progress.completed?icon("check","ic-sm"):icon("star","ic-sm")))+'</span><div><b>Итоговый тест</b><span>'+(course.quizHiddenForMe?'Временно недоступен':course.quiz.length+' вопросов')+'</span></div></div>';
   nav += '</div>';
 
-  if(lesson.hiddenForMe){
+  if(lesson.hiddenForMe || lesson.dripLockedForMe){
+    var lockedText = lesson.hiddenForMe ? 'Этот урок временно недоступен.<br>Куратор откроет его позже.' : 'Этот урок ещё не открылся.<br>Станет доступен '+fmtDate(lesson.availableAt)+'.';
     var lockedBody = '<div class="lesson-body"><button class="back-link" data-action="close-course">← К курсу</button>' +
-      '<div class="empty-state" style="padding:60px 10px;"><div class="big">'+icon("lock","ic-lg")+'</div>Этот урок временно недоступен.<br>Куратор откроет его позже.</div></div>';
+      '<div class="empty-state" style="padding:60px 10px;"><div class="big">'+icon("lock","ic-lg")+'</div>'+lockedText+'</div></div>';
     return el('<div class="player" style="margin-top:6px;">'+nav+lockedBody+'</div>');
   }
 
@@ -1561,7 +1563,9 @@ function wireEvents(root){
     if(action==="close-course"){ studentState.tab="course"; studentState.quizMode=false; render(); return; }
     if(action==="goto-lesson"){
       var goIdx=parseInt(t.getAttribute("data-idx"),10);
-      if(course.lessons[goIdx].hiddenForMe){ showToast("Этот урок временно недоступен"); return; }
+      var goLesson=course.lessons[goIdx];
+      if(goLesson.hiddenForMe){ showToast("Этот урок временно недоступен"); return; }
+      if(goLesson.dripLockedForMe){ showToast("Этот урок откроется "+fmtDate(goLesson.availableAt)); return; }
       studentState.lessonIndex=goIdx; studentState.quizMode=false; render(); return;
     }
     if(action==="save-lesson-note"){
@@ -1589,7 +1593,7 @@ function wireEvents(root){
         course.progress.completed_lessons.push(lid);
       }
       var nextIdx = -1;
-      for(var i=studentState.lessonIndex+1; i<course.lessons.length; i++){ if(!course.lessons[i].hiddenForMe){ nextIdx=i; break; } }
+      for(var i=studentState.lessonIndex+1; i<course.lessons.length; i++){ if(!course.lessons[i].hiddenForMe && !course.lessons[i].dripLockedForMe){ nextIdx=i; break; } }
       if(nextIdx!==-1){ studentState.lessonIndex=nextIdx; }
       else if(!course.quizHiddenForMe){ studentState.quizMode=true; studentState.quizSubmitted=false; }
       else { showToast("Пока больше нечего проходить — куратор скоро откроет остальные материалы"); studentState.tab="course"; studentState.quizMode=false; }

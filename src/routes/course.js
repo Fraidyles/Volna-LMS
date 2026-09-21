@@ -18,6 +18,14 @@ function computeLocked(pr) {
   return { locked: false, reason: null };
 }
 
+// Дрип: урок открывается через drip_days дней после того, как ЭТОТ врач начал курс
+// (progress.created_at), а не по общей календарной дате — у каждого свой отсчёт.
+function computeDripLock(lesson, pr) {
+  if (lesson.drip_days === null || lesson.drip_days === undefined) return { locked: false, availableAt: null };
+  const availableAt = new Date(new Date(pr.created_at).getTime() + lesson.drip_days * 86400000);
+  return { locked: new Date() < availableAt, availableAt: availableAt.toISOString() };
+}
+
 async function getHiddenForMap(courseId) {
   const row = await pool.query("SELECT hidden_for FROM course_visibility WHERE course_id=$1", [courseId]);
   return row.rowCount ? row.rows[0].hidden_for : {};
@@ -37,7 +45,7 @@ router.get("/", authRequired, requireRole("student"), async (req, res) => {
   const courseId = course.rows[0].id;
 
   const lessons = await pool.query(
-    "SELECT id, idx, title, duration, html FROM lessons WHERE course_id=$1 ORDER BY idx",
+    "SELECT id, idx, title, duration, html, drip_days FROM lessons WHERE course_id=$1 ORDER BY idx",
     [courseId]
   );
   const quiz = await pool.query(
@@ -48,10 +56,15 @@ router.get("/", authRequired, requireRole("student"), async (req, res) => {
 
   // Дополнительный (второй) слой санитизации прямо перед показом врачу — на случай,
   // если в базе оказался контент, сохранённый до включения санитайзера.
-  const lessonsOut = lessons.rows.map((l) => ({
-    id: l.id, idx: l.idx, title: l.title, duration: l.duration, html: sanitizeLessonHtml(l.html),
-    hiddenForMe: (hiddenFor[l.id] || []).indexOf(req.user.id) !== -1
-  }));
+  const lessonsOut = lessons.rows.map((l) => {
+    const drip = computeDripLock(l, pr);
+    return {
+      id: l.id, idx: l.idx, title: l.title, duration: l.duration, html: sanitizeLessonHtml(l.html),
+      hiddenForMe: (hiddenFor[l.id] || []).indexOf(req.user.id) !== -1,
+      dripLockedForMe: drip.locked,
+      availableAt: drip.availableAt
+    };
+  });
 
   const unread = await pool.query(
     "SELECT COUNT(*)::int AS cnt FROM messages WHERE student_id=$1 AND from_role='curator' AND created_at > COALESCE($2::timestamptz, '-infinity')",
@@ -83,6 +96,11 @@ router.post("/lesson-done", authRequired, requireRole("student"), async (req, re
   const hiddenFor = await getHiddenForMap(pr.course_id);
   if ((hiddenFor[lessonId] || []).indexOf(req.user.id) !== -1) {
     return res.status(403).json({ error: "content_hidden", message: "Этот урок временно недоступен" });
+  }
+
+  const lessonRow = await pool.query("SELECT drip_days FROM lessons WHERE id=$1", [lessonId]);
+  if (lessonRow.rowCount && computeDripLock(lessonRow.rows[0], pr).locked) {
+    return res.status(403).json({ error: "content_drip_locked", message: "Этот урок ещё не открылся" });
   }
 
   const list = pr.completed_lessons || [];

@@ -92,6 +92,45 @@ describe("Курс врача", () => {
     expect(doneRes.body.error).toBe("content_hidden");
   });
 
+  test("дрип: урок с drip_days ещё не открылся врачу, зарегистрированному недавно (403 + dripLockedForMe)", async () => {
+    await pool.query("UPDATE lessons SET drip_days=7 WHERE id=$1", [course.lessonIds[1]]);
+    try {
+      const user = await createUser({ role: "student", courseId: course.courseId });
+      const cookie = await loginAs(user);
+
+      const getRes = await request(app).get("/api/course").set("Cookie", cookie);
+      const lesson = getRes.body.lessons.find((l) => l.id === course.lessonIds[1]);
+      expect(lesson.dripLockedForMe).toBe(true);
+      expect(lesson.availableAt).toBeTruthy();
+
+      const doneRes = await request(app).post("/api/course/lesson-done").set("Cookie", cookie)
+        .send({ lessonId: course.lessonIds[1] });
+      expect(doneRes.status).toBe(403);
+      expect(doneRes.body.error).toBe("content_drip_locked");
+    } finally {
+      await pool.query("UPDATE lessons SET drip_days=NULL WHERE id=$1", [course.lessonIds[1]]);
+    }
+  });
+
+  test("дрип: урок открывается сам, когда прошло достаточно дней с регистрации врача", async () => {
+    await pool.query("UPDATE lessons SET drip_days=7 WHERE id=$1", [course.lessonIds[1]]);
+    try {
+      const user = await createUser({ role: "student", courseId: course.courseId });
+      await pool.query("UPDATE progress SET created_at=now() - interval '8 days' WHERE user_id=$1", [user.id]);
+      const cookie = await loginAs(user);
+
+      const getRes = await request(app).get("/api/course").set("Cookie", cookie);
+      const lesson = getRes.body.lessons.find((l) => l.id === course.lessonIds[1]);
+      expect(lesson.dripLockedForMe).toBe(false);
+
+      const doneRes = await request(app).post("/api/course/lesson-done").set("Cookie", cookie)
+        .send({ lessonId: course.lessonIds[1] });
+      expect(doneRes.status).toBe(200);
+    } finally {
+      await pool.query("UPDATE lessons SET drip_days=NULL WHERE id=$1", [course.lessonIds[1]]);
+    }
+  });
+
   test("HTML урока при сохранении черновика очищается от <script> (XSS)", async () => {
     const admin = await createUser({ role: "super_admin" });
     const cookie = await loginAs(admin);
