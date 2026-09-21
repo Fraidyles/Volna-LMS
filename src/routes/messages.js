@@ -14,12 +14,31 @@ router.get("/:studentId", authRequired, async (req, res) => {
     "SELECT id, from_role, author_name, body, created_at FROM messages WHERE student_id=$1 ORDER BY created_at ASC",
     [studentId]
   );
-  // Врач читает свой же чат — отмечаем момент прочтения, чтобы бейдж непрочитанного
-  // на вкладке «Сообщения» погас (см. unreadMessages в GET /course).
-  if (req.user.role === "student") {
-    await pool.query("UPDATE progress SET messages_read_at=now() WHERE user_id=$1", [studentId]);
-  }
   res.json({ messages: result.rows });
+});
+
+// Отмечать прочитанным нарочно вынесено из GET выше в отдельное явное действие:
+// GET дергает ещё и фоновый поллинг открытого чата каждые 4с, и если бы он сам
+// отмечал прочитанным на каждый тик, «Пометить непрочитанным» ниже отменялось бы
+// следующим же тиком поллинга, пока чат остаётся открытым.
+router.post("/:studentId/mark-read", authRequired, async (req, res) => {
+  const { studentId } = req.params;
+  if (req.user.role !== "student" || req.user.id !== studentId) {
+    return res.status(403).json({ error: "forbidden" });
+  }
+  await pool.query("UPDATE progress SET messages_read_at=now() WHERE user_id=$1", [studentId]);
+  res.json({ ok: true });
+});
+
+// Врач сам возвращает свой чат в непрочитанные — как «Пометить непрочитанным» в почте,
+// например если хочет вернуться к сообщению куратора позже.
+router.post("/:studentId/mark-unread", authRequired, async (req, res) => {
+  const { studentId } = req.params;
+  if (req.user.role !== "student" || req.user.id !== studentId) {
+    return res.status(403).json({ error: "forbidden" });
+  }
+  await pool.query("UPDATE progress SET messages_read_at=NULL WHERE user_id=$1", [studentId]);
+  res.json({ ok: true });
 });
 
 router.post("/", authRequired, async (req, res) => {

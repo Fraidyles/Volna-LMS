@@ -104,7 +104,7 @@ describe("Курс врача", () => {
     expect(lessonRes.body.lesson.draft_html).not.toContain("onerror");
   });
 
-  test("непрочитанные сообщения: считаются, пока врач не откроет чат", async () => {
+  test("непрочитанные сообщения: считаются, пока врач явно не отметит прочитанным; GET сам по себе (поллинг чата) это не делает", async () => {
     const crypto = require("crypto");
     const user = await createUser({ role: "student", courseId: course.courseId });
     const cookie = await loginAs(user);
@@ -117,10 +117,33 @@ describe("Курс врача", () => {
     const before = await request(app).get("/api/course").set("Cookie", cookie);
     expect(before.body.unreadMessages).toBe(1);
 
+    // Обычный GET (как при поллинге открытого чата) не должен сам отмечать прочитанным —
+    // иначе «Пометить непрочитанным» ниже отменялось бы следующим же тиком поллинга.
     await request(app).get(`/api/messages/${user.id}`).set("Cookie", cookie);
+    const stillUnread = await request(app).get("/api/course").set("Cookie", cookie);
+    expect(stillUnread.body.unreadMessages).toBe(1);
 
-    const after = await request(app).get("/api/course").set("Cookie", cookie);
-    expect(after.body.unreadMessages).toBe(0);
+    await request(app).post(`/api/messages/${user.id}/mark-read`).set("Cookie", cookie);
+    const afterRead = await request(app).get("/api/course").set("Cookie", cookie);
+    expect(afterRead.body.unreadMessages).toBe(0);
+
+    await request(app).post(`/api/messages/${user.id}/mark-unread`).set("Cookie", cookie);
+    const afterUnread = await request(app).get("/api/course").set("Cookie", cookie);
+    expect(afterUnread.body.unreadMessages).toBe(1);
+  });
+
+  test("mark-read/mark-unread недоступны персоналу и для чужого id", async () => {
+    const user = await createUser({ role: "student", courseId: course.courseId });
+    const other = await createUser({ role: "student", courseId: course.courseId });
+    const curator = await createUser({ role: "curator" });
+
+    const otherCookie = await loginAs(other);
+    const forbidden1 = await request(app).post(`/api/messages/${user.id}/mark-read`).set("Cookie", otherCookie);
+    expect(forbidden1.status).toBe(403);
+
+    const curatorCookie = await loginAs(curator);
+    const forbidden2 = await request(app).post(`/api/messages/${user.id}/mark-unread`).set("Cookie", curatorCookie);
+    expect(forbidden2.status).toBe(403);
   });
 
   test("заметка к уроку сохраняется и удаляется пустой строкой", async () => {

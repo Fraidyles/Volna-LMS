@@ -720,7 +720,10 @@ function renderCertificate(){
 function renderStudentMessages(){
   return el(
     '<div class="card msg-panel" style="margin-top:6px;max-width:640px;">' +
-      '<div style="padding:16px 20px;border-bottom:1px solid var(--line);"><b style="font-size:14.5px;">Чат с куратором</b></div>' +
+      '<div style="padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;">' +
+        '<b style="font-size:14.5px;">Чат с куратором</b>' +
+        '<button class="btn btn-sm btn-ghost" data-action="mark-messages-unread" title="Показать бейдж снова, чтобы вернуться к чату позже">Пометить непрочитанным</button>' +
+      '</div>' +
       '<div class="msg-list" id="msgList"><div class="msg-empty">Загрузка…</div></div>' +
       '<div class="msg-input-row"><textarea class="input" id="msgInput" placeholder="Напишите сообщение…"></textarea>' +
       '<button class="btn btn-primary" data-action="send-student-msg">Отправить</button></div>' +
@@ -1477,7 +1480,10 @@ function wireEvents(root){
     if(action==="student-tab"){
       studentState.tab=t.getAttribute("data-tab");
       if(studentState.tab!=="messages") stopMessagePolling();
-      else if(course) course.unreadMessages=0; // сервер отметит прочитанным при загрузке чата
+      else{
+        if(course) course.unreadMessages=0;
+        api("/messages/"+me.id+"/mark-read", { method:"POST" }).catch(function(){});
+      }
       render();
       if(studentState.tab==="messages") startMessagePolling(me.id,"msgList");
       return;
@@ -1533,6 +1539,14 @@ function wireEvents(root){
       var inp=document.getElementById("msgInput"); var val=inp?inp.value:"";
       if(val.trim()){ if(inp) inp.value=""; try{ await api("/messages", { method:"POST", body: JSON.stringify({studentId:me.id, text:val}) }); loadMessages(me.id,"msgList"); }catch(err){ showToast(err.message); } }
       return;
+    }
+    if(action==="mark-messages-unread"){
+      try{
+        await api("/messages/"+me.id+"/mark-unread", { method:"POST" });
+        var mu=await api("/course"); course.unreadMessages=mu.unreadMessages;
+        showToast("Чат помечен непрочитанным");
+      }catch(err){ showToast(err.message); }
+      render(); return;
     }
     if(action==="download-ics"){
       var evObj = calendarState.events.filter(function(x){ return x.id===t.getAttribute("data-id"); })[0];
