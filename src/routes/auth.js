@@ -92,7 +92,14 @@ router.post("/register", authLimiter, async (req, res) => {
   const user = { id, email, name: name.trim(), role, tokenVersion: 0 };
   res.cookie("token", signToken(user), COOKIE_OPTS);
   await logAction(user, "auth.register", "user", id, name.trim(), { role, viaInvite: !!invite.rowCount, referredBy });
-  res.json({ user, invitedBy: invite.rowCount ? invite.rows[0].invited_by : null });
+  // Профиль отдаём целиком (не только поля из JWT) — иначе только что заполненные
+  // специализация/место работы/телефон выглядели бы пустыми на экране до перезахода.
+  const profileOut = {
+    id, email, name: name.trim(), role,
+    specialization: specialization || null, workplace: workplace || null, phone: phone || null,
+    referral_code: referralCode
+  };
+  res.json({ user: profileOut, invitedBy: invite.rowCount ? invite.rows[0].invited_by : null });
 });
 
 router.post("/login", authLimiter, async (req, res) => {
@@ -115,7 +122,15 @@ router.post("/login", authLimiter, async (req, res) => {
 
   const user = { id: row.id, email: row.email, name: row.name, role: row.role, tokenVersion: row.token_version };
   res.cookie("token", signToken(user), COOKIE_OPTS);
-  res.json({ user });
+  // Профиль целиком, а не только поля из JWT — иначе специализация/место работы/телефон
+  // выглядели бы пустыми в модалке профиля сразу после входа, до первого GET /auth/me.
+  res.json({
+    user: {
+      id: row.id, email: row.email, name: row.name, role: row.role,
+      specialization: row.specialization, workplace: row.workplace, phone: row.phone,
+      stream_id: row.stream_id, referral_code: row.referral_code, created_at: row.created_at
+    }
+  });
 });
 
 router.post("/logout", (req, res) => {
@@ -138,6 +153,38 @@ router.get("/me", authRequired, async (req, res) => {
   );
   if (!result.rowCount) return res.status(404).json({ error: "not_found" });
   res.json({ user: result.rows[0] });
+});
+
+// Самостоятельное редактирование своих же контактных данных — имя, телефон, место
+// работы, а для врача ещё и специализация. Email и роль отсюда не меняются намеренно.
+router.patch("/me", authRequired, async (req, res) => {
+  const { name, phone, workplace, specialization } = req.body || {};
+  const sets = [];
+  const values = [];
+  if (typeof name === "string") {
+    if (!name.trim()) return res.status(400).json({ error: "invalid_input", message: "Имя не может быть пустым" });
+    sets.push(`name=$${sets.length + 1}`); values.push(name.trim());
+  }
+  if (typeof phone === "string") { sets.push(`phone=$${sets.length + 1}`); values.push(phone.trim() || null); }
+  if (typeof workplace === "string") { sets.push(`workplace=$${sets.length + 1}`); values.push(workplace.trim() || null); }
+  if (typeof specialization === "string" && req.user.role === "student") {
+    sets.push(`specialization=$${sets.length + 1}`); values.push(specialization.trim() || null);
+  }
+  if (!sets.length) return res.status(400).json({ error: "invalid_input" });
+
+  values.push(req.user.id);
+  await pool.query(`UPDATE users SET ${sets.join(", ")} WHERE id=$${values.length}`, values);
+
+  const result = await pool.query(
+    "SELECT id, email, name, role, specialization, workplace, phone, stream_id, referral_code, token_version, created_at FROM users WHERE id=$1",
+    [req.user.id]
+  );
+  const row = result.rows[0];
+  // Имя могло поменяться — перевыпускаем токен, чтобы во всех последующих действиях
+  // (например, в журнале аудита) снова фигурировало актуальное имя, а не старое из JWT.
+  const user = { id: row.id, email: row.email, name: row.name, role: row.role, tokenVersion: row.token_version };
+  res.cookie("token", signToken(user), COOKIE_OPTS);
+  res.json({ user: { id: row.id, email: row.email, name: row.name, role: row.role, specialization: row.specialization, workplace: row.workplace, phone: row.phone, stream_id: row.stream_id, referral_code: row.referral_code, created_at: row.created_at } });
 });
 
 router.post("/change-password", authRequired, async (req, res) => {

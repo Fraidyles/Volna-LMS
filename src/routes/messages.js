@@ -14,6 +14,11 @@ router.get("/:studentId", authRequired, async (req, res) => {
     "SELECT id, from_role, author_name, body, created_at FROM messages WHERE student_id=$1 ORDER BY created_at ASC",
     [studentId]
   );
+  // Врач читает свой же чат — отмечаем момент прочтения, чтобы бейдж непрочитанного
+  // на вкладке «Сообщения» погас (см. unreadMessages в GET /course).
+  if (req.user.role === "student") {
+    await pool.query("UPDATE progress SET messages_read_at=now() WHERE user_id=$1", [studentId]);
+  }
   res.json({ messages: result.rows });
 });
 

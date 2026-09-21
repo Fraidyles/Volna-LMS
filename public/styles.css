@@ -174,6 +174,7 @@ label{font-size:13px;font-weight:500;color:var(--muted);display:block;margin-bot
 .tab{padding:11px 4px;margin-right:26px;font-size:14px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;white-space:nowrap;transition:color .12s;}
 .tab:hover{color:var(--ink);}
 .tab.active{color:var(--ink);border-bottom-color:var(--primary);}
+.tab-badge{display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;margin-left:6px;border-radius:8px;background:var(--status-live);color:#fff;font-size:10px;font-weight:600;line-height:1;vertical-align:2px;}
 
 /* ---------------- «Моя строка»: тонкий сегментированный прогресс ---------------- */
 .course-hero{padding:26px 28px;}
@@ -210,6 +211,9 @@ label{font-size:13px;font-weight:500;color:var(--muted);display:block;margin-bot
 .lesson-body .prose ul{margin:0 0 16px;padding-left:20px;}
 .lesson-body .prose li{margin-bottom:6px;}
 .lesson-footer{display:flex;justify-content:space-between;align-items:center;margin-top:34px;padding-top:22px;border-top:var(--border-hairline);}
+.lesson-note{max-width:66ch;margin-top:28px;padding-top:22px;border-top:var(--border-hairline);}
+.lesson-note label{font-size:12.5px;font-weight:500;color:var(--muted);display:block;margin-bottom:7px;}
+.lesson-note textarea{resize:vertical;}
 
 .quiz-q{margin-bottom:26px;padding-bottom:26px;border-bottom:var(--border-hairline);}
 .quiz-q:last-child{border-bottom:none;}

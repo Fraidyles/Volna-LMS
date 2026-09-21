@@ -1,5 +1,6 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 const pool = require("../db");
 const { authRequired, requireRole } = require("../middleware/auth");
 const { logAction } = require("../audit");
@@ -34,6 +35,28 @@ router.get("/directory", authRequired, requireRole("curator", "admin", "super_ad
     `SELECT id, name, role FROM users WHERE role IN ('admin','curator','super_admin') ORDER BY name`
   );
   res.json({ staff: result.rows });
+});
+
+// Смена роли уже существующему сотруднику (без удаления и повторного приглашения).
+// Доступ к обеим ролям — текущей и новой — проверяется той же логикой, что и назначение
+// при приглашении: администратор не может трогать другого администратора, только куратора.
+router.patch("/team/:id/role", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const newRole = req.body && req.body.role;
+  if (!["curator", "admin"].includes(newRole)) return res.status(400).json({ error: "invalid_input" });
+
+  const target = await pool.query("SELECT role, name FROM users WHERE id=$1", [req.params.id]);
+  if (!target.rowCount) return res.status(404).json({ error: "not_found" });
+  const currentRole = target.rows[0].role;
+
+  if (!canAssignRole(req.user.role, currentRole) || !canAssignRole(req.user.role, newRole)) {
+    return res.status(403).json({ error: "forbidden" });
+  }
+  if (currentRole === newRole) return res.json({ ok: true, role: newRole });
+
+  await pool.query("UPDATE users SET role=$1 WHERE id=$2", [newRole, req.params.id]);
+  await logAction(req.user, "staff.role_change", "user", req.params.id, target.rows[0].name,
+    { newRole, before: { role: currentRole } }, true);
+  res.json({ ok: true, role: newRole });
 });
 
 router.delete("/team/:id", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
@@ -161,6 +184,33 @@ router.patch("/students/:id/curator", authRequired, requireRole("curator", "admi
   res.json({ ok: true });
 });
 
+// Персонал правит контактные данные врача (например, тот сам не может/не успел
+// это сделать) — имя, телефон, место работы, специализация.
+router.patch("/students/:id/profile", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+  const { name, phone, workplace, specialization } = req.body || {};
+  const sets = [];
+  const values = [];
+  if (typeof name === "string") {
+    if (!name.trim()) return res.status(400).json({ error: "invalid_input", message: "Имя не может быть пустым" });
+    sets.push(`name=$${sets.length + 1}`); values.push(name.trim());
+  }
+  if (typeof phone === "string") { sets.push(`phone=$${sets.length + 1}`); values.push(phone.trim() || null); }
+  if (typeof workplace === "string") { sets.push(`workplace=$${sets.length + 1}`); values.push(workplace.trim() || null); }
+  if (typeof specialization === "string") { sets.push(`specialization=$${sets.length + 1}`); values.push(specialization.trim() || null); }
+  if (!sets.length) return res.status(400).json({ error: "invalid_input" });
+
+  const before = await pool.query("SELECT name, phone, workplace, specialization FROM users WHERE id=$1 AND role='student'", [req.params.id]);
+  if (!before.rowCount) return res.status(404).json({ error: "not_found" });
+
+  values.push(req.params.id);
+  const result = await pool.query(`UPDATE users SET ${sets.join(", ")} WHERE id=$${values.length} AND role='student' RETURNING id`, values);
+  if (!result.rowCount) return res.status(404).json({ error: "not_found" });
+
+  await logAction(req.user, "student.profile_update", "student", req.params.id, name ? name.trim() : before.rows[0].name,
+    { before: before.rows[0] }, true);
+  res.json({ ok: true });
+});
+
 router.post("/students/bulk-field", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
   const { ids, field, value } = req.body || {};
   if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "invalid_input", message: "Не выбраны врачи" });
@@ -174,6 +224,29 @@ router.post("/students/bulk-field", authRequired, requireRole("curator", "admin"
     return res.status(400).json({ error: "invalid_field" });
   }
   res.json({ ok: true, updated: ids.length });
+});
+
+/* ---------- Приватные заметки персонала о враче (врач их никогда не видит) ---------- */
+
+router.get("/students/:id/notes", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+  const result = await pool.query(
+    "SELECT id, author_name, body, created_at FROM student_notes WHERE student_id=$1 ORDER BY created_at DESC",
+    [req.params.id]
+  );
+  res.json({ notes: result.rows });
+});
+
+router.post("/students/:id/notes", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+  const body = req.body && req.body.body;
+  if (!body || !body.trim()) return res.status(400).json({ error: "invalid_input" });
+  const target = await pool.query("SELECT id FROM users WHERE id=$1 AND role='student'", [req.params.id]);
+  if (!target.rowCount) return res.status(404).json({ error: "not_found" });
+  const id = crypto.randomUUID();
+  await pool.query(
+    "INSERT INTO student_notes (id, student_id, author_id, author_name, body) VALUES ($1,$2,$3,$4,$5)",
+    [id, req.params.id, req.user.id, req.user.name, body.trim()]
+  );
+  res.json({ ok: true, id });
 });
 
 /* ---------- Сброс пароля (пока нет email-рассылки — куратор/админ передаёт временный пароль лично) ---------- */

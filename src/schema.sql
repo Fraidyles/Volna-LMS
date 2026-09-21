@@ -172,5 +172,23 @@ ALTER TABLE events ADD COLUMN IF NOT EXISTS recurrence_group_id TEXT;
 ALTER TABLE events ADD COLUMN IF NOT EXISTS recurrence TEXT;
 CREATE INDEX IF NOT EXISTS idx_events_recurrence_group ON events(recurrence_group_id);
 
+-- ---------- Этап 6: непрочитанные сообщения, заметки к уроку, приватные заметки куратора ----------
 
+-- Момент, когда врач последний раз открывал свой чат — всё от куратора после этой
+-- отметки считается непрочитанным (бейдж на вкладке «Сообщения»).
+ALTER TABLE progress ADD COLUMN IF NOT EXISTS messages_read_at TIMESTAMPTZ;
+
+-- Личные заметки врача к урокам: {"l1": "текст заметки", ...} — видны только ему самому.
+ALTER TABLE progress ADD COLUMN IF NOT EXISTS lesson_notes JSONB NOT NULL DEFAULT '{}';
+
+-- Приватные заметки персонала о враче — отдельно от чата, врач их не видит никогда.
+CREATE TABLE IF NOT EXISTS student_notes (
+  id            TEXT PRIMARY KEY,
+  student_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  author_id     TEXT,
+  author_name   TEXT NOT NULL,
+  body          TEXT NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_student_notes_student ON student_notes(student_id, created_at DESC);
 

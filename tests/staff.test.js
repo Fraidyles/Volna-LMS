@@ -101,4 +101,67 @@ describe("Права доступа персонала", () => {
     expect(allowed.status).toBe(200);
     expect(Array.isArray(allowed.body.log)).toBe(true);
   });
+
+  test("куратор может поправить контактные данные врача", async () => {
+    const curator = await createUser({ role: "curator" });
+    const cookie = await loginAs(curator);
+    const student = await createUser({ role: "student" });
+    const res = await request(app).patch(`/api/staff/students/${student.id}/profile`).set("Cookie", cookie)
+      .send({ workplace: "Городская клиника №5", phone: "+7 900 111-22-33" });
+    expect(res.status).toBe(200);
+
+    const check = await request(app).get(`/api/staff/students/${student.id}`).set("Cookie", cookie);
+    expect(check.body.student.workplace).toBe("Городская клиника №5");
+    expect(check.body.student.phone).toBe("+7 900 111-22-33");
+  });
+
+  test("приватные заметки куратора о враче — врач их не видит", async () => {
+    const curator = await createUser({ role: "curator" });
+    const curatorCookie = await loginAs(curator);
+    const student = await createUser({ role: "student" });
+
+    const createRes = await request(app).post(`/api/staff/students/${student.id}/notes`).set("Cookie", curatorCookie)
+      .send({ body: "Пропускает эфиры, стоит позвонить" });
+    expect(createRes.status).toBe(200);
+
+    const listRes = await request(app).get(`/api/staff/students/${student.id}/notes`).set("Cookie", curatorCookie);
+    expect(listRes.status).toBe(200);
+    expect(listRes.body.notes.length).toBe(1);
+    expect(listRes.body.notes[0].body).toBe("Пропускает эфиры, стоит позвонить");
+
+    const studentCookie = await loginAs(student);
+    const forbidden = await request(app).get(`/api/staff/students/${student.id}/notes`).set("Cookie", studentCookie);
+    expect(forbidden.status).toBe(403);
+  });
+
+  test("смена роли: администратор не может назначать роль «администратор» (это только у главного администратора), как и при приглашении", async () => {
+    const admin = await createUser({ role: "admin" });
+    const adminCookie = await loginAs(admin);
+    const curator = await createUser({ role: "curator" });
+
+    const promote = await request(app).patch(`/api/staff/team/${curator.id}/role`).set("Cookie", adminCookie)
+      .send({ role: "admin" });
+    expect(promote.status).toBe(403);
+
+    const otherAdmin = await createUser({ role: "admin" });
+    const forbidden = await request(app).patch(`/api/staff/team/${otherAdmin.id}/role`).set("Cookie", adminCookie)
+      .send({ role: "curator" });
+    expect(forbidden.status).toBe(403);
+  });
+
+  test("смена роли: главный администратор может повысить куратора и понизить админа обратно", async () => {
+    const superAdmin = await createUser({ role: "super_admin" });
+    const cookie = await loginAs(superAdmin);
+    const curator = await createUser({ role: "curator" });
+
+    const promote = await request(app).patch(`/api/staff/team/${curator.id}/role`).set("Cookie", cookie)
+      .send({ role: "admin" });
+    expect(promote.status).toBe(200);
+    expect(promote.body.role).toBe("admin");
+
+    const demote = await request(app).patch(`/api/staff/team/${curator.id}/role`).set("Cookie", cookie)
+      .send({ role: "curator" });
+    expect(demote.status).toBe(200);
+    expect(demote.body.role).toBe("curator");
+  });
 });

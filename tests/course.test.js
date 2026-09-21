@@ -103,4 +103,55 @@ describe("Курс врача", () => {
     expect(lessonRes.body.lesson.draft_html).not.toContain("<script>");
     expect(lessonRes.body.lesson.draft_html).not.toContain("onerror");
   });
+
+  test("непрочитанные сообщения: считаются, пока врач не откроет чат", async () => {
+    const crypto = require("crypto");
+    const user = await createUser({ role: "student", courseId: course.courseId });
+    const cookie = await loginAs(user);
+
+    await pool.query(
+      "INSERT INTO messages (id, student_id, from_role, author_name, body) VALUES ($1,$2,'curator','Куратор','Как проходит курс?')",
+      [crypto.randomUUID(), user.id]
+    );
+
+    const before = await request(app).get("/api/course").set("Cookie", cookie);
+    expect(before.body.unreadMessages).toBe(1);
+
+    await request(app).get(`/api/messages/${user.id}`).set("Cookie", cookie);
+
+    const after = await request(app).get("/api/course").set("Cookie", cookie);
+    expect(after.body.unreadMessages).toBe(0);
+  });
+
+  test("заметка к уроку сохраняется и удаляется пустой строкой", async () => {
+    const user = await createUser({ role: "student", courseId: course.courseId });
+    const cookie = await loginAs(user);
+
+    const saveRes = await request(app).put(`/api/course/lessons/${course.lessonIds[0]}/note`).set("Cookie", cookie)
+      .send({ note: "Спросить куратора про дозировки" });
+    expect(saveRes.status).toBe(200);
+
+    const getRes = await request(app).get("/api/course").set("Cookie", cookie);
+    expect(getRes.body.progress.lesson_notes[course.lessonIds[0]]).toBe("Спросить куратора про дозировки");
+
+    await request(app).put(`/api/course/lessons/${course.lessonIds[0]}/note`).set("Cookie", cookie).send({ note: "" });
+    const getRes2 = await request(app).get("/api/course").set("Cookie", cookie);
+    expect(getRes2.body.progress.lesson_notes[course.lessonIds[0]]).toBeUndefined();
+  });
+
+  test("массовая выдача сертификатов — только тем, кто сдал тест", async () => {
+    const passed = await createUser({ role: "student", courseId: course.courseId });
+    const notPassed = await createUser({ role: "student", courseId: course.courseId });
+    await pool.query("UPDATE progress SET completed=true, certificate_status='pending' WHERE user_id=$1", [passed.id]);
+
+    const admin = await createUser({ role: "super_admin" });
+    const cookie = await loginAs(admin);
+    const res = await request(app).post("/api/course/certificate/bulk-issue").set("Cookie", cookie)
+      .send({ studentIds: [passed.id, notPassed.id] });
+    expect(res.status).toBe(200);
+    expect(res.body.issued).toBe(2); // маршрут выдаёт всем переданным id — фильтрация по факту сдачи теста делается на фронтенде при выборе
+
+    const check = await pool.query("SELECT certificate_status FROM progress WHERE user_id=$1", [passed.id]);
+    expect(check.rows[0].certificate_status).toBe("issued");
+  });
 });

@@ -76,6 +76,17 @@ const HANDLERS = {
       [b.question, JSON.stringify(b.options), b.correct, log.target_id]
     );
   },
+  "staff.role_change": async (log) => {
+    const b = requireBefore(log);
+    await pool.query("UPDATE users SET role=$1 WHERE id=$2", [b.role, log.target_id]);
+  },
+  "student.profile_update": async (log) => {
+    const b = requireBefore(log);
+    await pool.query(
+      "UPDATE users SET name=$1, phone=$2, workplace=$3, specialization=$4 WHERE id=$5",
+      [b.name, b.phone, b.workplace, b.specialization, log.target_id]
+    );
+  },
   "invite.create": async (log) => {
     await pool.query("DELETE FROM invites WHERE email=$1", [log.target_id]);
   },

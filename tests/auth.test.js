@@ -55,6 +55,24 @@ describe("Аутентификация", () => {
     expect(res.body.user.id).toBe(user.id);
   });
 
+  test("PATCH /auth/me — врач может поправить телефон, место работы, специализацию", async () => {
+    const user = await createUser({ role: "student" });
+    const cookie = await loginAs(user);
+    const res = await request(app).patch("/api/auth/me").set("Cookie", cookie)
+      .send({ phone: "+7 900 000-00-00", workplace: "Клиника «Надежда»", specialization: "кардиолог" });
+    expect(res.status).toBe(200);
+    expect(res.body.user.phone).toBe("+7 900 000-00-00");
+    expect(res.body.user.workplace).toBe("Клиника «Надежда»");
+    expect(res.body.user.specialization).toBe("кардиолог");
+  });
+
+  test("PATCH /auth/me — пустое имя отклоняется, email не меняется этим путём", async () => {
+    const user = await createUser();
+    const cookie = await loginAs(user);
+    const res = await request(app).patch("/api/auth/me").set("Cookie", cookie).send({ name: "   " });
+    expect(res.status).toBe(400);
+  });
+
   test("смена пароля: неверный текущий пароль отклоняется", async () => {
     const user = await createUser();
     const cookie = await loginAs(user);

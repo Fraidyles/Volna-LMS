@@ -53,12 +53,18 @@ router.get("/", authRequired, requireRole("student"), async (req, res) => {
     hiddenForMe: (hiddenFor[l.id] || []).indexOf(req.user.id) !== -1
   }));
 
+  const unread = await pool.query(
+    "SELECT COUNT(*)::int AS cnt FROM messages WHERE student_id=$1 AND from_role='curator' AND created_at > COALESCE($2::timestamptz, '-infinity')",
+    [req.user.id, pr.messages_read_at]
+  );
+
   res.json({
     course: course.rows[0],
     lessons: lessonsOut,
     quiz: quiz.rows.map((q) => ({ id: q.id, question: q.question, options: q.options })),
     quizHiddenForMe: (hiddenFor.quiz || []).indexOf(req.user.id) !== -1,
     progress: pr,
+    unreadMessages: unread.rows[0].cnt,
     locked: computeLocked(pr)
   });
 });
@@ -124,6 +130,18 @@ router.post("/quiz-submit", authRequired, requireRole("student"), async (req, re
   res.json({ score, completed, certificateStatus });
 });
 
+// Личная заметка врача к уроку — видна только ему самому, хранится в progress.lesson_notes.
+router.put("/lessons/:id/note", authRequired, requireRole("student"), async (req, res) => {
+  const note = (req.body && typeof req.body.note === "string") ? req.body.note : "";
+  const progressRow = await pool.query("SELECT lesson_notes FROM progress WHERE user_id=$1", [req.user.id]);
+  if (!progressRow.rowCount) return res.status(404).json({ error: "no_progress" });
+  const notes = progressRow.rows[0].lesson_notes || {};
+  if (note.trim()) notes[req.params.id] = note.trim();
+  else delete notes[req.params.id];
+  await pool.query("UPDATE progress SET lesson_notes=$1 WHERE user_id=$2", [JSON.stringify(notes), req.user.id]);
+  res.json({ ok: true });
+});
+
 router.post("/request-full-access", authRequired, requireRole("student"), async (req, res) => {
   await pool.query("UPDATE progress SET requested_full_access=true WHERE user_id=$1", [req.user.id]);
   res.json({ ok: true });
@@ -156,6 +174,38 @@ router.post(
     res.json({ ok: true });
   }
 );
+
+// Массовая выдача — тот же путь, что и у одиночной выдачи, просто в цикле по списку
+// (каждая выдача логируется отдельной записью, чтобы откат остался точечным).
+router.post("/certificate/bulk-issue", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+  const ids = (req.body && req.body.studentIds) || [];
+  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "invalid_input" });
+
+  let issued = 0;
+  for (const studentId of ids) {
+    const before = await pool.query(
+      "SELECT certificate_status, certificate_issued_at, certificate_issued_by FROM progress WHERE user_id=$1",
+      [studentId]
+    );
+    if (!before.rowCount) continue;
+    const result = await pool.query(
+      `UPDATE progress SET certificate_status='issued', certificate_issued_at=now(), certificate_issued_by=$1
+       WHERE user_id=$2 RETURNING user_id`,
+      [req.user.name, studentId]
+    );
+    if (!result.rowCount) continue;
+    const u = await pool.query("SELECT name FROM users WHERE id=$1", [studentId]);
+    await logAction(req.user, "certificate.issue", "student", studentId, u.rows[0] && u.rows[0].name, {
+      before: {
+        certificateStatus: before.rows[0].certificate_status,
+        certificateIssuedAt: before.rows[0].certificate_issued_at,
+        certificateIssuedBy: before.rows[0].certificate_issued_by
+      }
+    }, true);
+    issued++;
+  }
+  res.json({ ok: true, issued });
+});
 
 /* ---------- Видимость материалов по врачам ---------- */
 

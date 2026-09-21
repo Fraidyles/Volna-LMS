@@ -21,7 +21,8 @@ var me = null;                 // текущий пользователь {id,em
 var view = "loading";
 var course = null;             // {course, lessons, quiz, progress} — для врача
 var studentState = { tab:"course", lessonIndex:0, quizMode:false, quizSubmitted:false };
-var staffState = { mainTab:"students", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], quizAdmin:[], auditLog:[], inviteMode:"single" };
+var staffState = { mainTab:"students", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"" };
+var profileEditor = { open:false };
 var calendarState = { monthDate:new Date(), streams:[], events:[], showStreamForm:false, eventModalMode:null, eventModalDate:null, eventModalId:null, recurring:false };
 var materialsPicker = { open:false, targetId:null, targetTitle:"", search:"", selectedIds:[] };
 var courseVisibility = {}; // {lessonId|"quiz": [uid,...]} — для вкладки «Материалы» у персонала
@@ -261,6 +262,9 @@ function render(){
   if(changePasswordOpen && (view==="student"||view==="staff")){
     app.appendChild(renderChangePasswordModal());
   }
+  if(profileEditor.open && (view==="student"||view==="staff")){
+    app.appendChild(renderProfileModal());
+  }
   if(tempPasswordResult && view==="staff"){
     app.appendChild(renderTempPasswordModal());
   }
@@ -360,6 +364,21 @@ function renderChangePasswordModal(){
   return el('<div class="overlay" data-action="overlay-close-password"><div class="drawer" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
 }
 
+function renderProfileModal(){
+  var isStudent = me.role === "student";
+  var body = '<div class="drawer-head"><b style="font-size:16px;">Профиль</b><button class="btn btn-ghost btn-sm" data-action="close-profile-editor">Закрыть ✕</button></div>' +
+    '<div class="drawer-body"><form id="profileEditorForm">' +
+      '<div class="field"><label>Имя и фамилия</label><input class="input" name="name" required value="'+escapeHtml(me.name||"")+'"></div>' +
+      (isStudent ? '<div class="field"><label>Специализация</label><input class="input" name="specialization" value="'+escapeHtml(me.specialization||"")+'"></div>' : '') +
+      '<div class="field"><label>Телефон</label><input class="input" type="tel" name="phone" value="'+escapeHtml(me.phone||"")+'"></div>' +
+      (isStudent ? '<div class="field"><label>Место работы</label><input class="input" name="workplace" value="'+escapeHtml(me.workplace||"")+'"></div>' : '') +
+      '<div class="field"><label>Email</label><div class="input" style="background:var(--line-2);color:var(--muted);">'+escapeHtml(me.email||"")+'</div><p class="hint">Email нельзя изменить самостоятельно — обратитесь к куратору.</p></div>' +
+      '<div class="err-text" id="profileEditorError" style="display:none;"></div>' +
+      '<button class="btn btn-primary btn-block" type="submit">Сохранить</button>' +
+    '</form></div>';
+  return el('<div class="overlay" data-action="overlay-close-profile-editor"><div class="drawer" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
+}
+
 /* ============================= РЕНДЕР: АВТОРИЗАЦИЯ ============================= */
 function renderAuthScreen(mode){
   var isLogin = mode === "login";
@@ -413,7 +432,8 @@ function renderTopbar(){
   var themeBtn = '<button class="btn btn-sm btn-ghost" data-action="toggle-theme" title="Переключить тему">'+icon(isDark?"sun":"moon")+'</button>';
   var rightControls = previewMode
     ? themeBtn + '<button class="btn btn-sm btn-ghost" data-action="exit-preview">Вернуться в панель</button>'
-    : themeBtn + '<button class="btn btn-sm btn-ghost" data-action="open-change-password">Сменить пароль</button>' +
+    : themeBtn + '<button class="btn btn-sm btn-ghost" data-action="open-profile-editor">Профиль</button>' +
+      '<button class="btn btn-sm btn-ghost" data-action="open-change-password">Сменить пароль</button>' +
       '<button class="btn btn-sm btn-ghost" data-action="logout">Выйти</button>';
   return el(
     '<div class="topbar"><div class="wrap topbar-inner">' +
@@ -452,7 +472,7 @@ function renderStudentShell(){
     content.appendChild(renderCoursePlayer());
   } else {
     var tabs = previewMode ? ["course","schedule"] : ["course","schedule","messages"];
-    content.appendChild(renderTabsRow(tabs, studentState.tab, "student-tab"));
+    content.appendChild(renderTabsRow(tabs, studentState.tab, "student-tab", { messages: course.unreadMessages||0 }));
     if(studentState.tab === "messages" && !previewMode) content.appendChild(renderStudentMessages());
     else if(studentState.tab === "schedule") content.appendChild(renderStudentSchedule());
     else content.appendChild(renderStudentHome());
@@ -460,10 +480,14 @@ function renderStudentShell(){
   return wrap;
 }
 
-function renderTabsRow(tabs, active, actionName){
+function renderTabsRow(tabs, active, actionName, badges){
   var labels = { course:"Курс", messages:"Сообщения", progress:"Прогресс", chat:"Чат", profile:"Профиль", schedule:"Эфиры" };
   var html = '<div class="tabs" style="margin-top:24px;">';
-  tabs.forEach(function(t){ html += '<button class="tab'+(t===active?' active':'')+'" data-action="'+actionName+'" data-tab="'+t+'">'+labels[t]+'</button>'; });
+  tabs.forEach(function(t){
+    var count = badges && badges[t];
+    html += '<button class="tab'+(t===active?' active':'')+'" data-action="'+actionName+'" data-tab="'+t+'">'+labels[t]+
+      (count?'<span class="tab-badge">'+(count>9?"9+":count)+'</span>':'')+'</button>';
+  });
   html += '</div>';
   return el(html);
 }
@@ -633,11 +657,17 @@ function renderCoursePlayer(){
   }
 
   var isLast = idx === course.lessons.length-1;
+  var noteVal = (course.progress && course.progress.lesson_notes && course.progress.lesson_notes[lesson.id]) || "";
   var body = '<div class="lesson-body">' +
     '<button class="back-link" data-action="close-course">← К курсу</button>' +
     '<h3>'+escapeHtml(lesson.title)+'</h3>' +
     '<div class="meta">Урок '+(idx+1)+' из '+course.lessons.length+' · '+escapeHtml(lesson.duration||"")+'</div>' +
     '<div class="prose">'+lesson.html+'</div>' +
+    '<div class="lesson-note">' +
+      '<label>Ваша заметка к уроку <span style="font-weight:400;color:var(--muted-2);">(видна только вам)</span></label>' +
+      '<textarea class="input" id="lessonNoteInput" style="height:64px;font-size:13.5px;" placeholder="Например: спросить куратора про дозировки">'+escapeHtml(noteVal)+'</textarea>' +
+      '<button class="btn btn-sm btn-ghost" style="margin-top:8px;" data-action="save-lesson-note" data-id="'+lesson.id+'">Сохранить заметку</button>' +
+    '</div>' +
     '<div class="lesson-footer">' +
       '<button class="btn btn-ghost" data-action="prev-lesson"'+(idx===0?' disabled':'')+'>← Предыдущий</button>' +
       '<button class="btn btn-primary" data-action="next-lesson">'+(isLast?"Перейти к тесту":"Урок пройден, далее →")+'</button>' +
@@ -872,6 +902,8 @@ var AUDIT_ACTION_LABELS = {
   "invite.bulk_create": "Массовое приглашение",
   "invite.cancel": "Отмена приглашения",
   "staff.remove": "Отзыв доступа сотруднику",
+  "staff.role_change": "Изменена роль сотрудника",
+  "student.profile_update": "Изменены данные врача",
   "password.reset_by_staff": "Сброс пароля (персоналом)",
   "access.set_expiry": "Установлен срок доступа",
   "access.extend": "Доступ продлён",
@@ -1144,10 +1176,19 @@ function renderStaffStats(){
 function renderCertificateQueue(){
   var pending = staffState.students.filter(function(s){ return s.completed && s.certificate_status!=="issued"; });
   if(!pending.length) return el('<div></div>');
+  var pendingIds = pending.map(function(s){ return s.id; });
+  var selected = staffState.certSelectedIds.filter(function(id){ return pendingIds.indexOf(id)!==-1; });
+  var allSelected = selected.length>0 && selected.length===pending.length;
   var html = '<div class="card" style="padding:18px 20px;margin-bottom:20px;">' +
-    '<b style="font-size:14.5px;display:block;margin-bottom:12px;">Очередь сертификатов</b>';
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">' +
+      '<label style="display:flex;align-items:center;gap:8px;font-size:14.5px;font-weight:600;cursor:pointer;">' +
+        '<input type="checkbox" data-action="toggle-cert-select-all"'+(allSelected?' checked':'')+' style="accent-color:var(--primary);">Очередь сертификатов</label>' +
+      (selected.length ? '<button class="btn btn-sm btn-primary" data-action="bulk-issue-certificates">Выдать выбранным ('+selected.length+')</button>' : '') +
+    '</div>';
   pending.forEach(function(s){
+    var checked = selected.indexOf(s.id)!==-1;
     html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line-2);">' +
+      '<input type="checkbox" data-action="toggle-cert-select" data-id="'+s.id+'"'+(checked?' checked':'')+' style="accent-color:var(--primary);">' +
       '<div class="avatar">'+initials(s.name)+'</div>' +
       '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:12px;color:var(--muted);">тест: '+s.quiz_score+'%</span></div>' +
       '<button class="btn btn-sm btn-ghost" data-action="open-student" data-id="'+s.id+'">Открыть</button>' +
@@ -1242,13 +1283,19 @@ function renderTeamTab(){
   if(!staffState.staff.length){
     html += '<div class="empty-state" style="padding:30px 10px;">Пока только вы.</div>';
   } else {
+    var myOptionsForChange = assignableRoleOptions(me.role);
     staffState.staff.forEach(function(c){
       var isMe = c.id===me.id;
       var canManage = !isMe && canAssignRole(me.role, c.role);
-      html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);">' +
+      // Смена роли имеет смысл только тогда, когда есть больше одного варианта на выбор —
+      // у администратора он один («куратор»), т.е. фактически no-op; показываем только главному администратору.
+      var canChangeRole = canManage && myOptionsForChange.length>1;
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);flex-wrap:wrap;">' +
         '<div class="avatar">'+initials(c.name)+'</div>' +
-        '<div style="flex:1;"><b style="font-size:13.8px;display:block;">'+escapeHtml(c.name)+(isMe?' <span style="color:var(--muted);font-weight:400;">(вы)</span>':'')+'</b>' +
+        '<div style="flex:1;min-width:140px;"><b style="font-size:13.8px;display:block;">'+escapeHtml(c.name)+(isMe?' <span style="color:var(--muted);font-weight:400;">(вы)</span>':'')+'</b>' +
         '<span style="font-size:12px;color:var(--muted);">'+roleLabel(c.role)+' · с '+fmtDate(c.created_at)+'</span></div>' +
+        (canChangeRole ? '<select class="input btn-sm" style="width:auto;" data-role-select data-id="'+c.id+'">' +
+          myOptionsForChange.map(function(r){ return '<option value="'+r+'"'+(c.role===r?' selected':'')+'>'+roleLabel(r)+'</option>'; }).join("") + '</select>' : '') +
         (canManage ? '<button class="btn btn-sm btn-ghost" data-action="reset-staff-password" data-id="'+c.id+'" data-name="'+escapeHtml(c.name)+'">Сбросить пароль</button>' : '') +
         (canManage ? '<button class="btn btn-sm btn-ghost" data-action="remove-staff" data-id="'+c.id+'">Убрать</button>' : '') +
       '</div>';
@@ -1286,7 +1333,8 @@ function renderStudentDrawer(){
     '<div class="tabs"><button class="tab'+(staffState.drawerTab==="progress"?' active':'')+'" data-action="drawer-tab" data-tab="progress">Прогресс</button>' +
     '<button class="tab'+(staffState.drawerTab==="access"?' active':'')+'" data-action="drawer-tab" data-tab="access">Доступ</button>' +
     '<button class="tab'+(staffState.drawerTab==="chat"?' active':'')+'" data-action="drawer-tab" data-tab="chat">Чат</button>' +
-    '<button class="tab'+(staffState.drawerTab==="profile"?' active':'')+'" data-action="drawer-tab" data-tab="profile">Профиль</button></div>';
+    '<button class="tab'+(staffState.drawerTab==="profile"?' active':'')+'" data-action="drawer-tab" data-tab="profile">Профиль</button>' +
+    '<button class="tab'+(staffState.drawerTab==="notes"?' active':'')+'" data-action="drawer-tab" data-tab="notes">Заметки</button></div>';
 
   if(staffState.drawerTab === "progress"){
     body += '<div class="progress-label">'+done+' из 5 уроков'+(typeof s.quiz_score==="number"?' · тест: '+s.quiz_score+'%':'')+'</div>';
@@ -1324,15 +1372,32 @@ function renderStudentDrawer(){
       '<div class="msg-list" id="msgListCurator"><div class="msg-empty">Загрузка…</div></div>' +
       '<div class="msg-input-row"><textarea class="input" id="curatorMsgInput" placeholder="Ответить врачу…"></textarea>' +
       '<button class="btn btn-primary" data-action="send-curator-msg" data-id="'+s.id+'">Отправить</button></div></div>';
+  } else if(staffState.drawerTab === "notes"){
+    body += '<p class="hint" style="margin-top:0;">Видно только персоналу — врач эти записи не видит.</p>' +
+      '<div class="field"><textarea class="input" id="studentNoteInput" style="height:64px;" placeholder="Например: пропускает эфиры, стоит позвонить"></textarea></div>' +
+      '<button class="btn btn-sm btn-primary" data-action="add-student-note" data-id="'+s.id+'">Добавить заметку</button>' +
+      '<div style="margin-top:18px;">';
+    if(!staffState.notes.length){
+      body += '<p class="hint">Заметок пока нет.</p>';
+    } else {
+      staffState.notes.forEach(function(n){
+        body += '<div style="padding:10px 0;border-bottom:1px solid var(--line-2);"><p style="font-size:13.5px;margin:0 0 4px;">'+escapeHtml(n.body)+'</p>' +
+          '<span style="font-size:11.5px;color:var(--muted-2);">'+escapeHtml(n.author_name||"")+' · '+fmtDate(n.created_at)+' '+fmtTime(n.created_at)+'</span></div>';
+      });
+    }
+    body += '</div>';
   } else {
     var curatorSelectOpts = '<option value=""'+(!s.assigned_curator_id?' selected':'')+'>Не назначен</option>' +
       directory.map(function(c){ return '<option value="'+c.id+'"'+(s.assigned_curator_id===c.id?' selected':'')+'>'+escapeHtml(c.name)+'</option>'; }).join("");
     var productSelectOpts = Object.keys(PRODUCTS).map(function(k){ return '<option value="'+k+'"'+((s.product||"longevity")===k?' selected':'')+'>'+escapeHtml(PRODUCTS[k])+'</option>'; }).join("");
     var paymentSelectOpts = Object.keys(PAYMENT_LABELS).map(function(k){ return '<option value="'+k+'"'+((s.payment_status||"unpaid")===k?' selected':'')+'>'+escapeHtml(PAYMENT_LABELS[k])+'</option>'; }).join("");
-    body += '<div class="field"><label>Email</label><div class="input" style="background:var(--line-2);">'+escapeHtml(s.email||"—")+'</div></div>' +
-      '<div class="field"><label>Телефон</label><div class="input" style="background:var(--line-2);">'+escapeHtml(s.phone||"—")+'</div></div>' +
-      '<div class="field"><label>Место работы</label><div class="input" style="background:var(--line-2);">'+escapeHtml(s.workplace||"—")+'</div></div>' +
-      '<div class="field"><label>Дата регистрации</label><div class="input" style="background:var(--line-2);">'+fmtDate(s.created_at)+'</div></div>' +
+    body += '<div class="field"><label>Имя и фамилия</label><input class="input" id="studentProfileName" value="'+escapeHtml(s.name||"")+'"></div>' +
+      '<div class="field"><label>Специализация</label><input class="input" id="studentProfileSpecialization" value="'+escapeHtml(s.specialization||"")+'"></div>' +
+      '<div class="field"><label>Email</label><div class="input" style="background:var(--line-2);">'+escapeHtml(s.email||"—")+'</div></div>' +
+      '<div class="field"><label>Телефон</label><input class="input" id="studentProfilePhone" value="'+escapeHtml(s.phone||"")+'"></div>' +
+      '<div class="field"><label>Место работы</label><input class="input" id="studentProfileWorkplace" value="'+escapeHtml(s.workplace||"")+'"></div>' +
+      '<button class="btn btn-sm btn-ghost" data-action="save-student-profile" data-id="'+s.id+'">Сохранить данные</button>' +
+      '<div class="field" style="margin-top:18px;"><label>Дата регистрации</label><div class="input" style="background:var(--line-2);">'+fmtDate(s.created_at)+'</div></div>' +
       '<div class="field"><label>Продукт</label><select class="input" data-field-select="product" data-id="'+s.id+'">'+productSelectOpts+'</select></div>' +
       '<div class="field"><label>Оплата</label><select class="input" data-field-select="payment" data-id="'+s.id+'">'+paymentSelectOpts+'</select></div>' +
       '<div class="field"><label>Ответственный куратор</label><select class="input" data-field-select="curator" data-id="'+s.id+'">'+curatorSelectOpts+'</select></div>' +
@@ -1405,8 +1470,18 @@ function wireEvents(root){
     if(action==="open-change-password"){ changePasswordOpen=true; render(); return; }
     if(action==="close-change-password"){ changePasswordOpen=false; render(); return; }
     if(action==="overlay-close-password" && !e.target.closest("[data-stop]")){ changePasswordOpen=false; render(); return; }
+    if(action==="open-profile-editor"){ profileEditor.open=true; render(); return; }
+    if(action==="close-profile-editor"){ profileEditor.open=false; render(); return; }
+    if(action==="overlay-close-profile-editor" && !e.target.closest("[data-stop]")){ profileEditor.open=false; render(); return; }
 
-    if(action==="student-tab"){ studentState.tab=t.getAttribute("data-tab"); if(studentState.tab!=="messages") stopMessagePolling(); render(); if(studentState.tab==="messages") startMessagePolling(me.id,"msgList"); return; }
+    if(action==="student-tab"){
+      studentState.tab=t.getAttribute("data-tab");
+      if(studentState.tab!=="messages") stopMessagePolling();
+      else if(course) course.unreadMessages=0; // сервер отметит прочитанным при загрузке чата
+      render();
+      if(studentState.tab==="messages") startMessagePolling(me.id,"msgList");
+      return;
+    }
     if(action==="open-course"){
       if(course.locked && course.locked.locked){ showToast("Доступ к курсу ограничен — напишите куратору в чате"); return; }
       studentState.tab="lesson"; studentState.lessonIndex=Math.min((course.progress&&course.progress.completed_lessons||[]).length, course.lessons.length-1); studentState.quizMode=false; studentState.quizSubmitted=false; render(); return;
@@ -1416,6 +1491,18 @@ function wireEvents(root){
       var goIdx=parseInt(t.getAttribute("data-idx"),10);
       if(course.lessons[goIdx].hiddenForMe){ showToast("Этот урок временно недоступен"); return; }
       studentState.lessonIndex=goIdx; studentState.quizMode=false; render(); return;
+    }
+    if(action==="save-lesson-note"){
+      var noteLessonId=t.getAttribute("data-id");
+      var noteVal2=document.getElementById("lessonNoteInput").value;
+      try{
+        await api("/course/lessons/"+noteLessonId+"/note", { method:"PUT", body: JSON.stringify({ note:noteVal2 }) });
+        if(!course.progress.lesson_notes) course.progress.lesson_notes={};
+        if(noteVal2.trim()) course.progress.lesson_notes[noteLessonId]=noteVal2.trim();
+        else delete course.progress.lesson_notes[noteLessonId];
+        showToast("Заметка сохранена");
+      }catch(err){ showToast(err.message); }
+      return;
     }
     if(action==="goto-quiz"){
       if(course.quizHiddenForMe){ showToast("Тест временно недоступен"); return; }
@@ -1469,12 +1556,48 @@ function wireEvents(root){
       render(); return;
     }
     if(action==="open-student"){
-      staffState.selectedStudentId=t.getAttribute("data-id"); staffState.drawerTab="progress"; staffState.selectedStudent=null; render();
+      staffState.selectedStudentId=t.getAttribute("data-id"); staffState.drawerTab="progress"; staffState.selectedStudent=null; staffState.notes=[]; render();
       try{ var d=await api("/staff/students/"+staffState.selectedStudentId); staffState.selectedStudent=d.student; render(); }catch(err){ showToast(err.message); }
       return;
     }
     if(action==="close-drawer" || (action==="overlay-close" && !e.target.closest("[data-stop]"))){ staffState.selectedStudentId=null; stopMessagePolling(); render(); return; }
-    if(action==="drawer-tab"){ staffState.drawerTab=t.getAttribute("data-tab"); render(); if(staffState.drawerTab==="chat") startMessagePolling(staffState.selectedStudentId,"msgListCurator"); else stopMessagePolling(); return; }
+    if(action==="drawer-tab"){
+      staffState.drawerTab=t.getAttribute("data-tab"); render();
+      if(staffState.drawerTab==="chat") startMessagePolling(staffState.selectedStudentId,"msgListCurator");
+      else stopMessagePolling();
+      if(staffState.drawerTab==="notes"){
+        try{ var dn=await api("/staff/students/"+staffState.selectedStudentId+"/notes"); staffState.notes=dn.notes; render(); }catch(err){ showToast(err.message); }
+      }
+      return;
+    }
+    if(action==="save-student-profile"){
+      var spId=t.getAttribute("data-id");
+      var spPayload={
+        name: document.getElementById("studentProfileName").value,
+        specialization: document.getElementById("studentProfileSpecialization").value,
+        phone: document.getElementById("studentProfilePhone").value,
+        workplace: document.getElementById("studentProfileWorkplace").value
+      };
+      t.disabled=true; t.textContent="Сохраняем…";
+      try{
+        await api("/staff/students/"+spId+"/profile", { method:"PATCH", body: JSON.stringify(spPayload) });
+        staffState.selectedStudent=Object.assign({}, staffState.selectedStudent, spPayload);
+        var spIdx=staffState.students.findIndex(function(x){ return x.id===spId; });
+        if(spIdx!==-1) staffState.students[spIdx]=Object.assign({}, staffState.students[spIdx], spPayload);
+        showToast("Данные сохранены");
+      }catch(err){ showToast(err.message); }
+      t.disabled=false; t.textContent="Сохранить данные"; render(); return;
+    }
+    if(action==="add-student-note"){
+      var anId=t.getAttribute("data-id"); var anInput=document.getElementById("studentNoteInput"); var anVal=anInput?anInput.value:"";
+      if(!anVal || !anVal.trim()) return;
+      t.disabled=true;
+      try{
+        await api("/staff/students/"+anId+"/notes", { method:"POST", body: JSON.stringify({ body:anVal }) });
+        var dn2=await api("/staff/students/"+anId+"/notes"); staffState.notes=dn2.notes;
+      }catch(err){ showToast(err.message); }
+      t.disabled=false; render(); return;
+    }
     if(action==="send-curator-msg"){
       var sid=t.getAttribute("data-id"); var cinp=document.getElementById("curatorMsgInput"); var cval=cinp?cinp.value:"";
       if(cval.trim()){ if(cinp) cinp.value=""; try{ await api("/messages", { method:"POST", body: JSON.stringify({studentId:sid, text:cval}) }); loadMessages(sid,"msgListCurator"); }catch(err){ showToast(err.message); } }
@@ -1617,6 +1740,29 @@ function wireEvents(root){
       render(); return;
     }
     if(action==="clear-selection"){ staffState.selectedIds=[]; render(); return; }
+    if(action==="toggle-cert-select"){
+      var cpid=t.getAttribute("data-id"); var cpidx=staffState.certSelectedIds.indexOf(cpid);
+      if(t.checked && cpidx===-1) staffState.certSelectedIds.push(cpid);
+      if(!t.checked && cpidx!==-1) staffState.certSelectedIds.splice(cpidx,1);
+      render(); return;
+    }
+    if(action==="toggle-cert-select-all"){
+      var pending0=staffState.students.filter(function(s){ return s.completed && s.certificate_status!=="issued"; }).map(function(s){ return s.id; });
+      staffState.certSelectedIds = t.checked ? pending0 : [];
+      render(); return;
+    }
+    if(action==="bulk-issue-certificates"){
+      var certIds=staffState.certSelectedIds.slice();
+      if(!certIds.length) return;
+      t.disabled=true; t.textContent="Выдаём…";
+      try{
+        await api("/course/certificate/bulk-issue", { method:"POST", body: JSON.stringify({ studentIds: certIds }) });
+        showToast("Сертификаты выданы: "+certIds.length);
+        staffState.certSelectedIds=[];
+        await loadStaffData();
+      }catch(err){ showToast(err.message); }
+      render(); return;
+    }
     if(action==="apply-bulk-stream"){
       var sel=document.getElementById("bulkStreamSelect"); var streamId=sel?sel.value:"";
       var ids=staffState.selectedIds.slice();
@@ -1761,6 +1907,20 @@ function wireEvents(root){
       }catch(err){ errBoxCp.textContent=err.message; errBoxCp.style.display="block"; btnCp.disabled=false; btnCp.textContent="Сохранить новый пароль"; }
       render(); return;
     }
+    if(e.target.id==="profileEditorForm"){
+      e.preventDefault();
+      var fdpe=new FormData(e.target);
+      var errPe=document.getElementById("profileEditorError"); errPe.style.display="none";
+      var btnPe=e.target.querySelector("button[type=submit]"); btnPe.disabled=true; btnPe.textContent="Сохраняем…";
+      var payloadPe={ name:fdpe.get("name"), phone:fdpe.get("phone")||"" };
+      if(me.role==="student"){ payloadPe.specialization=fdpe.get("specialization")||""; payloadPe.workplace=fdpe.get("workplace")||""; }
+      try{
+        var rPe=await api("/auth/me", { method:"PATCH", body: JSON.stringify(payloadPe) });
+        me = rPe.user;
+        profileEditor.open=false; showToast("Профиль обновлён");
+      }catch(err){ errPe.textContent=err.message; errPe.style.display="block"; btnPe.disabled=false; btnPe.textContent="Сохранить"; }
+      render(); return;
+    }
     if(e.target.id==="quizForm"){
       e.preventDefault();
       var fd3=new FormData(e.target); var answers={};
@@ -1839,6 +1999,16 @@ function wireEvents(root){
       try{ await api("/staff/students/"+e.target.getAttribute("data-id")+"/stream", { method:"PATCH", body: JSON.stringify({ streamId: e.target.value }) }); var s=staffState.students.find(function(x){return x.id===e.target.getAttribute("data-id");}); if(s) s.stream_id=e.target.value; showToast("Поток обновлён"); }
       catch(err){ showToast(err.message); }
       return;
+    }
+    if(e.target.hasAttribute("data-role-select")){
+      var rsId=e.target.getAttribute("data-id"); var rsVal=e.target.value;
+      try{
+        await api("/staff/team/"+rsId+"/role", { method:"PATCH", body: JSON.stringify({ role: rsVal }) });
+        var rsStaff=staffState.staff.find(function(x){ return x.id===rsId; });
+        if(rsStaff) rsStaff.role=rsVal;
+        showToast("Роль обновлена");
+      }catch(err){ showToast(err.message); }
+      render(); return;
     }
     if(e.target.hasAttribute("data-field-select")){
       var field=e.target.getAttribute("data-field-select"); var id=e.target.getAttribute("data-id"); var val=e.target.value;
