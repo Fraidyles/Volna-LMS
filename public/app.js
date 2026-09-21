@@ -225,9 +225,27 @@ async function refreshSelectedStudent(){
 }
 
 /* ============================= РЕНДЕР: ROOT ============================= */
+// Фоновое свечение (см. --glow-a/b/c в styles.css) — три степени насыщенности,
+// распределённые по разделам, а не один вариант на весь сайт.
+function applyGlow(){
+  var g = "a";
+  if(view === "login" || view === "register") g = "c";
+  else if(view === "student"){
+    if(studentState.tab === "schedule") g = "b";
+    else if(studentState.tab === "messages" || studentState.tab === "lesson") g = "a";
+    else g = "c"; // главная — курс, сертификат
+  } else if(view === "staff"){
+    if(staffState.mainTab === "calendar") g = "b";
+    else if(staffState.mainTab === "dashboard") g = "c";
+    else g = "a"; // ученики / материалы / команда / журнал — плотные таблицы
+  }
+  document.documentElement.setAttribute("data-glow", g);
+}
+
 function render(){
   var app = document.getElementById("app");
   var node;
+  applyGlow();
   if(view === "loading") node = el('<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;color:#8A968F;">Загрузка…</div>');
   else if(view === "login") node = renderAuthScreen("login");
   else if(view === "register") node = renderAuthScreen("register");
