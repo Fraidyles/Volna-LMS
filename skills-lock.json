@@ -13,6 +13,12 @@
       "skillPath": "plugins/dev-toolkit/skills/explain-code/SKILL.md",
       "computedHash": "aa12f124237769e4366a457f68a3bab6929cf1700699835ba4cce03c7dd37575"
     },
+    "jobs-to-be-done": {
+      "source": "deanpeters/Product-Manager-Skills",
+      "sourceType": "github",
+      "skillPath": "skills/jobs-to-be-done/SKILL.md",
+      "computedHash": "8677f17e76c98d8afbaabcf20e888c119d5ff073c6329a6d3d4c8c6fa78b7a86"
+    },
     "ad-creative": {
       "source": "coreyhaines31/marketingskills",
       "sourceType": "github",
