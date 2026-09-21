@@ -185,6 +185,12 @@ router.post("/quiz-submit", authRequired, requireRole("student"), async (req, re
   res.json({ score, completed, certificateStatus, gamification: { currentStreak: streak.currentStreak, longestStreak: streak.longestStreak } });
 });
 
+// Врач сам закрывает карточку онбординг-чеклиста, не дожидаясь выполнения всех пунктов.
+router.put("/onboarding-dismiss", authRequired, requireRole("student"), async (req, res) => {
+  await pool.query("UPDATE progress SET onboarding_dismissed=true WHERE user_id=$1", [req.user.id]);
+  res.json({ ok: true });
+});
+
 // Личная заметка врача к уроку — видна только ему самому, хранится в progress.lesson_notes.
 router.put("/lessons/:id/note", authRequired, requireRole("student"), async (req, res) => {
   const note = (req.body && typeof req.body.note === "string") ? req.body.note : "";

@@ -613,6 +613,40 @@ function renderStudentSchedule(){
   return el(html);
 }
 
+// Три пункта первых шагов новичка — не хранятся отдельным флагом каждый,
+// а считаются из уже имеющихся данных (профиль/прогресс) плюс один локальный
+// флаг на "посмотрели расписание" (смотреть его не с чем сверять на сервере).
+function onboardingChecklistItems(){
+  var profileDone = !!(me.workplace && me.workplace.trim()) && !!(me.phone && me.phone.trim());
+  var lessonDone = ((course.progress && course.progress.completed_lessons) || []).length > 0;
+  var scheduleDone = localStorage.getItem("lms-viewed-schedule-"+me.id) === "1";
+  return [
+    { done:profileDone, label:"Заполните профиль", action:"open-profile-editor" },
+    { done:lessonDone, label:"Посмотрите первый урок", action:"open-course" },
+    { done:scheduleDone, label:"Посмотрите расписание эфиров", action:"student-tab", tab:"schedule" }
+  ];
+}
+function renderOnboardingCard(){
+  var pr = course.progress || {};
+  if(pr.onboarding_dismissed) return "";
+  var items = onboardingChecklistItems();
+  var doneCount = items.filter(function(i){ return i.done; }).length;
+  if(doneCount===items.length) return "";
+  var html = '<div class="card" style="padding:18px 20px;margin-bottom:14px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+      '<b style="font-size:14px;">Первые шаги ('+doneCount+'/'+items.length+')</b>' +
+      '<button class="btn btn-sm btn-ghost" data-action="dismiss-onboarding">Скрыть</button>' +
+    '</div>';
+  items.forEach(function(i,idx){
+    html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;'+(idx<items.length-1?'border-bottom:1px solid var(--line-2);':'')+(i.done?'':'cursor:pointer;')+'" '+(i.done?'':'data-action="'+i.action+'"'+(i.tab?' data-tab="'+i.tab+'"':''))+'>' +
+      '<span style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;background:'+(i.done?'var(--status-done)':'var(--line-2)')+';">'+(i.done?icon("check","ic-sm"):'')+'</span>' +
+      '<span style="font-size:13.5px;'+(i.done?'color:var(--muted);text-decoration:line-through;':'')+'">'+escapeHtml(i.label)+'</span>' +
+    '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
 function renderStudentHome(){
   var pr = course.progress || {};
   var total = course.lessons.length;
@@ -620,7 +654,7 @@ function renderStudentHome(){
   var done = doneIds.length;
   var lock = course.locked || {locked:false};
 
-  var html = '<div style="margin-top:10px;">';
+  var html = '<div style="margin-top:10px;">' + renderOnboardingCard();
   if(lock.locked){
     html += '<div class="card course-hero" style="background:var(--status-blocked-tint);">' +
       magnet("blocked", "Доступ ограничен") +
@@ -1730,6 +1764,7 @@ function wireEvents(root){
 
     if(action==="student-tab"){
       studentState.tab=t.getAttribute("data-tab");
+      if(studentState.tab==="schedule") localStorage.setItem("lms-viewed-schedule-"+me.id, "1");
       if(studentState.tab!=="messages"){ stopMessagePolling(); stopStreamMessagePolling(); }
       else if(studentState.messagesSubTab==="curator"){
         if(course) course.unreadMessages=0;
@@ -1822,6 +1857,11 @@ function wireEvents(root){
         showToast("Чат помечен непрочитанным");
       }catch(err){ showToast(err.message); }
       render(); return;
+    }
+    if(action==="dismiss-onboarding"){
+      course.progress.onboarding_dismissed=true; render();
+      api("/course/onboarding-dismiss", { method:"PUT" }).catch(function(){});
+      return;
     }
     if(action==="download-ics"){
       var evObj = calendarState.events.filter(function(x){ return x.id===t.getAttribute("data-id"); })[0];

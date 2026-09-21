@@ -189,6 +189,20 @@ describe("Курс врача", () => {
     expect(res.body.gamification.points).toBe(230);
   });
 
+  test("онбординг-чеклист: по умолчанию не скрыт, врач может закрыть его вручную", async () => {
+    const user = await createUser({ role: "student", courseId: course.courseId });
+    const cookie = await loginAs(user);
+
+    const before = await request(app).get("/api/course").set("Cookie", cookie);
+    expect(before.body.progress.onboarding_dismissed).toBe(false);
+
+    const dismissRes = await request(app).put("/api/course/onboarding-dismiss").set("Cookie", cookie);
+    expect(dismissRes.status).toBe(200);
+
+    const after = await request(app).get("/api/course").set("Cookie", cookie);
+    expect(after.body.progress.onboarding_dismissed).toBe(true);
+  });
+
   test("HTML урока при сохранении черновика очищается от <script> (XSS)", async () => {
     const admin = await createUser({ role: "super_admin" });
     const cookie = await loginAs(admin);
