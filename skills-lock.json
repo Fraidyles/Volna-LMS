@@ -7,6 +7,12 @@
       "skillPath": "skills/ab-testing/SKILL.md",
       "computedHash": "c42af0107540e71dfe9605eca51b5100d96730d0bddf51085fc0c9429e40083c"
     },
+    "explain-code": {
+      "source": "kimliss/claude-code-inhand",
+      "sourceType": "github",
+      "skillPath": "plugins/dev-toolkit/skills/explain-code/SKILL.md",
+      "computedHash": "aa12f124237769e4366a457f68a3bab6929cf1700699835ba4cce03c7dd37575"
+    },
     "ad-creative": {
       "source": "coreyhaines31/marketingskills",
       "sourceType": "github",
