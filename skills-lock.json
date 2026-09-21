@@ -7,6 +7,12 @@
       "skillPath": "skills/ab-testing/SKILL.md",
       "computedHash": "c42af0107540e71dfe9605eca51b5100d96730d0bddf51085fc0c9429e40083c"
     },
+    "emilkowalski-motion": {
+      "source": "nexu-io/open-design",
+      "sourceType": "github",
+      "skillPath": "skills/emilkowalski-motion/SKILL.md",
+      "computedHash": "1478b70162dfe62a2088c2a98d7bf8fd071439c6decf044b9b69a02a3b14753f"
+    },
     "ad-creative": {
       "source": "coreyhaines31/marketingskills",
       "sourceType": "github",
