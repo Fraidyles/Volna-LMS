@@ -300,6 +300,12 @@
       "sourceType": "github",
       "skillPath": "skills/video/SKILL.md",
       "computedHash": "53f7082208785054a33bba07d188a4d1c8054c22b269146f3d3edccbeca7db81"
+    },
+    "web-asset-generator": {
+      "source": "alonw0/web-asset-generator",
+      "sourceType": "github",
+      "skillPath": "skills/web-asset-generator/SKILL.md",
+      "computedHash": "73cd073db98ba7f397ef380cd9290ca66a1c30dd6c465c40309d56fc26133024"
     }
   }
 }
