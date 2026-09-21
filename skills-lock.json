@@ -145,6 +145,13 @@
       "skillPath": "plugins/dev-toolkit/skills/explain-code/SKILL.md",
       "computedHash": "aa12f124237769e4366a457f68a3bab6929cf1700699835ba4cce03c7dd37575"
     },
+    "find-skills": {
+      "source": "vercel-labs/skills",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": "skills/find-skills/SKILL.md",
+      "computedHash": "913b9d37d0d54047dd65222bb8c67b2bf04e3cb87dcad1729068d7a8b2c8c396"
+    },
     "free-tools": {
       "source": "coreyhaines31/marketingskills",
       "sourceType": "github",
