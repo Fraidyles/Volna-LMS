@@ -5,6 +5,7 @@ const { authRequired, requireRole } = require("../middleware/auth");
 const { logAction } = require("../audit");
 const { sanitizeLessonHtml } = require("../sanitize");
 const { notify, notifyAllStudents } = require("../notifications");
+const { requireStudentScope, filterToScope } = require("../access");
 
 const router = express.Router();
 
@@ -212,6 +213,7 @@ router.post(
   "/certificate/:studentId/issue",
   authRequired,
   requireRole("curator", "admin", "super_admin"),
+  requireStudentScope("studentId"),
   async (req, res) => {
     const before = await pool.query(
       "SELECT certificate_status, certificate_issued_at, certificate_issued_by FROM progress WHERE user_id=$1",
@@ -242,9 +244,10 @@ router.post(
 router.post("/certificate/bulk-issue", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
   const ids = (req.body && req.body.studentIds) || [];
   if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "invalid_input" });
+  const scopedIds = await filterToScope(req.user, ids);
 
   let issued = 0;
-  for (const studentId of ids) {
+  for (const studentId of scopedIds) {
     const before = await pool.query(
       "SELECT certificate_status, certificate_issued_at, certificate_issued_by FROM progress WHERE user_id=$1",
       [studentId]

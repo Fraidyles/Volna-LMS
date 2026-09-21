@@ -7,6 +7,7 @@ const { logAction } = require("../audit");
 const { revertLogEntry } = require("../revert");
 const { generateTempPassword } = require("../util");
 const { notify } = require("../notifications");
+const { canManageStudent, requireStudentScope, filterToScope } = require("../access");
 
 const router = express.Router();
 
@@ -72,14 +73,18 @@ router.delete("/team/:id", authRequired, requireRole("admin", "super_admin"), as
 });
 
 router.get("/students", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+  // Куратор видит только "своих" врачей + ещё никому не назначенных — не весь список.
+  const scopeClause = req.user.role === "curator" ? "AND (u.assigned_curator_id = $1 OR u.assigned_curator_id IS NULL)" : "";
+  const params = req.user.role === "curator" ? [req.user.id] : [];
   const result = await pool.query(
     `SELECT ${STUDENT_FIELDS} FROM users u LEFT JOIN progress p ON p.user_id = u.id
-     WHERE u.role = 'student' ORDER BY u.created_at DESC`
+     WHERE u.role = 'student' ${scopeClause} ORDER BY u.created_at DESC`,
+    params
   );
   res.json({ students: result.rows });
 });
 
-router.get("/students/:id", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+router.get("/students/:id", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
   const result = await pool.query(
     `SELECT ${STUDENT_FIELDS}, p.quiz_answers FROM users u LEFT JOIN progress p ON p.user_id = u.id
      WHERE u.id = $1 AND u.role = 'student'`,
@@ -89,7 +94,7 @@ router.get("/students/:id", authRequired, requireRole("curator", "admin", "super
   res.json({ student: result.rows[0] });
 });
 
-router.patch("/students/:id/access", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+router.patch("/students/:id/access", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
   const expiresAt = (req.body && req.body.expiresAt) || null;
   const before = await pool.query("SELECT access_expires_at FROM progress WHERE user_id=$1", [req.params.id]);
   if (!before.rowCount) return res.status(404).json({ error: "not_found" });
@@ -104,7 +109,7 @@ router.patch("/students/:id/access", authRequired, requireRole("curator", "admin
   res.json({ ok: true, expiresAt });
 });
 
-router.post("/students/:id/access/extend", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+router.post("/students/:id/access/extend", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
   const days = parseInt(req.body && req.body.days, 10) || 0;
   const current = await pool.query("SELECT access_expires_at FROM progress WHERE user_id=$1", [req.params.id]);
   if (!current.rowCount) return res.status(404).json({ error: "not_found" });
@@ -127,7 +132,7 @@ router.post("/students/:id/access/extend", authRequired, requireRole("curator", 
   res.json({ ok: true, expiresAt: iso });
 });
 
-router.patch("/students/:id/access/block", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+router.patch("/students/:id/access/block", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
   const blocked = !!(req.body && req.body.blocked);
   const before = await pool.query("SELECT access_blocked FROM progress WHERE user_id=$1", [req.params.id]);
   if (!before.rowCount) return res.status(404).json({ error: "not_found" });
@@ -145,7 +150,7 @@ router.patch("/students/:id/access/block", authRequired, requireRole("curator", 
   res.json({ ok: true, blocked });
 });
 
-router.patch("/students/:id/stream", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+router.patch("/students/:id/stream", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
   const streamId = (req.body && req.body.streamId) || null;
   const result = await pool.query(
     "UPDATE users SET stream_id=$1 WHERE id=$2 AND role='student' RETURNING id",
@@ -158,31 +163,35 @@ router.patch("/students/:id/stream", authRequired, requireRole("curator", "admin
 router.post("/students/bulk-stream", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
   const { ids, streamId } = req.body || {};
   if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "invalid_input", message: "Не выбраны врачи" });
+  // Куратор массово трогает только тех врачей, что и так в его скоупе — остальных
+  // id из списка молча пропускаем, а не 403-им весь запрос целиком.
+  const scopedIds = await filterToScope(req.user, ids);
+  if (!scopedIds.length) return res.json({ ok: true, updated: 0 });
   await pool.query(
     "UPDATE users SET stream_id=$1 WHERE id = ANY($2::text[]) AND role='student'",
-    [streamId || null, ids]
+    [streamId || null, scopedIds]
   );
-  res.json({ ok: true, updated: ids.length });
+  res.json({ ok: true, updated: scopedIds.length });
 });
 
 const PRODUCT_VALUES = ["longevity", "peptide", "personal_brand"];
 const PAYMENT_VALUES = ["unpaid", "partial", "paid"];
 
-router.patch("/students/:id/product", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+router.patch("/students/:id/product", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
   const product = req.body && req.body.product;
   if (PRODUCT_VALUES.indexOf(product) === -1) return res.status(400).json({ error: "invalid_input" });
   await pool.query("UPDATE users SET product=$1 WHERE id=$2 AND role='student'", [product, req.params.id]);
   res.json({ ok: true });
 });
 
-router.patch("/students/:id/payment", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+router.patch("/students/:id/payment", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
   const paymentStatus = req.body && req.body.paymentStatus;
   if (PAYMENT_VALUES.indexOf(paymentStatus) === -1) return res.status(400).json({ error: "invalid_input" });
   await pool.query("UPDATE users SET payment_status=$1 WHERE id=$2 AND role='student'", [paymentStatus, req.params.id]);
   res.json({ ok: true });
 });
 
-router.patch("/students/:id/curator", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+router.patch("/students/:id/curator", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
   const curatorId = (req.body && req.body.curatorId) || null;
   await pool.query("UPDATE users SET assigned_curator_id=$1 WHERE id=$2 AND role='student'", [curatorId, req.params.id]);
   res.json({ ok: true });
@@ -190,7 +199,7 @@ router.patch("/students/:id/curator", authRequired, requireRole("curator", "admi
 
 // Персонал правит контактные данные врача (например, тот сам не может/не успел
 // это сделать) — имя, телефон, место работы, специализация.
-router.patch("/students/:id/profile", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+router.patch("/students/:id/profile", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
   const { name, phone, workplace, specialization } = req.body || {};
   const sets = [];
   const values = [];
@@ -218,21 +227,23 @@ router.patch("/students/:id/profile", authRequired, requireRole("curator", "admi
 router.post("/students/bulk-field", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
   const { ids, field, value } = req.body || {};
   if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "invalid_input", message: "Не выбраны врачи" });
+  const scopedIds = await filterToScope(req.user, ids);
+  if (!scopedIds.length) return res.json({ ok: true, updated: 0 });
   if (field === "product") {
     if (PRODUCT_VALUES.indexOf(value) === -1) return res.status(400).json({ error: "invalid_input" });
-    await pool.query("UPDATE users SET product=$1 WHERE id = ANY($2::text[]) AND role='student'", [value, ids]);
+    await pool.query("UPDATE users SET product=$1 WHERE id = ANY($2::text[]) AND role='student'", [value, scopedIds]);
   } else if (field === "payment_status") {
     if (PAYMENT_VALUES.indexOf(value) === -1) return res.status(400).json({ error: "invalid_input" });
-    await pool.query("UPDATE users SET payment_status=$1 WHERE id = ANY($2::text[]) AND role='student'", [value, ids]);
+    await pool.query("UPDATE users SET payment_status=$1 WHERE id = ANY($2::text[]) AND role='student'", [value, scopedIds]);
   } else {
     return res.status(400).json({ error: "invalid_field" });
   }
-  res.json({ ok: true, updated: ids.length });
+  res.json({ ok: true, updated: scopedIds.length });
 });
 
 /* ---------- Приватные заметки персонала о враче (врач их никогда не видит) ---------- */
 
-router.get("/students/:id/notes", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+router.get("/students/:id/notes", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
   const result = await pool.query(
     "SELECT id, author_name, body, created_at FROM student_notes WHERE student_id=$1 ORDER BY created_at DESC",
     [req.params.id]
@@ -240,7 +251,7 @@ router.get("/students/:id/notes", authRequired, requireRole("curator", "admin", 
   res.json({ notes: result.rows });
 });
 
-router.post("/students/:id/notes", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+router.post("/students/:id/notes", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
   const body = req.body && req.body.body;
   if (!body || !body.trim()) return res.status(400).json({ error: "invalid_input" });
   const target = await pool.query("SELECT id FROM users WHERE id=$1 AND role='student'", [req.params.id]);
@@ -255,7 +266,7 @@ router.post("/students/:id/notes", authRequired, requireRole("curator", "admin",
 
 /* ---------- Сброс пароля (пока нет email-рассылки — куратор/админ передаёт временный пароль лично) ---------- */
 
-router.post("/students/:id/reset-password", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+router.post("/students/:id/reset-password", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
   const target = await pool.query("SELECT id, name FROM users WHERE id=$1 AND role='student'", [req.params.id]);
   if (!target.rowCount) return res.status(404).json({ error: "not_found" });
 

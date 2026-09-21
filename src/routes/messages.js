@@ -2,6 +2,7 @@ const express = require("express");
 const crypto = require("crypto");
 const pool = require("../db");
 const { authRequired } = require("../middleware/auth");
+const { canManageStudent } = require("../access");
 
 const router = express.Router();
 
@@ -9,6 +10,9 @@ router.get("/:studentId", authRequired, async (req, res) => {
   const { studentId } = req.params;
   if (req.user.role === "student" && req.user.id !== studentId) {
     return res.status(403).json({ error: "forbidden" });
+  }
+  if (req.user.role !== "student" && !(await canManageStudent(req.user, studentId))) {
+    return res.status(403).json({ error: "forbidden", message: "Этот врач закреплён за другим куратором" });
   }
   const result = await pool.query(
     "SELECT id, from_role, author_name, body, created_at FROM messages WHERE student_id=$1 ORDER BY created_at ASC",
@@ -46,6 +50,9 @@ router.post("/", authRequired, async (req, res) => {
   if (!studentId || !text || !text.trim()) return res.status(400).json({ error: "invalid_input" });
   if (req.user.role === "student" && req.user.id !== studentId) {
     return res.status(403).json({ error: "forbidden" });
+  }
+  if (req.user.role !== "student" && !(await canManageStudent(req.user, studentId))) {
+    return res.status(403).json({ error: "forbidden", message: "Этот врач закреплён за другим куратором" });
   }
   const fromRole = req.user.role === "student" ? "student" : "curator";
   await pool.query(
