@@ -15,6 +15,7 @@ const inviteRoutes = require("./routes/invites");
 const staffRoutes = require("./routes/staff");
 const courseRoutes = require("./routes/course");
 const messageRoutes = require("./routes/messages");
+const streamMessageRoutes = require("./routes/stream-messages");
 const calendarRoutes = require("./routes/calendar");
 
 const app = express();
@@ -38,6 +39,7 @@ app.use("/api/invites", inviteRoutes);
 app.use("/api/staff", staffRoutes);
 app.use("/api/course", courseRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/stream-messages", streamMessageRoutes);
 app.use("/api", calendarRoutes);
 
 // Интерактивная документация API — удобно, когда фронтенд и бэкенд начнут жить отдельно

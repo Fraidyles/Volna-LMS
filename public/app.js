@@ -20,11 +20,12 @@ function assignableRoleOptions(actingRole){
 var me = null;                 // текущий пользователь {id,email,name,role,...}
 var view = "loading";
 var course = null;             // {course, lessons, quiz, progress} — для врача
-var studentState = { tab:"course", lessonIndex:0, quizMode:false, quizSubmitted:false };
+var studentState = { tab:"course", lessonIndex:0, quizMode:false, quizSubmitted:false, messagesSubTab:"curator" };
 var staffState = { mainTab:"students", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"" };
 var profileEditor = { open:false };
 var calendarState = { monthDate:new Date(), streams:[], events:[], showStreamForm:false, eventModalMode:null, eventModalDate:null, eventModalId:null, recurring:false };
 var materialsPicker = { open:false, targetId:null, targetTitle:"", search:"", selectedIds:[] };
+var streamChat = { open:false, streamId:null, streamName:"" };
 var courseVisibility = {}; // {lessonId|"quiz": [uid,...]} — для вкладки «Материалы» у персонала
 var directory = []; // все сотрудники (admin+curator+super_admin) — для фильтра/назначения куратора
 var dashboardState = { periodFrom:"", periodTo:"", specializations:[], streams:[], stages:[], products:[], certStatuses:[], paymentStatuses:[], demoStatuses:[], accessStatuses:[], curatorIds:[], openFilterMenu:null };
@@ -728,18 +729,40 @@ function renderCertificate(){
   return el(html);
 }
 
+// Два отдельных канала общения врача: личный чат с куратором (как раньше) и
+// общая беседа его потока (когорты) — сознательно разведены на под-вкладки,
+// а не смешаны в одну ленту, чтобы не терять приватность 1:1-переписки.
 function renderStudentMessages(){
-  return el(
-    '<div class="card msg-panel" style="margin-top:6px;max-width:640px;">' +
-      '<div style="padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;">' +
+  var sub = studentState.messagesSubTab;
+  var mySid = me.stream_id || "";
+  var html = '<div class="card msg-panel" style="margin-top:6px;max-width:640px;">' +
+    '<div style="padding:14px 20px 0;display:flex;gap:6px;">' +
+      '<button class="tab'+(sub==="curator"?' active':'')+'" data-action="student-messages-subtab" data-sub="curator">Куратор</button>' +
+      '<button class="tab'+(sub==="stream"?' active':'')+'" data-action="student-messages-subtab" data-sub="stream">Поток</button>' +
+    '</div>';
+  if(sub==="stream"){
+    if(!mySid){
+      html += '<div class="empty-state" style="padding:30px 20px;">Вы пока не привязаны ни к одному потоку — куратор добавит вас, когда сформируется поток, и здесь появится общая беседа.</div>';
+    } else {
+      html += '<div style="padding:16px 20px;border-bottom:1px solid var(--line);">' +
+          '<b style="font-size:14.5px;">Беседа потока</b>' +
+          '<p style="font-size:12px;color:var(--muted);margin:2px 0 0;">Видят и пишут все врачи вашего потока и куратор.</p>' +
+        '</div>' +
+        '<div class="msg-list" id="msgListStream"><div class="msg-empty">Загрузка…</div></div>' +
+        '<div class="msg-input-row"><textarea class="input" id="msgInputStream" placeholder="Написать в общий чат потока…"></textarea>' +
+        '<button class="btn btn-primary" data-action="send-student-stream-msg">Отправить</button></div>';
+    }
+  } else {
+    html += '<div style="padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;">' +
         '<b style="font-size:14.5px;">Чат с куратором</b>' +
         '<button class="btn btn-sm btn-ghost" data-action="mark-messages-unread" title="Показать бейдж снова, чтобы вернуться к чату позже">Пометить непрочитанным</button>' +
       '</div>' +
       '<div class="msg-list" id="msgList"><div class="msg-empty">Загрузка…</div></div>' +
       '<div class="msg-input-row"><textarea class="input" id="msgInput" placeholder="Напишите сообщение…"></textarea>' +
-      '<button class="btn btn-primary" data-action="send-student-msg">Отправить</button></div>' +
-    '</div>'
-  );
+      '<button class="btn btn-primary" data-action="send-student-msg">Отправить</button></div>';
+  }
+  html += '</div>';
+  return el(html);
 }
 
 /* ============================= РЕНДЕР: ПЕРСОНАЛ ============================= */
@@ -776,6 +799,9 @@ function renderStaffShell(){
   }
   if(materialsPicker.open){
     wrap.appendChild(renderMaterialsPickerModal());
+  }
+  if(streamChat.open){
+    wrap.appendChild(renderStreamChatModal());
   }
   return wrap;
 }
@@ -821,12 +847,25 @@ function renderStreamsPanel(){
     streams.forEach(function(s){
       html += '<div class="stream-card"><b style="font-size:13.5px;display:block;">'+escapeHtml(s.name)+'</b>' +
         '<span style="font-size:12px;color:var(--muted);">старт: '+(s.start_date?fmtDate(s.start_date):"—")+' · '+(countsByStream[s.id]||0)+' врачей</span><br>' +
-        '<button class="btn btn-sm btn-ghost" style="margin-top:8px;" data-action="delete-stream" data-id="'+s.id+'">Удалить поток</button></div>';
+        '<div style="display:flex;gap:6px;margin-top:8px;">' +
+          '<button class="btn btn-sm btn-ghost" data-action="open-stream-chat" data-id="'+s.id+'" data-name="'+escapeHtml(s.name)+'">Чат потока</button>' +
+          '<button class="btn btn-sm btn-ghost" data-action="delete-stream" data-id="'+s.id+'">Удалить поток</button>' +
+        '</div></div>';
     });
     html += '</div>';
   }
   html += '</div>';
   return html;
+}
+
+function renderStreamChatModal(){
+  var body = '<div class="drawer-head"><b style="font-size:16px;">Чат: '+escapeHtml(streamChat.streamName)+'</b><button class="btn btn-ghost btn-sm" data-action="close-stream-chat">Закрыть ✕</button></div>' +
+    '<div class="drawer-body" style="display:flex;flex-direction:column;height:100%;">' +
+      '<div class="msg-list" id="streamChatList" style="flex:1;"><div class="msg-empty">Загрузка…</div></div>' +
+      '<div class="msg-input-row"><textarea class="input" id="streamChatInput" placeholder="Написать в чат потока…"></textarea>' +
+      '<button class="btn btn-primary" data-action="send-stream-chat-msg">Отправить</button></div>' +
+    '</div>';
+  return el('<div class="overlay" data-action="overlay-close-stream-chat"><div class="drawer" data-stop="1" style="width:min(480px,100%);">'+body+'</div></div>');
 }
 
 function renderMonthCalendar(){
@@ -1500,6 +1539,35 @@ function startMessagePolling(studentId, containerId){
 }
 function stopMessagePolling(){ if(msgPollTimer){ clearInterval(msgPollTimer); msgPollTimer=null; } }
 
+// Беседа потока — отдельный канал от 1:1-чата с куратором выше: разные эндпоинты,
+// разный контейнер, свой таймер поллинга, но тот же ритм в 4 сек.
+var streamMsgPollTimer = null;
+async function loadStreamMessages(streamId, containerId){
+  try{
+    var data = await api("/stream-messages/"+streamId);
+    renderStreamMessages(containerId, data.messages);
+  }catch(e){}
+}
+function renderStreamMessages(containerId, msgs){
+  var container = document.getElementById(containerId);
+  if(!container) return;
+  if(!msgs.length){ container.innerHTML = '<div class="msg-empty">Сообщений пока нет — начните разговор первым.</div>'; return; }
+  var html = "";
+  msgs.forEach(function(m){
+    var isMe = m.author_id===me.id;
+    var roleLabel = m.author_role==="curator" ? "Куратор" : (m.author_role==="admin"||m.author_role==="super_admin" ? "Администратор" : "");
+    html += '<div class="msg-row'+(isMe?' me':'')+'"><div class="bubble">'+escapeHtml(m.body)+'<span class="t">'+(isMe?"":escapeHtml(m.author_name)+(roleLabel?" · "+roleLabel:"")+" · ")+fmtTime(m.created_at)+'</span></div></div>';
+  });
+  container.innerHTML = html;
+  container.scrollTop = container.scrollHeight;
+}
+function startStreamMessagePolling(streamId, containerId){
+  stopStreamMessagePolling();
+  loadStreamMessages(streamId, containerId);
+  streamMsgPollTimer = setInterval(function(){ loadStreamMessages(streamId, containerId); }, 4000);
+}
+function stopStreamMessagePolling(){ if(streamMsgPollTimer){ clearInterval(streamMsgPollTimer); streamMsgPollTimer=null; } }
+
 /* ============================= СОБЫТИЯ ============================= */
 function wireEvents(root){
   // render() calls wireEvents(app) on every re-render; app (the #app container) is never
@@ -1547,13 +1615,30 @@ function wireEvents(root){
 
     if(action==="student-tab"){
       studentState.tab=t.getAttribute("data-tab");
-      if(studentState.tab!=="messages") stopMessagePolling();
-      else{
+      if(studentState.tab!=="messages"){ stopMessagePolling(); stopStreamMessagePolling(); }
+      else if(studentState.messagesSubTab==="curator"){
         if(course) course.unreadMessages=0;
         api("/messages/"+me.id+"/mark-read", { method:"POST" }).catch(function(){});
       }
       render();
-      if(studentState.tab==="messages") startMessagePolling(me.id,"msgList");
+      if(studentState.tab==="messages"){
+        if(studentState.messagesSubTab==="stream" && me.stream_id) startStreamMessagePolling(me.stream_id,"msgListStream");
+        else startMessagePolling(me.id,"msgList");
+      }
+      return;
+    }
+    if(action==="student-messages-subtab"){
+      var newSub=t.getAttribute("data-sub");
+      if(newSub===studentState.messagesSubTab) return;
+      stopMessagePolling(); stopStreamMessagePolling();
+      studentState.messagesSubTab=newSub;
+      render();
+      if(newSub==="stream"){ if(me.stream_id) startStreamMessagePolling(me.stream_id,"msgListStream"); }
+      else{
+        if(course) course.unreadMessages=0;
+        api("/messages/"+me.id+"/mark-read", { method:"POST" }).catch(function(){});
+        startMessagePolling(me.id,"msgList");
+      }
       return;
     }
     if(action==="open-course"){
@@ -1608,6 +1693,11 @@ function wireEvents(root){
     if(action==="send-student-msg"){
       var inp=document.getElementById("msgInput"); var val=inp?inp.value:"";
       if(val.trim()){ if(inp) inp.value=""; try{ await api("/messages", { method:"POST", body: JSON.stringify({studentId:me.id, text:val}) }); loadMessages(me.id,"msgList"); }catch(err){ showToast(err.message); } }
+      return;
+    }
+    if(action==="send-student-stream-msg"){
+      var sinp=document.getElementById("msgInputStream"); var sval=sinp?sinp.value:"";
+      if(sval.trim() && me.stream_id){ if(sinp) sinp.value=""; try{ await api("/stream-messages/"+me.stream_id, { method:"POST", body: JSON.stringify({text:sval}) }); loadStreamMessages(me.stream_id,"msgListStream"); }catch(err){ showToast(err.message); } }
       return;
     }
     if(action==="mark-messages-unread"){
@@ -1940,6 +2030,18 @@ function wireEvents(root){
     }
     if(action==="close-materials-picker"){ materialsPicker.open=false; render(); return; }
     if(action==="overlay-close-materials" && !e.target.closest("[data-stop]")){ materialsPicker.open=false; render(); return; }
+
+    if(action==="open-stream-chat"){
+      streamChat.open=true; streamChat.streamId=t.getAttribute("data-id"); streamChat.streamName=t.getAttribute("data-name");
+      render(); startStreamMessagePolling(streamChat.streamId,"streamChatList"); return;
+    }
+    if(action==="close-stream-chat"){ streamChat.open=false; stopStreamMessagePolling(); render(); return; }
+    if(action==="overlay-close-stream-chat" && !e.target.closest("[data-stop]")){ streamChat.open=false; stopStreamMessagePolling(); render(); return; }
+    if(action==="send-stream-chat-msg"){
+      var scinp=document.getElementById("streamChatInput"); var scval=scinp?scinp.value:"";
+      if(scval.trim()){ if(scinp) scinp.value=""; try{ await api("/stream-messages/"+streamChat.streamId, { method:"POST", body: JSON.stringify({text:scval}) }); loadStreamMessages(streamChat.streamId,"streamChatList"); }catch(err){ showToast(err.message); } }
+      return;
+    }
     if(action==="toggle-picker-student"){
       var pid=t.getAttribute("data-id"); var pidx=materialsPicker.selectedIds.indexOf(pid);
       if(t.checked && pidx===-1) materialsPicker.selectedIds.push(pid);
@@ -2217,9 +2319,11 @@ function wireEvents(root){
   });
 
   root.addEventListener("keydown", function(e){
-    if((e.target.id==="msgInput"||e.target.id==="curatorMsgInput") && e.key==="Enter" && !e.shiftKey){
+    var sendActionById = { msgInput:"send-student-msg", curatorMsgInput:"send-curator-msg", msgInputStream:"send-student-stream-msg", streamChatInput:"send-stream-chat-msg" };
+    var sendAction = sendActionById[e.target.id];
+    if(sendAction && e.key==="Enter" && !e.shiftKey){
       e.preventDefault();
-      var btn = e.target.id==="msgInput" ? root.querySelector('[data-action="send-student-msg"]') : root.querySelector('[data-action="send-curator-msg"]');
+      var btn = root.querySelector('[data-action="'+sendAction+'"]');
       if(btn) btn.click();
     }
   });
