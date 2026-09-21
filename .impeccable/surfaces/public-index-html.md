@@ -9,6 +9,86 @@ related_targets: []
 
 Primary target: `public/index.html` (the whole SPA — врач dashboard, course/lesson viewer,
 quiz, calendar, messages, certificate — plus curator/admin/super_admin dashboard, students,
+team, audit-log views rendered by `public/app.js`). Visitor mode: **Operate** throughout.
+
+## Direction contract (v2 — supersedes the "Rounds Board" contract below)
+
+**THESIS:** A dark-first, single-voice modern EdTech interface — the opposite of a
+"whiteboard/ledger" metaphor. Status is a small circular dot + plain text, never a colored
+block, a tinted pill, or capitalized tracked label. One typeface (IBM Plex Sans) carries every
+role through weight alone.
+
+**Why this replaced v1:** the user was shown the built "Rounds Board" direction and rejected it
+outright as looking dated ("как из 2011 года"), providing concrete reference screenshots
+(Yandex Practicum's course UI: dark theme, clean sans, soft rounded cards, thin segmented
+progress, minimal chrome, friendly illustration). Per the skill's own rule, a user-provided
+reference beats any prior roll or direction, always. V1's board/magnet/hand-ruled-grid identity
+is fully retired, not blended.
+
+**OWN-WORLD:** Dark base (`#121214` bg / `#1B1B1F` surface) as the true default (stored
+explicitly, not just `prefers-color-scheme`), light theme as an equally complete alternate via
+toggle. Single sans family, sentence case throughout, no letter-spacing tricks. Soft large radii
+(10/16/24px). Hairline borders (`rgba(255,255,255,.07)`) instead of visible rules. Status dots
+are circles (7px), not squares — reads as a software status indicator, not a physical token.
+
+**STORY:** Same product truth as before (врач progress/streams/certificate/messages; staff
+dashboard/roster/audit-log/calendar) — only the visual skin changed, twice now.
+
+**FIRST VIEWPORT:** Same layout skeleton as v1 (topbar → tabs → course-hero with segmented
+progress → 3-tile board-strip), restyled: thin 5px progress segments (not thick blocks), quiet
+dot-status tiles, soft cards with hairline borders instead of shadows-plus-borders.
+
+**FORM:** No dice/concept-seed ritual this round — the user supplied a concrete pinned
+reference (Yandex Practicum screenshots), which per the skill's own rule overrides any
+roll-based exploration. Two confirming questions were asked (dark-only vs. dark-default+toggle;
+illustrations now vs. later) before building.
+
+**Signature interaction:** a quiet `fadeUp` (opacity + 4px translateY, ease-out-expo, ~250ms)
+on status dots and the certificate badge — replacing v1's rotation/overshoot "magnet snap"
+entirely, consistent with the calmer world.
+
+**FINISH:** unreviewed and undocumented is unfinished — DESIGN.md rewritten from the built v2
+world (the v1 DESIGN.md content is fully superseded, not merged).
+
+## Real bugs fixed while touching this code (not visual, discovered via testing)
+
+1. **Event-listener accumulation**: `render()` calls `wireEvents(app)` on every re-render, and
+   `#app` is never replaced (only `.innerHTML` cleared), so every one of the 5 delegated
+   listeners (click/submit/change/input/keydown) was being re-attached on top of the previous
+   ones on every render — after N renders, one click fired the shared handler N times. This is
+   why the theme toggle appeared to silently do nothing (dark→light→dark canceled out) and would
+   have caused duplicate form submissions elsewhere too. Fixed with a one-line `root.__wired`
+   guard at the top of `wireEvents`. Verified: toggled 5 times then confirmed a single tab-switch
+   click landed on the correct tab, not bounced back.
+2. Two smaller ones from v1's review carried forward unchanged (see prior brief content below):
+   student-schedule classifying a live-in-progress stream as "past", and the month calendar
+   leaving trailing grid cells undrawn.
+
+## WCAG contrast
+
+`impeccable detect` flagged `--muted-2` at 3.6:1 against the dark background (needs 4.5:1).
+Fixed: dark `--muted-2` raised to `#86868F` (5.19:1); light `--muted-2` raised to `#6E6E76`
+(4.68:1) since it had the same problem un-flagged at 2.53:1. Also caught and fixed one literal
+hardcoded hex in `index.html`'s pre-JS loading fallback that the CSS variable change didn't
+reach. Re-verified: zero warning/slop findings remain.
+
+## Open follow-up (not built)
+
+Illustrations (the reference's hand-drawn character art) are out of scope for this session: no
+image-generation tool or configured Stitch MCP is available here (checked directly, twice).
+Documented in DESIGN.md's "Open follow-up" section rather than faked with SVG sketch art, which
+craft-floor explicitly bans as reading amateur.
+
+---
+
+## v1 record (superseded, kept for history)
+
+
+
+## Scope
+
+Primary target: `public/index.html` (the whole SPA — врач dashboard, course/lesson viewer,
+quiz, calendar, messages, certificate — plus curator/admin/super_admin dashboard, students,
 team, audit-log views rendered by `public/app.js`). Visitor mode: **Operate** throughout
 (no Persuade/Read/Experience surface in this product — врач is completing tasks, not being sold to).
 

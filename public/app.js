@@ -401,16 +401,11 @@ function renderTopbar(){
   );
 }
 
-function getTheme(){ return localStorage.getItem("lms-theme") || "auto"; }
-function applyTheme(){
-  var t = getTheme();
-  if(t==="auto") document.documentElement.removeAttribute("data-theme");
-  else document.documentElement.setAttribute("data-theme", t);
-}
+// Тёмная тема — дефолт продукта (не только системная), можно переключить вручную.
+function getTheme(){ return localStorage.getItem("lms-theme") || "dark"; }
+function applyTheme(){ document.documentElement.setAttribute("data-theme", getTheme()); }
 function toggleTheme(){
-  var current = getTheme();
-  var isDarkNow = current==="dark" || (current==="auto" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  localStorage.setItem("lms-theme", isDarkNow ? "light" : "dark");
+  localStorage.setItem("lms-theme", getTheme()==="dark" ? "light" : "dark");
   applyTheme();
 }
 
@@ -1353,6 +1348,12 @@ function stopMessagePolling(){ if(msgPollTimer){ clearInterval(msgPollTimer); ms
 
 /* ============================= СОБЫТИЯ ============================= */
 function wireEvents(root){
+  // render() calls wireEvents(app) on every re-render; app (the #app container) is never
+  // replaced, only its innerHTML is cleared, so without this guard every listener below
+  // would be re-attached on top of the previous ones and a single click/input would fire
+  // once per render that has happened so far (theme toggle flips twice, forms submit twice…).
+  if(root.__wired) return;
+  root.__wired = true;
   root.addEventListener("click", async function(e){
     var t = e.target.closest("[data-action]");
     if(!t) return;
