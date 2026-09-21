@@ -27,7 +27,7 @@ var calendarState = { monthDate:new Date(), streams:[], events:[], showStreamFor
 var materialsPicker = { open:false, targetId:null, targetTitle:"", search:"", selectedIds:[] };
 var courseVisibility = {}; // {lessonId|"quiz": [uid,...]} — для вкладки «Материалы» у персонала
 var directory = []; // все сотрудники (admin+curator+super_admin) — для фильтра/назначения куратора
-var dashboardState = { periodFrom:"", periodTo:"", specializations:[], streams:[], stages:[], products:[], certStatuses:[], paymentStatuses:[], demoStatuses:[], accessStatuses:[], curatorIds:[] };
+var dashboardState = { periodFrom:"", periodTo:"", specializations:[], streams:[], stages:[], products:[], certStatuses:[], paymentStatuses:[], demoStatuses:[], accessStatuses:[], curatorIds:[], openFilterMenu:null };
 
 var PRODUCTS = { longevity:"Медицина Долголетия", peptide:"Пептидная терапия", personal_brand:"Личный бренд" };
 var PAYMENT_LABELS = { unpaid:"Не оплачено", partial:"Частично оплачено", paid:"Оплачено" };
@@ -106,7 +106,8 @@ var ICONS = {
   search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M19.5 19.5l-4.3-4.3"/>',
   clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
   badge: '<circle cx="12" cy="9.5" r="5.5"/><path d="M9 14l-2 7 5-2.5L17 21l-2-7"/>',
-  doctor: '<path d="M7 3.5v5a5 5 0 0 0 10 0v-5"/><path d="M17 8v2a5 5 0 0 1-10 0"/><circle cx="19" cy="5" r="2"/><path d="M12 15.5v3.5"/><circle cx="12" cy="20.5" r="1.3"/>'
+  doctor: '<path d="M7 3.5v5a5 5 0 0 0 10 0v-5"/><path d="M17 8v2a5 5 0 0 1-10 0"/><circle cx="19" cy="5" r="2"/><path d="M12 15.5v3.5"/><circle cx="12" cy="20.5" r="1.3"/>',
+  chevron: '<path d="M6 9.5l6 6 6-6"/>'
 };
 function icon(name, cls){ return '<svg class="ic'+(cls?' '+cls:'')+'" viewBox="0 0 24 24">'+(ICONS[name]||'')+'</svg>'; }
 function brandMark(style){ return '<span class="mark"'+(style?' style="'+style+'"':'')+'>'+icon("doctor")+'</span>'; }
@@ -1028,17 +1029,41 @@ function renderMaterialsPickerModal(){
 }
 
 /* ============================= РЕНДЕР: DASHBOARD (срезы по параметрам) ============================= */
+// Компактное поле-дропдаун с чекбоксами внутри (мульти-выбор), а не строка
+// крупных pill-кнопок — плотная сетка мелких полей, как в референсных
+// аналитических дашбордах (amoCRM-подобные отчёты), при тех же данных и той
+// же логике мульти-выбора, что и раньше.
 function renderChipGroup(title, options, selectedArr, groupName){
-  var html = '<div style="margin-bottom:14px;"><b style="font-size:12.5px;color:var(--muted);display:block;margin-bottom:6px;">'+escapeHtml(title)+'</b><div style="display:flex;flex-wrap:wrap;gap:6px;">';
-  if(!options.length){
-    html += '<span style="font-size:12.5px;color:var(--muted-2);">нет данных</span>';
-  } else {
-    options.forEach(function(opt){
-      var active = selectedArr.indexOf(opt.value)!==-1;
-      html += '<button type="button" class="btn btn-sm '+(active?'btn-primary':'btn-ghost')+'" data-action="toggle-dash-filter" data-group="'+groupName+'" data-value="'+escapeHtml(opt.value)+'">'+escapeHtml(opt.label)+'</button>';
-    });
+  var isOpen = dashboardState.openFilterMenu === groupName;
+  var summary = "Все";
+  if(selectedArr.length){
+    if(selectedArr.length <= 2){
+      summary = selectedArr.map(function(v){
+        var opt = options.filter(function(o){ return o.value===v; })[0];
+        return opt ? opt.label : v;
+      }).join(", ");
+    } else {
+      summary = selectedArr.length+" выбрано";
+    }
   }
-  html += '</div></div>';
+  var html = '<div class="dash-field" data-stop="1">' +
+    '<label>'+escapeHtml(title)+'</label>' +
+    '<button type="button" class="dash-select'+(selectedArr.length?' has-value':'')+'" data-action="toggle-dash-filter-menu" data-group="'+groupName+'">' +
+      '<span class="dash-select-value">'+escapeHtml(summary)+'</span>' + icon("chevron","ic-sm") +
+    '</button>';
+  if(isOpen){
+    html += '<div class="dash-menu">';
+    if(!options.length){
+      html += '<div class="dash-menu-empty">нет данных</div>';
+    } else {
+      options.forEach(function(opt){
+        var checked = selectedArr.indexOf(opt.value)!==-1;
+        html += '<label class="dash-menu-item"><input type="checkbox" data-action="toggle-dash-filter" data-group="'+groupName+'" data-value="'+escapeHtml(opt.value)+'"'+(checked?' checked':'')+'>'+escapeHtml(opt.label)+'</label>';
+      });
+    }
+    html += '</div>';
+  }
+  html += '</div>';
   return html;
 }
 
@@ -1103,11 +1128,14 @@ function renderDashboardTab(){
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
       '<b style="font-size:14.5px;">Фильтры</b><button class="btn btn-sm btn-ghost" data-action="reset-dash-filters">Сбросить всё</button></div>';
 
-  html += '<div style="margin-bottom:14px;"><b style="font-size:12.5px;color:var(--muted);display:block;margin-bottom:6px;">Период регистрации</b>' +
-    '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
-      '<input class="input" type="date" id="dashPeriodFrom" value="'+escapeHtml(dashboardState.periodFrom)+'" style="width:auto;">' +
-      '<span style="color:var(--muted);font-size:13px;">—</span>' +
-      '<input class="input" type="date" id="dashPeriodTo" value="'+escapeHtml(dashboardState.periodTo)+'" style="width:auto;"></div></div>';
+  html += '<div class="dash-filters-grid">';
+
+  html += '<div class="dash-field dash-field-period" data-stop="1"><label>Период регистрации</label>' +
+    '<div class="dash-period-inputs">' +
+      '<input class="input" type="date" id="dashPeriodFrom" value="'+escapeHtml(dashboardState.periodFrom)+'">' +
+      '<span>—</span>' +
+      '<input class="input" type="date" id="dashPeriodTo" value="'+escapeHtml(dashboardState.periodTo)+'">' +
+    '</div></div>';
 
   html += renderChipGroup("Специальность", specs, dashboardState.specializations, "specializations");
   html += renderChipGroup("Поток", streamOpts, dashboardState.streams, "streams");
@@ -1446,6 +1474,11 @@ function wireEvents(root){
   if(root.__wired) return;
   root.__wired = true;
   root.addEventListener("click", async function(e){
+    // Клик вне открытого поповера дашборд-фильтра закрывает его — не return,
+    // чтобы клик по чему-то ещё (например, кнопке в таблице ниже) всё равно сработал.
+    if(dashboardState.openFilterMenu && !e.target.closest(".dash-field")){
+      dashboardState.openFilterMenu = null; render();
+    }
     var t = e.target.closest("[data-action]");
     if(!t) return;
     var action = t.getAttribute("data-action");
@@ -1830,6 +1863,11 @@ function wireEvents(root){
       render(); return;
     }
 
+    if(action==="toggle-dash-filter-menu"){
+      var mGroup=t.getAttribute("data-group");
+      dashboardState.openFilterMenu = (dashboardState.openFilterMenu===mGroup) ? null : mGroup;
+      render(); return;
+    }
     if(action==="toggle-dash-filter"){
       var group=t.getAttribute("data-group"); var val=t.getAttribute("data-value");
       var arr=dashboardState[group]; var vIdx=arr.indexOf(val);
@@ -1837,7 +1875,7 @@ function wireEvents(root){
       render(); return;
     }
     if(action==="reset-dash-filters"){
-      dashboardState = { periodFrom:"", periodTo:"", specializations:[], streams:[], stages:[], products:[], certStatuses:[], paymentStatuses:[], demoStatuses:[], accessStatuses:[], curatorIds:[] };
+      dashboardState = { periodFrom:"", periodTo:"", specializations:[], streams:[], stages:[], products:[], certStatuses:[], paymentStatuses:[], demoStatuses:[], accessStatuses:[], curatorIds:[], openFilterMenu:null };
       render(); return;
     }
     if(action==="export-dash-csv"){ exportDashboardCSV(computeFilteredStudents()); return; }

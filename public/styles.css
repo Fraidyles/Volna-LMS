@@ -250,6 +250,26 @@ label{font-size:13px;font-weight:500;color:var(--muted);display:block;margin-bot
 .stat .num{font-weight:700;font-size:26px;line-height:1;letter-spacing:-.02em;color:var(--ink);}
 .stat .lbl{font-size:12.5px;color:var(--muted);margin-top:8px;}
 
+/* ---------------- Плотная сетка фильтров дашборда ---------------- */
+.dash-filters-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px 12px;align-items:start;}
+.dash-field-period{grid-column:span 2;min-width:260px;}
+@media (max-width:480px){.dash-field-period{grid-column:span 1;}}
+.dash-field{position:relative;min-width:0;}
+.dash-field > label{font-size:11px;color:var(--muted-2);font-weight:600;letter-spacing:.02em;text-transform:uppercase;display:block;margin-bottom:5px;}
+.dash-select{width:100%;display:flex;align-items:center;justify-content:space-between;gap:6px;background:var(--surface-2);border:var(--border-hairline);color:var(--muted);font-size:12.5px;padding:8px 9px;border-radius:var(--radius-s);text-align:left;}
+.dash-select:hover{background:var(--line);}
+.dash-select.has-value{color:var(--ink);border-color:var(--primary);}
+.dash-select .ic{width:13px;height:13px;flex-shrink:0;stroke-width:2.2;}
+.dash-select-value{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.dash-period-inputs{display:flex;align-items:center;gap:6px;}
+.dash-period-inputs .input{padding:8px 9px;font-size:12.5px;flex:1;min-width:0;}
+.dash-period-inputs span{color:var(--muted-2);font-size:12px;}
+.dash-menu{position:absolute;z-index:20;top:calc(100% + 4px);left:0;min-width:100%;max-width:260px;max-height:240px;overflow-y:auto;background:var(--surface);border:var(--border-hairline);border-radius:var(--radius-s);box-shadow:var(--shadow-lift);padding:6px;}
+.dash-menu-item{display:flex;align-items:center;gap:8px;padding:6px 7px;border-radius:6px;font-size:13px;color:var(--ink);cursor:pointer;white-space:nowrap;}
+.dash-menu-item:hover{background:var(--surface-2);}
+.dash-menu-item input{accent-color:var(--primary);flex-shrink:0;}
+.dash-menu-empty{font-size:12.5px;color:var(--muted-2);padding:6px 7px;}
+
 /* ---------------- Реестр ---------------- */
 table.roster{width:100%;border-collapse:collapse;font-size:13.8px;}
 table.roster th{text-align:left;font-size:11px;color:var(--muted-2);font-weight:600;letter-spacing:.03em;text-transform:uppercase;padding:10px 14px;border-bottom:var(--border-hairline);}
