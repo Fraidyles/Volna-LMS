@@ -803,7 +803,13 @@ function renderStudentHome(){
         '<p style="margin:4px 0 0;">5 коротких уроков и итоговый тест. По завершении — сертификат и возможность оставить заявку на полную программу обучения.</p></div>' +
       '</div>' +
       slots +
-      '<div class="progress-label">'+done+' / '+total+' уроков'+(pr.completed?' · тест '+pr.quiz_score+'%':'')+'</div>' +
+      '<div class="progress-label">'+done+' / '+total+' уроков'+(pr.completed?' · тест '+pr.quiz_score+'%':'')+'</div>';
+    // Название конкретного следующего шага рядом с кнопкой — чтобы врач видел,
+    // куда именно попадёт, не открывая курс наугад.
+    var nextStepLabel = null;
+    if(done < total) nextStepLabel = "Урок "+(done+1)+": "+course.lessons[done].title;
+    else if(!quizDone) nextStepLabel = "Итоговый тест";
+    html += (nextStepLabel ? '<div style="font-size:12.5px;color:var(--muted);margin-bottom:12px;">Далее: '+escapeHtml(nextStepLabel)+'</div>' : '') +
       '<button class="btn btn-primary" data-action="open-course">'+(done>0?'Продолжить курс':'Начать курс')+'</button>' +
       '</div>';
   }
@@ -872,6 +878,36 @@ function renderStudentHome(){
   '</div>';
 
   html += '</div>';
+
+  // Короткий предпросмотр на главной — не дублирует полные страницы «Уведомления»/«Чаты»
+  // из сайдбара, а просто отвечает на вопрос «есть что-то новое?», не уходя со страницы.
+  var homeReminders = upcomingEventReminders();
+  var homeNotifItems = homeReminders.concat(notifState.items.filter(function(n){ return !n.read_at; }));
+  html += '<div class="grid-2" style="margin-top:14px;">';
+  html += '<div class="card" style="padding:18px 20px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+      '<b style="font-size:14px;">Уведомления</b>' +
+      (homeNotifItems.length ? '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="notifications">Все →</button>' : '') +
+    '</div>';
+  if(!homeNotifItems.length){
+    html += '<p style="font-size:13px;color:var(--muted);margin:0;">У вас нет новых уведомлений.</p>';
+  } else {
+    homeNotifItems.slice(0,3).forEach(function(n){
+      html += '<div style="padding:8px 0;border-bottom:1px solid var(--line-2);"><b style="font-size:12.5px;display:block;">'+escapeHtml(n.title)+'</b></div>';
+    });
+  }
+  html += '</div>';
+  html += '<div class="card" style="padding:18px 20px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+      '<b style="font-size:14px;">Сообщения</b>' +
+      (course.unreadMessages ? '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="messages">Открыть →</button>' : '') +
+    '</div>';
+  if(!course.unreadMessages){
+    html += '<p style="font-size:13px;color:var(--muted);margin:0;">У вас нет новых сообщений.</p>';
+  } else {
+    html += '<p style="font-size:13px;margin:0;">Непрочитанных сообщений от куратора: '+course.unreadMessages+'.</p>';
+  }
+  html += '</div></div>';
 
   if(me.referral_code){
     var refLink = window.location.origin + "/?ref=" + me.referral_code;
