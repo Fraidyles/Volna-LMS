@@ -20,14 +20,14 @@ function assignableRoleOptions(actingRole){
 var me = null;                 // текущий пользователь {id,email,name,role,...}
 var view = "loading";
 var course = null;             // {course, lessons, quiz, progress} — для врача
-var studentState = { tab:"course", lessonIndex:0, quizMode:false, quizSubmitted:false, messagesSubTab:"curator", materialsSearch:"", materialsFilter:"all" };
-var staffState = { mainTab:"students", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],unanswered:[],pendingCertificates:[]} };
+var studentState = { tab:"course", navKey:"course", lessonIndex:0, quizMode:false, quizSubmitted:false, messagesSubTab:"curator", materialsSearch:"", materialsFilter:"all", materialsAutoFocus:false };
+var staffState = { mainTab:"students", navKey:"students", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],unanswered:[],pendingCertificates:[]} };
 var profileEditor = { open:false };
 var calendarState = { monthDate:new Date(), streams:[], events:[], showStreamForm:false, eventModalMode:null, eventModalDate:null, eventModalId:null, recurring:false };
 var materialsPicker = { open:false, targetId:null, targetTitle:"", search:"", selectedIds:[] };
 var scheduleModal = { open:false, lessonId:null, lessonTitle:"", search:"", selectedIds:[], applyToAll:true, unlockDate:"", schedule:[] };
 var streamChat = { open:false, streamId:null, streamName:"" };
-var notifState = { open:false, items:[], unreadCount:0 };
+var notifState = { items:[], unreadCount:0 };
 var notifPollTimer = null;
 var courseVisibility = {}; // {lessonId|"quiz": [uid,...]} — для вкладки «Материалы» у персонала
 var directory = []; // все сотрудники (admin+curator+super_admin) — для фильтра/назначения куратора
@@ -117,7 +117,17 @@ var ICONS = {
   chevron: '<path d="M6 9.5l6 6 6-6"/>',
   trash: '<path d="M5 7h14"/><path d="M9 7V5.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5.5V7"/><path d="M7 7l1 12.5A1.5 1.5 0 0 0 9.5 21h5a1.5 1.5 0 0 0 1.5-1.5L17 7"/>',
   bell: '<path d="M6 10.5a6 6 0 0 1 12 0v4l1.8 3H4.2L6 14.5v-4Z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
-  flame: '<path d="M12 2.5s-5.5 5-5.5 10a5.5 5.5 0 0 0 11 0c0-1.6-.7-2.7-1.4-3.7.1 1.6-.6 2.6-1.4 2.6-1.1 0-1.2-1-1-2 .3-1.7-.2-3.6-1.7-4.9-.1 1.4-.6 2.5-1.5 3.4-1.1 1.1-1.5 2.4-1.5 3.6a3 3 0 0 0 3 3"/>'
+  flame: '<path d="M12 2.5s-5.5 5-5.5 10a5.5 5.5 0 0 0 11 0c0-1.6-.7-2.7-1.4-3.7.1 1.6-.6 2.6-1.4 2.6-1.1 0-1.2-1-1-2 .3-1.7-.2-3.6-1.7-4.9-.1 1.4-.6 2.5-1.5 3.4-1.1 1.1-1.5 2.4-1.5 3.6a3 3 0 0 0 3 3"/>',
+  user: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.5-4 4-5.5 7-5.5s5.5 1.5 7 5.5"/>',
+  users: '<circle cx="8.5" cy="8" r="3"/><path d="M2.5 20c1.2-3.5 3.2-5 6-5s4.8 1.5 6 5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.3 13c2 .2 3.4 1.6 4.2 3.8"/>',
+  home: '<path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9.5h12V10"/>',
+  calendar: '<rect x="4" y="5.5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/>',
+  folder: '<path d="M3.5 7A1.5 1.5 0 0 1 5 5.5h4l2 2.5h8A1.5 1.5 0 0 1 20.5 9.5v8A1.5 1.5 0 0 1 19 19H5A1.5 1.5 0 0 1 3.5 17.5V7Z"/>',
+  chartbar: '<path d="M5 20V10M12 20V4M19 20v-7"/>',
+  message: '<path d="M4 5.5A2 2 0 0 1 6 3.5h12a2 2 0 0 1 2 2V15a2 2 0 0 1-2 2H9l-4.5 4V5.5Z"/>',
+  gear: '<circle cx="12" cy="12" r="3.2"/><path d="M12 4v2.4M12 17.6V20M4 12h2.4M17.6 12H20M6.3 6.3l1.7 1.7M16 16l1.7 1.7M17.7 6.3 16 8M8 16l-1.7 1.7"/>',
+  logout: '<path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M15 16l4-4-4-4M19 12H9"/>',
+  list: '<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="18" r="1.2"/>'
 };
 function icon(name, cls){ return '<svg class="ic'+(cls?' '+cls:'')+'" viewBox="0 0 24 24">'+(ICONS[name]||'')+'</svg>'; }
 function brandMark(style){ return '<span class="mark"'+(style?' style="'+style+'"':'')+'>'+icon("doctor")+'</span>'; }
@@ -537,29 +547,10 @@ function renderAuthScreen(mode){
   return el('<div class="onb-shell">'+left+right+'</div>');
 }
 
-/* ============================= РЕНДЕР: TOPBAR ============================= */
-function renderTopbar(){
-  var roleText = previewMode ? "Просмотр" : (view === "staff" ? roleLabel(me.role) : "Демо-курс");
-  var isDark = getTheme()==="dark";
-  var themeBtn = '<button class="btn btn-sm btn-ghost" data-action="toggle-theme" title="Переключить тему">'+icon(isDark?"sun":"moon")+'</button>';
-  var bellBtn = (view==="student" && !previewMode) ? renderNotifBell() : "";
-  var rightControls = previewMode
-    ? themeBtn + '<button class="btn btn-sm btn-ghost" data-action="exit-preview">Вернуться в панель</button>'
-    : bellBtn + themeBtn + '<button class="btn btn-sm btn-ghost" data-action="open-profile-editor">Профиль</button>' +
-      '<button class="btn btn-sm btn-ghost" data-action="open-change-password">Сменить пароль</button>' +
-      '<button class="btn btn-sm btn-ghost" data-action="logout">Выйти</button>';
-  return el(
-    '<div class="topbar"><div class="wrap topbar-inner">' +
-      '<div class="brand">'+brandMark()+'Медицина Долголетия</div>' +
-      '<div class="who"><span class="role-label">'+escapeHtml(roleText)+'</span><span class="name">'+escapeHtml(me.name||"")+'</span>' +
-      rightControls + '</div>' +
-    '</div></div>'
-  );
-}
-
+/* ============================= РЕНДЕР: БОКОВАЯ НАВИГАЦИЯ ============================= */
 // Напоминания об эфирах считаем на лету из уже загруженного календаря — они не
 // хранятся в базе (нет кронджоба, который бы их "погасил"), поэтому просто
-// подмешиваем их в выпадающий список рядом с настоящими уведомлениями.
+// подмешиваем их в список уведомлений (страница «Уведомления» и счётчик бейджа).
 function upcomingEventReminders(){
   var mySid = me.stream_id || "";
   var now = new Date();
@@ -575,36 +566,73 @@ function upcomingEventReminders(){
   return reminders;
 }
 
-function renderNotifBell(){
-  var reminders = upcomingEventReminders();
-  var totalUnread = notifState.unreadCount + reminders.length;
-  var html = '<div class="notif-bell-wrap" data-stop="1" style="position:relative;">' +
-    '<button class="btn btn-sm btn-ghost" data-action="toggle-notif-bell" title="Уведомления" style="position:relative;">'+icon("bell")+
-    (totalUnread?'<span class="tab-badge" style="position:absolute;top:2px;right:2px;">'+(totalUnread>9?"9+":totalUnread)+'</span>':'')+
-    '</button>';
-  if(notifState.open){
-    html += '<div class="dash-menu" style="right:0;left:auto;top:calc(100% + 6px);width:320px;max-width:320px;max-height:400px;overflow-y:auto;">';
-    var items = reminders.concat(notifState.items);
-    if(!items.length){
-      html += '<div class="dash-menu-empty">Пока нет уведомлений</div>';
+function sidebarItem(key, iconName, label, active, badge){
+  return '<button type="button" class="sidebar-item'+(active?' active':'')+'" data-action="sidebar-nav" data-key="'+key+'" title="'+escapeHtml(label)+'">' +
+    icon(iconName) +
+    '<span class="sidebar-item-label">'+escapeHtml(label)+'</span>' +
+    (badge>0 ? '<span class="sidebar-item-badge">'+(badge>9?"9+":badge)+'</span><span class="sidebar-item-dot"></span>' : '') +
+  '</button>';
+}
+
+function renderSidebar(){
+  var items = "";
+  if(view==="student"){
+    var navKey = studentState.navKey || "course";
+    if(previewMode){
+      items += sidebarItem("course","home","Обучение", navKey==="course");
+      items += sidebarItem("schedule","calendar","Расписание", navKey==="schedule");
     } else {
-      items.forEach(function(n){
-        var unread = n.synthetic || !n.read_at;
-        html += '<div class="'+(n.synthetic?'':'notif-item')+'" '+(n.synthetic?'':'data-action="mark-notif-read" data-id="'+n.id+'"')+
-          ' style="padding:10px 12px;border-bottom:1px solid var(--line-2);cursor:'+(n.synthetic?'default':'pointer')+';'+(unread?'':'opacity:.55;')+'">' +
-          '<b style="font-size:12.5px;display:block;">'+escapeHtml(n.title)+'</b>' +
-          (n.body?'<span style="font-size:11.5px;color:var(--muted);display:block;margin-top:2px;">'+escapeHtml(n.body)+'</span>':'') +
-          (n.created_at&&!n.synthetic?'<span style="font-size:10.5px;color:var(--muted-2);display:block;margin-top:3px;">'+fmtTime(n.created_at)+'</span>':'') +
-        '</div>';
-      });
+      var msgBadge = course ? (course.unreadMessages||0) : 0;
+      var notifBadge = notifState.unreadCount + upcomingEventReminders().length;
+      items += sidebarItem("search","search","Поиск", navKey==="search");
+      items += sidebarItem("profile","user","Мой профиль", false);
+      items += sidebarItem("course","home","Обучение", navKey==="course");
+      items += sidebarItem("schedule","calendar","Расписание", navKey==="schedule");
+      items += sidebarItem("materials","folder","Материалы обучения", navKey==="materials");
+      items += sidebarItem("progress","chartbar","Мой прогресс", navKey==="progress");
+      items += sidebarItem("messages","message","Чаты", navKey==="messages", msgBadge);
+      items += sidebarItem("notifications","bell","Уведомления", navKey==="notifications", notifBadge);
+      items += sidebarItem("settings","gear","Настройки", navKey==="settings");
     }
-    if(notifState.unreadCount>0){
-      html += '<button class="btn btn-sm btn-ghost" style="width:100%;border-radius:0;" data-action="mark-all-notifs-read">Пометить всё прочитанным</button>';
+  } else {
+    var snavKey = staffState.navKey || "students";
+    var isAdmin = me.role==="admin" || me.role==="super_admin";
+    var unanswered = (staffState.inbox && staffState.inbox.unanswered) || [];
+    var chatsBadge = unanswered.filter(function(r){ return !isChatMutedLocal("curator", r.id); }).length;
+    items += sidebarItem("profile","user","Мой профиль", false);
+    items += sidebarItem("students","users","Ученики", snavKey==="students");
+    items += sidebarItem("calendar","calendar","Расписание", snavKey==="calendar");
+    items += sidebarItem("materials","folder","Учебные материалы", snavKey==="materials");
+    items += sidebarItem("dashboard","chartbar","Аналитика", snavKey==="dashboard");
+    if(isAdmin){
+      items += sidebarItem("team","users","Команда", snavKey==="team");
+      items += sidebarItem("audit","list","Журнал", snavKey==="audit");
     }
-    html += '</div>';
+    items += sidebarItem("chats","message","Чаты", snavKey==="chats", chatsBadge);
+    items += sidebarItem("notifications","bell","Уведомления", snavKey==="notifications");
+    items += sidebarItem("settings","gear","Настройки", snavKey==="settings");
   }
-  html += '</div>';
-  return html;
+
+  var footer;
+  if(previewMode){
+    footer = '<div class="sidebar-footer">' +
+      '<button type="button" class="sidebar-item" data-action="exit-preview" title="Вернуться в панель">'+icon("logout")+'<span class="sidebar-item-label">Вернуться в панель</span></button>' +
+    '</div>';
+  } else {
+    var isDark = getTheme()==="dark";
+    footer = '<div class="sidebar-footer">' +
+      '<button type="button" class="sidebar-item" data-action="toggle-theme" title="Переключить тему">'+icon(isDark?"sun":"moon")+'<span class="sidebar-item-label">'+(isDark?"Светлая тема":"Тёмная тема")+'</span></button>' +
+      '<button type="button" class="sidebar-item" data-action="logout" title="Выйти">'+icon("logout")+'<span class="sidebar-item-label">Выйти</span></button>' +
+    '</div>';
+  }
+
+  return el(
+    '<div class="sidebar">' +
+      '<div class="sidebar-brand">'+brandMark()+'<span class="sidebar-item-label">Медицина Долголетия</span></div>' +
+      '<div class="sidebar-nav">'+items+'</div>' +
+      footer +
+    '</div>'
+  );
 }
 
 // Тёмная тема — дефолт продукта (не только системная), можно переключить вручную.
@@ -618,12 +646,14 @@ function toggleTheme(){
 /* ============================= РЕНДЕР: СТУДЕНТ ============================= */
 function renderStudentShell(){
   var wrap = el('<div></div>');
+  wrap.appendChild(renderSidebar());
+  var main = el('<div class="app-main"></div>');
+  wrap.appendChild(main);
   if(previewMode){
-    wrap.appendChild(el('<div style="background:var(--accent);color:#1B1A14;text-align:center;padding:10px 16px;font-size:13.5px;font-weight:600;position:sticky;top:0;z-index:40;display:flex;align-items:center;justify-content:center;gap:8px;">'+icon("eye")+' Режим просмотра «глазами врача» — изменения не сохраняются &nbsp; <button class="btn btn-sm" style="background:rgba(27,26,20,.14);border-color:transparent;color:#1B1A14;" data-action="exit-preview">Вернуться в панель</button></div>'));
+    main.appendChild(el('<div style="background:var(--accent);color:#1B1A14;text-align:center;padding:10px 16px;font-size:13.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;">'+icon("eye")+' Режим просмотра «глазами врача» — изменения не сохраняются</div>'));
   }
-  wrap.appendChild(renderTopbar());
   var shell = el('<div class="shell"><div class="wrap" id="studentContent"></div></div>');
-  wrap.appendChild(shell);
+  main.appendChild(shell);
   var content = shell.querySelector("#studentContent");
 
   if(!course){
@@ -633,27 +663,22 @@ function renderStudentShell(){
 
   if(studentState.tab === "lesson"){
     content.appendChild(renderCoursePlayer());
+  } else if(studentState.tab === "messages" && !previewMode){
+    content.appendChild(renderStudentMessages());
+  } else if(studentState.tab === "schedule"){
+    content.appendChild(renderStudentSchedule());
+  } else if(studentState.tab === "materials" && !previewMode){
+    content.appendChild(renderStudentMaterials());
+  } else if(studentState.tab === "progress" && !previewMode){
+    content.appendChild(renderMyProgressPage());
+  } else if(studentState.tab === "notifications" && !previewMode){
+    content.appendChild(renderNotificationsPage());
+  } else if(studentState.tab === "settings" && !previewMode){
+    content.appendChild(renderSettingsPage());
   } else {
-    var tabs = previewMode ? ["course","schedule"] : ["course","materials","schedule","messages"];
-    content.appendChild(renderTabsRow(tabs, studentState.tab, "student-tab", { messages: course.unreadMessages||0 }));
-    if(studentState.tab === "messages" && !previewMode) content.appendChild(renderStudentMessages());
-    else if(studentState.tab === "schedule") content.appendChild(renderStudentSchedule());
-    else if(studentState.tab === "materials" && !previewMode) content.appendChild(renderStudentMaterials());
-    else content.appendChild(renderStudentHome());
+    content.appendChild(renderStudentHome());
   }
   return wrap;
-}
-
-function renderTabsRow(tabs, active, actionName, badges){
-  var labels = { course:"Курс", messages:"Сообщения", progress:"Прогресс", chat:"Чат", profile:"Профиль", schedule:"Эфиры", materials:"Материалы" };
-  var html = '<div class="tabs" style="margin-top:24px;">';
-  tabs.forEach(function(t){
-    var count = badges && badges[t];
-    html += '<button class="tab'+(t===active?' active':'')+'" data-action="'+actionName+'" data-tab="'+t+'">'+labels[t]+
-      (count?'<span class="tab-badge">'+(count>9?"9+":count)+'</span>':'')+'</button>';
-  });
-  html += '</div>';
-  return el(html);
 }
 
 function renderStudentSchedule(){
@@ -1042,15 +1067,145 @@ function renderStudentMessages(){
   return el(html);
 }
 
+function renderMyProgressPage(){
+  var pr = course.progress || {};
+  var total = course.lessons.length;
+  var doneIds = pr.completed_lessons || [];
+  var done = doneIds.length;
+  var quizDone = !!pr.completed;
+  var pct = Math.round((done + (quizDone?1:0)) / (total+1) * 100);
+  var gam = course.gamification || { points:0, currentStreak:0, longestStreak:0 };
+
+  var html = '<div style="margin-top:6px;max-width:640px;">' +
+    '<div class="card" style="padding:22px 24px;margin-bottom:14px;">' +
+      '<div style="display:flex;align-items:center;gap:16px;">' +
+        '<div class="progress-ring" style="background:conic-gradient(var(--primary) '+pct+'%, var(--line-2) 0);"><div class="progress-ring-inner">'+pct+'%</div></div>' +
+        '<div><b style="font-size:15px;display:block;">Прогресс по курсу</b>' +
+        '<span style="font-size:13px;color:var(--muted);">'+done+' из '+total+' уроков'+(quizDone?' · тест сдан ('+pr.quiz_score+'%)':' · итоговый тест ещё впереди')+'</span></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="board-strip" style="margin-top:0;">' +
+      '<div class="card" style="padding:18px;">'+magnet("neutral","Серия дней") +
+        '<div style="display:flex;align-items:baseline;gap:6px;margin-top:10px;">'+icon("flame","ic-sm streak-flame") +
+        '<span style="font-family:var(--display);font-weight:800;font-size:22px;letter-spacing:-.02em;">'+(gam.currentStreak||0)+'</span>' +
+        '<span style="font-size:12px;color:var(--muted);">'+(gam.currentStreak===1?"день подряд":"дней подряд")+'</span></div>' +
+        '<span style="font-size:12px;color:var(--muted);display:block;margin-top:2px;">рекорд: '+(gam.longestStreak||0)+'</span></div>' +
+      '<div class="card" style="padding:18px;">'+magnet("neutral","Очки") +
+        '<div style="font-family:var(--display);font-weight:800;font-size:22px;margin-top:10px;letter-spacing:-.02em;">'+(gam.points||0)+'</div></div>' +
+      '<div class="card" style="padding:18px;">' +
+        magnet(quizDone?(pr.certificate_status==="issued"?"done":"attention"):"neutral", quizDone?(pr.certificate_status==="issued"?"Сертификат выдан":"На проверке"):"Сертификат") +
+        (quizDone
+          ? '<div style="font-family:var(--display);font-weight:800;font-size:22px;margin-top:10px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>'
+          : '<p style="font-size:12.5px;color:var(--muted);margin:10px 0 0;">Появится после теста.</p>') +
+      '</div>' +
+    '</div>' +
+    '<div class="card" style="padding:18px 20px;margin-top:14px;">' +
+      '<b style="font-size:14px;display:block;margin-bottom:12px;">Уроки</b>';
+  course.lessons.forEach(function(l,i){
+    var isDone = doneIds.indexOf(l.id)!==-1;
+    html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;'+(i<course.lessons.length-1?'border-bottom:1px solid var(--line-2);':'')+'">' +
+      '<span style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;background:'+(isDone?'var(--status-done)':'var(--line-2)')+';">'+(isDone?icon("check","ic-sm"):'')+'</span>' +
+      '<span style="font-size:13.5px;flex:1;'+(isDone?'':'color:var(--muted);')+'">'+(i+1)+'. '+escapeHtml(l.title)+'</span>' +
+    '</div>';
+  });
+  html += '</div></div>';
+  return el(html);
+}
+
+function renderNotificationsPage(){
+  var reminders = upcomingEventReminders();
+  var items = reminders.concat(notifState.items);
+  var html = '<div style="margin-top:6px;max-width:640px;">' +
+    '<div class="card" style="padding:18px 20px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
+        '<b style="font-size:14.5px;">Уведомления</b>' +
+        (notifState.unreadCount>0 ? '<button class="btn btn-sm btn-ghost" data-action="mark-all-notifs-read">Пометить всё прочитанным</button>' : '') +
+      '</div>';
+  if(!items.length){
+    html += '<div class="empty-state" style="padding:30px 10px;">У вас нет новых уведомлений.</div>';
+  } else {
+    items.forEach(function(n){
+      var unread = n.synthetic || !n.read_at;
+      html += '<div class="'+(n.synthetic?'':'notif-item')+'" '+(n.synthetic?'':'data-action="mark-notif-read" data-id="'+n.id+'"')+
+        ' style="padding:12px 0;border-bottom:1px solid var(--line-2);cursor:'+(n.synthetic?'default':'pointer')+';'+(unread?'':'opacity:.55;')+'">' +
+        '<b style="font-size:13.5px;display:block;">'+escapeHtml(n.title)+'</b>' +
+        (n.body?'<span style="font-size:12.5px;color:var(--muted);display:block;margin-top:3px;">'+escapeHtml(n.body)+'</span>':'') +
+        (n.created_at&&!n.synthetic?'<span style="font-size:11px;color:var(--muted-2);display:block;margin-top:4px;">'+fmtDate(n.created_at)+' '+fmtTime(n.created_at)+'</span>':'') +
+      '</div>';
+    });
+  }
+  html += '</div></div>';
+  return el(html);
+}
+
+// Мьют принадлежит тому, кто его поставил (см. mutedChats) — поэтому один и тот же
+// список пригоден и для врача (максимум 2 записи: куратор + поток), и для куратора
+// (по одной записи на каждого замьюченного врача).
+function resolveChatLabel(type, key){
+  if(type==="curator"){
+    if(me.role==="student") return "Чат с куратором";
+    var st = (staffState.students||[]).find(function(s){ return s.id===key; });
+    return st ? ("Чат с "+st.name) : "Чат с врачом";
+  }
+  if(type==="stream"){
+    var stream = (calendarState.streams||[]).find(function(s){ return s.id===key; });
+    return stream ? ("Беседа потока «"+stream.name+"»") : "Беседа потока";
+  }
+  return type+": "+key;
+}
+function renderMuteOverviewCard(){
+  var keys = Object.keys(mutedChats);
+  var html = '<div class="card" style="padding:18px 20px;margin-top:14px;">' +
+    '<b style="font-size:14px;display:block;margin-bottom:4px;">Отключённые уведомления чатов</b>';
+  if(!keys.length){
+    html += '<p style="font-size:12.5px;color:var(--muted);margin:10px 0 0;">Вы не отключали уведомления ни для одного чата.</p>';
+  } else {
+    html += '<p class="hint" style="margin:6px 0 12px;">Для этих чатов новые сообщения нигде не подсвечиваются бейджами.</p>';
+    keys.forEach(function(k){
+      var sep = k.indexOf(":");
+      var type = k.slice(0,sep), key = k.slice(sep+1);
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line-2);">' +
+        '<span style="font-size:13px;">'+escapeHtml(resolveChatLabel(type,key))+'</span>' +
+        '<button class="btn btn-sm btn-ghost" data-action="toggle-chat-mute" data-type="'+type+'" data-key="'+key+'" data-muted="1">Включить уведомления</button>' +
+      '</div>';
+    });
+  }
+  html += '</div>';
+  return html;
+}
+function renderSettingsPage(){
+  var isDark = getTheme()==="dark";
+  var html = '<div style="margin-top:6px;max-width:520px;">' +
+    '<div class="card" style="padding:18px 20px;">' +
+      '<b style="font-size:14.5px;display:block;margin-bottom:14px;">Настройки</b>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line-2);">' +
+        '<span style="font-size:13.5px;">Тема оформления</span>' +
+        '<button class="btn btn-sm btn-ghost" data-action="toggle-theme">'+icon(isDark?"sun":"moon")+(isDark?"Светлая":"Тёмная")+'</button>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line-2);">' +
+        '<span style="font-size:13.5px;">Пароль</span>' +
+        '<button class="btn btn-sm btn-ghost" data-action="open-change-password">Сменить пароль</button>' +
+      '</div>' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;">' +
+        '<span style="font-size:13.5px;">Активные сеансы</span>' +
+        '<button class="btn btn-sm btn-ghost" data-action="logout-everywhere">Выйти со всех устройств</button>' +
+      '</div>' +
+    '</div>' +
+    renderMuteOverviewCard() +
+  '</div>';
+  return el(html);
+}
+
 /* ============================= РЕНДЕР: ПЕРСОНАЛ ============================= */
 function renderStaffShell(){
   var wrap = el('<div></div>');
-  wrap.appendChild(renderTopbar());
+  wrap.appendChild(renderSidebar());
+  var main = el('<div class="app-main"></div>');
+  wrap.appendChild(main);
   var shell = el('<div class="shell"><div class="wrap" id="staffContent"></div></div>');
-  wrap.appendChild(shell);
+  main.appendChild(shell);
   var content = shell.querySelector("#staffContent");
   content.appendChild(el('<h1 class="section-title">'+escapeHtml(roleLabel(me.role))+'</h1><p class="section-sub" style="margin-top:-2px;">Демо-курс «Медицина Долголетия»</p>'));
-  content.appendChild(renderStaffTabs());
 
   if(staffState.mainTab === "team" && (me.role==="admin"||me.role==="super_admin")){
     content.appendChild(renderTeamTab());
@@ -1062,6 +1217,12 @@ function renderStaffShell(){
     content.appendChild(renderDashboardTab());
   } else if(staffState.mainTab === "audit" && (me.role==="admin"||me.role==="super_admin")){
     content.appendChild(renderAuditLogTab());
+  } else if(staffState.mainTab === "chats"){
+    content.appendChild(renderStaffChatsPage());
+  } else if(staffState.mainTab === "notifications"){
+    content.appendChild(renderStaffNotificationsPage());
+  } else if(staffState.mainTab === "settings"){
+    content.appendChild(renderSettingsPage());
   } else {
     content.appendChild(renderInboxCard());
     content.appendChild(renderStaffStats());
@@ -1087,17 +1248,46 @@ function renderStaffShell(){
   return wrap;
 }
 
-function renderStaffTabs(){
-  var html = '<div class="tabs" style="margin-top:4px;">' +
-    '<button class="tab'+(staffState.mainTab==="students"?' active':'')+'" data-action="staff-main-tab" data-tab="students">Ученики</button>' +
-    '<button class="tab'+(staffState.mainTab==="calendar"?' active':'')+'" data-action="staff-main-tab" data-tab="calendar">Эфиры</button>' +
-    '<button class="tab'+(staffState.mainTab==="materials"?' active':'')+'" data-action="staff-main-tab" data-tab="materials">Материалы</button>' +
-    '<button class="tab'+(staffState.mainTab==="dashboard"?' active':'')+'" data-action="staff-main-tab" data-tab="dashboard">Dashboard</button>';
-  if(me.role==="admin"||me.role==="super_admin"){
-    html += '<button class="tab'+(staffState.mainTab==="team"?' active':'')+'" data-action="staff-main-tab" data-tab="team">Команда</button>';
-    html += '<button class="tab'+(staffState.mainTab==="audit"?' active':'')+'" data-action="staff-main-tab" data-tab="audit">Журнал</button>';
+// Чаты, ожидающие ответа 24ч+ — та же выборка, что в инбокс-карточке вкладки
+// «Ученики» (staffState.inbox.unanswered), но как отдельная страница с возможностью
+// замьютить конкретный чат прямо отсюда.
+function renderStaffChatsPage(){
+  var inbox = staffState.inbox || { unanswered:[] };
+  var html = '<div style="margin-top:6px;max-width:640px;"><div class="card" style="padding:18px 20px;">' +
+    '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Чаты</b>' +
+    '<p class="hint" style="margin:0 0 14px;">Врачи, которые ждут ответа 24 часа и больше.</p>';
+  if(!inbox.unanswered.length){
+    html += '<div class="empty-state" style="padding:30px 10px;">Нет чатов, ожидающих ответа.</div>';
+  } else {
+    inbox.unanswered.forEach(function(r){
+      var muted = isChatMutedLocal("curator", r.id);
+      html += '<div class="inbox-row">' +
+        '<div class="avatar">'+initials(r.name)+'</div>' +
+        '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(r.name)+'</b><span style="font-size:12px;color:var(--muted);">последнее сообщение '+daysSince(r.created_at)+' дн. назад</span></div>' +
+        '<button class="btn btn-sm btn-ghost" data-action="toggle-chat-mute" data-type="curator" data-key="'+r.id+'" data-muted="'+(muted?"1":"0")+'">'+(muted?"Включить":"Отключить")+'</button>' +
+        '<button class="btn btn-sm btn-primary" data-action="open-student-chat" data-id="'+r.id+'">Ответить</button>' +
+      '</div>';
+    });
   }
-  html += '</div>';
+  html += '</div></div>';
+  return el(html);
+}
+
+// У персонала пока нет отдельной системы уведомлений (в отличие от врача) — честно
+// показываем то немногое, что уже можно посчитать на лету (напоминания об эфирах),
+// и пустое состояние вместо выдуманной ленты.
+function renderStaffNotificationsPage(){
+  var reminders = upcomingEventReminders();
+  var html = '<div style="margin-top:6px;max-width:640px;"><div class="card" style="padding:18px 20px;">' +
+    '<b style="font-size:14.5px;display:block;margin-bottom:14px;">Уведомления</b>';
+  if(!reminders.length){
+    html += '<div class="empty-state" style="padding:30px 10px;">У вас нет новых уведомлений.</div>';
+  } else {
+    reminders.forEach(function(n){
+      html += '<div style="padding:12px 0;border-bottom:1px solid var(--line-2);"><b style="font-size:13.5px;">'+escapeHtml(n.title)+'</b></div>';
+    });
+  }
+  html += '</div></div>';
   return el(html);
 }
 
@@ -2150,6 +2340,32 @@ function startStreamMessagePolling(streamId, containerId){
 }
 function stopStreamMessagePolling(){ if(streamMsgPollTimer){ clearInterval(streamMsgPollTimer); streamMsgPollTimer=null; } }
 
+// Общая точка входа для переключения раздела врача — используется и прямыми
+// ссылками внутри страниц (data-action="student-tab"), и боковой навигацией
+// (sidebar-nav), поэтому navKey передаётся отдельно от tab: два пункта меню
+// («Поиск» и «Материалы обучения») ведут на один и тот же tab="materials",
+// но должны подсвечиваться в сайдбаре по-разному.
+async function applyStudentTab(tab, navKey){
+  studentState.tab = tab;
+  studentState.navKey = navKey || tab;
+  if(tab==="schedule") localStorage.setItem("lms-viewed-schedule-"+me.id, "1");
+  if(tab!=="messages"){ stopMessagePolling(); stopStreamMessagePolling(); }
+  else if(studentState.messagesSubTab==="curator"){
+    if(course) course.unreadMessages=0;
+    api("/messages/"+me.id+"/mark-read", { method:"POST" }).catch(function(){});
+  }
+  if(tab==="notifications") await loadNotifications();
+  render();
+  if(tab==="messages"){
+    if(studentState.messagesSubTab==="stream" && me.stream_id) startStreamMessagePolling(me.stream_id,"msgListStream");
+    else startMessagePolling(me.id,"msgList");
+  } else if(tab==="materials" && studentState.materialsAutoFocus){
+    var searchInp = document.getElementById("materialsSearchInput");
+    if(searchInp) searchInp.focus();
+    studentState.materialsAutoFocus = false;
+  }
+}
+
 /* ============================= СОБЫТИЯ ============================= */
 function wireEvents(root){
   // render() calls wireEvents(app) on every re-render; app (the #app container) is never
@@ -2170,9 +2386,6 @@ function wireEvents(root){
     if(dashboardState.openFilterMenu && !e.target.closest(".dash-field")){
       dashboardState.openFilterMenu = null; render();
     }
-    if(notifState.open && !e.target.closest(".notif-bell-wrap")){
-      notifState.open = false; render();
-    }
     var t = e.target.closest("[data-action]");
     if(!t) return;
     var action = t.getAttribute("data-action");
@@ -2181,11 +2394,6 @@ function wireEvents(root){
     if(action==="go-login"){ view="login"; render(); return; }
     if(action==="logout"){ stopNotificationPolling(); await api("/auth/logout", { method:"POST" }); me=null; course=null; view="login"; render(); return; }
     if(action==="toggle-theme"){ toggleTheme(); render(); return; }
-    if(action==="toggle-notif-bell"){
-      notifState.open = !notifState.open;
-      if(notifState.open) await loadNotifications();
-      render(); return;
-    }
     if(action==="mark-notif-read"){
       var nid=t.getAttribute("data-id");
       var n = notifState.items.find(function(x){ return x.id===nid; });
@@ -2228,18 +2436,21 @@ function wireEvents(root){
     if(action==="overlay-close-profile-editor" && !e.target.closest("[data-stop]")){ profileEditor.open=false; render(); return; }
 
     if(action==="student-tab"){
-      studentState.tab=t.getAttribute("data-tab");
-      if(studentState.tab==="schedule") localStorage.setItem("lms-viewed-schedule-"+me.id, "1");
-      if(studentState.tab!=="messages"){ stopMessagePolling(); stopStreamMessagePolling(); }
-      else if(studentState.messagesSubTab==="curator"){
-        if(course) course.unreadMessages=0;
-        api("/messages/"+me.id+"/mark-read", { method:"POST" }).catch(function(){});
+      await applyStudentTab(t.getAttribute("data-tab"));
+      return;
+    }
+    if(action==="sidebar-nav"){
+      var navKey = t.getAttribute("data-key");
+      if(navKey==="profile"){ profileEditor.open=true; render(); return; }
+      if(view==="student"){
+        if(navKey==="search"){ studentState.materialsAutoFocus=true; await applyStudentTab("materials","search"); return; }
+        if(navKey==="materials"){ studentState.materialsAutoFocus=false; await applyStudentTab("materials","materials"); return; }
+        await applyStudentTab(navKey, navKey);
+        return;
       }
+      staffState.navKey = navKey;
+      staffState.mainTab = navKey;
       render();
-      if(studentState.tab==="messages"){
-        if(studentState.messagesSubTab==="stream" && me.stream_id) startStreamMessagePolling(me.stream_id,"msgListStream");
-        else startMessagePolling(me.id,"msgList");
-      }
       return;
     }
     if(action==="student-messages-subtab"){
@@ -2360,19 +2571,20 @@ function wireEvents(root){
       return;
     }
 
-    if(action==="staff-main-tab"){ staffState.mainTab=t.getAttribute("data-tab"); render(); return; }
     if(action==="toggle-invite-student"){ staffState.showInviteStudent=!staffState.showInviteStudent; render(); return; }
     if(action==="invite-mode"){ staffState.inviteMode=t.getAttribute("data-mode"); render(); return; }
     if(action==="open-course-preview"){
       previewMode = true; previewReturnTab = staffState.mainTab;
       try{ course = await api("/staff/course-preview"); }
       catch(err){ showToast(err.message); previewMode=false; return; }
-      studentState = { tab:"course", lessonIndex:0, quizMode:false, quizSubmitted:false };
+      studentState = { tab:"course", navKey:"course", lessonIndex:0, quizMode:false, quizSubmitted:false };
       view = "student";
       render(); return;
     }
     if(action==="exit-preview"){
-      previewMode = false; course = null; view = "staff"; staffState.mainTab = previewReturnTab || "students";
+      previewMode = false; course = null; view = "staff";
+      staffState.mainTab = previewReturnTab || "students";
+      staffState.navKey = staffState.mainTab;
       render(); return;
     }
     if(action==="open-student"){

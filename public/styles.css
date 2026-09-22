@@ -117,6 +117,32 @@ button{font-family:var(--sans);cursor:pointer;}
 .topbar-inner{display:flex;align-items:center;justify-content:space-between;height:64px;}
 .brand{display:flex;align-items:center;gap:10px;font-size:15.5px;font-weight:600;}
 .brand .mark{width:30px;height:30px;border-radius:9px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+
+/* ---------------- Боковая навигация: узкая icon-полоса, раскрывается при наведении ---------------- */
+.sidebar{position:fixed;top:0;left:0;bottom:0;width:64px;background:var(--surface);border-right:var(--border-hairline);z-index:40;display:flex;flex-direction:column;overflow:hidden;transition:width .18s cubic-bezier(.16,1,.3,1);}
+.sidebar:hover{width:236px;box-shadow:var(--shadow-lift);}
+.sidebar-brand{display:flex;align-items:center;gap:10px;height:64px;padding:0 15px;flex-shrink:0;white-space:nowrap;border-bottom:var(--border-hairline);}
+.sidebar-nav{flex:1;overflow-y:auto;overflow-x:hidden;padding:8px;display:flex;flex-direction:column;gap:2px;}
+.sidebar-nav::-webkit-scrollbar{width:0;}
+.sidebar-item{display:flex;align-items:center;gap:14px;padding:11px 13px;border-radius:var(--radius-s);color:var(--muted);white-space:nowrap;position:relative;cursor:pointer;background:none;border:none;width:100%;text-align:left;font-size:13.5px;font-weight:500;font-family:var(--sans);flex-shrink:0;}
+.sidebar-item .ic{flex-shrink:0;}
+.sidebar-item:hover{background:var(--surface-2);color:var(--ink);}
+.sidebar-item.active{background:var(--primary-tint);color:var(--ink);}
+.sidebar-item.active .ic{color:var(--primary);}
+.sidebar-item-label{opacity:0;transition:opacity .12s ease;overflow:hidden;text-overflow:ellipsis;}
+.sidebar:hover .sidebar-item-label{opacity:1;}
+.sidebar-item-badge{margin-left:auto;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--status-live);color:#fff;font-size:10px;font-weight:600;opacity:0;transition:opacity .12s ease;}
+.sidebar:hover .sidebar-item-badge{opacity:1;}
+.sidebar-item-dot{position:absolute;left:33px;top:9px;width:7px;height:7px;border-radius:50%;background:var(--status-live);}
+.sidebar:hover .sidebar-item-dot{display:none;}
+.sidebar-footer{flex-shrink:0;padding:8px;border-top:var(--border-hairline);display:flex;flex-direction:column;gap:2px;}
+.app-main{margin-left:64px;min-height:100vh;}
+@media (max-width:640px){
+  .sidebar{width:52px;}
+  .sidebar:hover{width:210px;}
+  .app-main{margin-left:52px;}
+  .sidebar-item-dot{left:27px;}
+}
 .who{display:flex;align-items:center;gap:14px;font-size:13px;color:var(--muted);min-width:0;}
 .who .name{color:var(--ink);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:26vw;min-width:0;flex-shrink:1;}
 @media (max-width:640px){
