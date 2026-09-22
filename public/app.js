@@ -147,19 +147,24 @@ function ruPluralClient(n, one, few, many){
   if(mod10>=2 && mod10<=4) return few;
   return many;
 }
-// «Был(а) в сети N назад» для куратора — за пределами последнего месяца просто
-// показываем дату (а не "35 дней назад"), дальше относительное время не помогает.
+var RU_MONTHS_GEN = ["января","февраля","марта","апреля","мая","июня","июля","августа","сентября","октября","ноября","декабря"];
+function isSameCalendarDay(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+// «Был(а) в сети» — формат как в VK/Telegram: минуты назад, пока это недавно,
+// дальше "сегодня в 14:32" / "вчера в 20:15" / "3 сентября в 11:04" — привязка
+// к календарным суткам, а не бесконечное "N часов назад".
 function timeSince(iso){
   if(!iso) return "никогда";
-  var diffMs = Math.max(0, Date.now() - new Date(iso).getTime());
-  var mins = Math.floor(diffMs/60000);
+  var d = new Date(iso);
+  var now = new Date();
+  var mins = Math.floor(Math.max(0, now.getTime()-d.getTime())/60000);
   if(mins < 1) return "только что";
   if(mins < 60) return mins+" "+ruPluralClient(mins,"минуту","минуты","минут")+" назад";
-  var hours = Math.floor(mins/60);
-  if(hours < 24) return hours+" "+ruPluralClient(hours,"час","часа","часов")+" назад";
-  var days = Math.floor(hours/24);
-  if(days < 30) return days+" "+ruPluralClient(days,"день","дня","дней")+" назад";
-  return fmtDate(iso);
+  if(isSameCalendarDay(d,now)) return "сегодня в "+fmtTime(iso);
+  var yesterday = new Date(now.getFullYear(),now.getMonth(),now.getDate()-1);
+  if(isSameCalendarDay(d,yesterday)) return "вчера в "+fmtTime(iso);
+  var label = d.getDate()+" "+RU_MONTHS_GEN[d.getMonth()];
+  if(d.getFullYear()!==now.getFullYear()) label += " "+d.getFullYear();
+  return label+" в "+fmtTime(iso);
 }
 function showToast(text){
   var old = document.getElementById("toast"); if(old) old.remove();
@@ -198,6 +203,16 @@ async function init(){
     render();
   }
 }
+
+// Как в Telegram/VK: статус "в сети" должен пропадать сразу при закрытии вкладки,
+// а не только когда истечёт тайм-аут хартбита. Обычный fetch на выгрузке страницы
+// браузер может оборвать, не отправив — sendBeacon как раз для этого случая:
+// гарантированно уходит даже когда страница уже закрывается.
+function sendOfflineBeacon(){
+  if(!me || me.role!=="student") return;
+  try{ navigator.sendBeacon(API+"/course/offline"); }catch(e){}
+}
+window.addEventListener("pagehide", sendOfflineBeacon);
 
 async function routeAfterLogin(){
   await loadChatMutes();
@@ -2675,7 +2690,7 @@ function wireEvents(root){
 
     if(action==="go-register"){ view="register"; render(); return; }
     if(action==="go-login"){ view="login"; render(); return; }
-    if(action==="logout"){ stopNotificationPolling(); stopHeartbeat(); await api("/auth/logout", { method:"POST" }); me=null; course=null; view="login"; mySessionsList=[]; mySessionsLoaded=false; render(); return; }
+    if(action==="logout"){ stopNotificationPolling(); stopHeartbeat(); sendOfflineBeacon(); await api("/auth/logout", { method:"POST" }); me=null; course=null; view="login"; mySessionsList=[]; mySessionsLoaded=false; render(); return; }
     if(action==="toggle-theme"){ toggleTheme(); render(); return; }
     if(action==="mark-notif-read"){
       var nid=t.getAttribute("data-id");
@@ -2708,6 +2723,7 @@ function wireEvents(root){
     }
     if(action==="logout-everywhere"){
       if(!confirm("Выйти со всех устройств? Понадобится войти заново здесь тоже.")) return;
+      stopNotificationPolling(); stopHeartbeat(); sendOfflineBeacon();
       try{ await api("/auth/logout-everywhere", { method:"POST" }); }catch(err){}
       me=null; course=null; view="login"; changePasswordOpen=false; render(); return;
     }

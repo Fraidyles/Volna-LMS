@@ -81,8 +81,8 @@ router.get("/", authRequired, requireRole("student"), async (req, res) => {
   const pr = progressRow.rows[0];
 
   // Открыл главную — значит точно "в сети"; дальше это поддерживает периодический
-  // heartbeat с фронтенда, пока вкладка открыта (см. PUT /heartbeat ниже).
-  pool.query("UPDATE progress SET last_seen_at=now() WHERE user_id=$1", [req.user.id]).catch(() => {});
+  // heartbeat с фронтенда, пока вкладка открыта (см. PUT /heartbeat и POST /offline ниже).
+  pool.query("UPDATE progress SET last_seen_at=now(), is_online=true WHERE user_id=$1", [req.user.id]).catch(() => {});
 
   const course = await pool.query("SELECT id, title FROM courses WHERE id=$1", [pr.course_id]);
   if (!course.rowCount) return res.status(404).json({ error: "no_course" });
@@ -230,7 +230,17 @@ router.post("/quiz-submit", authRequired, requireRole("student"), async (req, re
 // открыта любая вкладка приложения, независимо от того, что он там делает
 // (читает материалы, пишет в чат — не обязательно проходит урок).
 router.put("/heartbeat", authRequired, requireRole("student"), async (req, res) => {
-  await pool.query("UPDATE progress SET last_seen_at=now() WHERE user_id=$1", [req.user.id]);
+  await pool.query("UPDATE progress SET last_seen_at=now(), is_online=true WHERE user_id=$1", [req.user.id]);
+  res.json({ ok: true });
+});
+
+// Явный сигнал "закрыл вкладку" — как в Telegram/VK, статус "в сети" пропадает
+// мгновенно, а не только когда истечёт тайм-аут хартбита. Шлётся через
+// navigator.sendBeacon на pagehide (обычный fetch на выгрузке страницы браузер
+// может просто оборвать, не отправив), поэтому тело запроса не читаем — важен
+// сам факт запроса, а не его содержимое.
+router.post("/offline", authRequired, requireRole("student"), async (req, res) => {
+  await pool.query("UPDATE progress SET last_seen_at=now(), is_online=false WHERE user_id=$1", [req.user.id]);
   res.json({ ok: true });
 });
 

@@ -53,6 +53,26 @@ describe("Курс врача", () => {
     expect(afterHeartbeat.body.student.online).toBe(true);
   });
 
+  test("POST /course/offline мгновенно гасит «онлайн» — как закрытие вкладки в Telegram/VK", async () => {
+    const curator = await createUser({ role: "curator" });
+    const curatorCookie = await loginAs(curator);
+    const user = await createUser({ role: "student", courseId: course.courseId });
+    await pool.query("UPDATE users SET assigned_curator_id=$1 WHERE id=$2", [curator.id, user.id]);
+    const cookie = await loginAs(user);
+
+    await request(app).get("/api/course").set("Cookie", cookie);
+    const online = await request(app).get(`/api/staff/students/${user.id}`).set("Cookie", curatorCookie);
+    expect(online.body.student.online).toBe(true);
+
+    // last_seen_at свежий (только что закрыл вкладку) — но online должен стать false
+    // немедленно, не дожидаясь устаревания last_seen_at.
+    const off = await request(app).post("/api/course/offline").set("Cookie", cookie);
+    expect(off.status).toBe(200);
+    const afterOffline = await request(app).get(`/api/staff/students/${user.id}`).set("Cookie", curatorCookie);
+    expect(afterOffline.body.student.online).toBe(false);
+    expect(new Date(afterOffline.body.student.last_seen_at).getTime()).toBeGreaterThan(Date.now() - 5000);
+  });
+
   test("lesson-done с несуществующим id урока — 404, а не молчаливое зачисление очков", async () => {
     const user = await createUser({ role: "student", courseId: course.courseId });
     const cookie = await loginAs(user);

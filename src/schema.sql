@@ -285,3 +285,9 @@ CREATE INDEX IF NOT EXISTS idx_login_sessions_user ON login_sessions(user_id, cr
 -- ничего не проходит, а читает материалы/чат — обновляется хартбитом с фронтенда.
 ALTER TABLE progress ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
 
+-- is_online — явный флаг (как в Telegram/VK): включается хартбитом, выключается
+-- явным сигналом при закрытии вкладки (навигатор.sendBeacon на pagehide) — поэтому
+-- статус пропадает мгновенно, а не только после истечения тайм-аута. last_seen_at
+-- при этом даёт safety-net на случай краша вкладки без события выгрузки (см. withOnlineStatus).
+ALTER TABLE progress ADD COLUMN IF NOT EXISTS is_online BOOLEAN NOT NULL DEFAULT false;
+

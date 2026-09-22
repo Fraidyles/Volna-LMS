@@ -27,15 +27,18 @@ const STUDENT_FIELDS = `
   u.product, u.payment_status, u.assigned_curator_id, u.referral_code,
   p.completed_lessons, p.quiz_score, p.completed, p.certificate_status,
   p.certificate_issued_at, p.certificate_issued_by, p.requested_full_access,
-  p.access_expires_at, p.access_blocked, p.quiz_answers, p.last_seen_at
+  p.access_expires_at, p.access_blocked, p.quiz_answers, p.last_seen_at, p.is_online
 `;
 
-// "Онлайн" — эвристика, а не гарантия: фронтенд шлёт heartbeat раз в 45с, пока
-// открыта вкладка, поэтому 3 минуты — запас на пропущенный тик/фон вкладки,
-// а не строгий предел активности (для этого есть last_active_at/"неактивны 7+ дней").
+// "Онлайн" как в Telegram/VK: is_online — явный флаг (включается хартбитом,
+// гасится сигналом при закрытии вкладки — см. POST /course/offline), поэтому
+// статус пропадает мгновенно, а не только по тайм-ауту. Но если вкладка упала
+// без события выгрузки, is_online мог бы навсегда остаться true — поэтому
+// дополнительно проверяем свежесть last_seen_at как safety-net (3 минуты запаса
+// на пропущенный тик хартбита; это не про "неактивны 7+ дней" — там свой last_active_at).
 const ONLINE_THRESHOLD_MS = 3 * 60 * 1000;
 function withOnlineStatus(row) {
-  const online = !!row.last_seen_at && Date.now() - new Date(row.last_seen_at).getTime() < ONLINE_THRESHOLD_MS;
+  const online = !!row.is_online && !!row.last_seen_at && Date.now() - new Date(row.last_seen_at).getTime() < ONLINE_THRESHOLD_MS;
   return Object.assign({}, row, { online });
 }
 
