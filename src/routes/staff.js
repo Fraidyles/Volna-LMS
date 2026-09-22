@@ -8,6 +8,7 @@ const { revertLogEntry } = require("../revert");
 const { generateTempPassword } = require("../util");
 const { notify } = require("../notifications");
 const { canManageStudent, requireStudentScope, filterToScope } = require("../access");
+const { buildDailyDigest } = require("../dailyDigest");
 
 const router = express.Router();
 
@@ -432,6 +433,14 @@ router.get("/inbox", authRequired, requireRole("curator", "admin", "super_admin"
     unanswered: unansweredOverdue,
     pendingCertificates: pendingCert.rows
   });
+});
+
+// Дайджест «что произошло вчера» — детерминированный (не LLM), считается по
+// запросу, а не по расписанию в 9:00 МСК: инфраструктуры для фонового крона в
+// этом приложении нет, а данные не устаревают за время между заходами куратора.
+router.get("/daily-digest", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+  const digest = await buildDailyDigest(req.user);
+  res.json(digest);
 });
 
 module.exports = router;
