@@ -1,5 +1,5 @@
 const request = require("supertest");
-const { app, pool, createUser, loginAs } = require("./helpers");
+const { app, pool, seedCourse, createUser, loginAs } = require("./helpers");
 
 afterAll(async () => { await pool.end(); });
 
@@ -17,6 +17,22 @@ describe("Права доступа персонала", () => {
     const res = await request(app).get("/api/staff/students").set("Cookie", cookie);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.students)).toBe(true);
+  });
+
+  test("список учеников включает quiz_answers — нужно для повопросной аналитики дашборда", async () => {
+    const course = await seedCourse();
+    const student = await createUser({ role: "student", courseId: course.courseId });
+    const studentCookie = await loginAs(student);
+    var answers = {};
+    answers[course.questionIds[0]] = 0;
+    answers[course.questionIds[1]] = 2;
+    await request(app).post("/api/course/quiz-submit").set("Cookie", studentCookie).send({ answers });
+
+    const curator = await createUser({ role: "curator" });
+    const cookie = await loginAs(curator);
+    const res = await request(app).get("/api/staff/students").set("Cookie", cookie);
+    const row = res.body.students.find((s) => s.id === student.id);
+    expect(row.quiz_answers).toEqual(answers);
   });
 
   test("куратор видит команду на чтение, но не может управлять ею", async () => {

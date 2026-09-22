@@ -1357,6 +1357,173 @@ function exportDashboardCSV(list){
   setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
 }
 
+/* ---------------- Аналитика дашборда: тренд регистраций, воронка, поурочный отсев, ответы теста ---------------- */
+// Все три блока считаются из УЖЕ отфильтрованного computeFilteredStudents() —
+// те же фильтры дашборда (период, поток, куратор и т.д.) автоматически
+// применяются и к графикам, без отдельной второй системы фильтрации.
+function analyticsRegistrationsByDay(filtered){
+  var toDate = dashboardState.periodTo ? new Date(dashboardState.periodTo+"T00:00:00") : new Date();
+  var fromDate = dashboardState.periodFrom ? new Date(dashboardState.periodFrom+"T00:00:00") : new Date(toDate.getTime()-29*86400000);
+  var days = Math.max(1, Math.round((toDate-fromDate)/86400000)+1);
+  var weekly = days > 45;
+  var buckets = {}, order = [];
+  if(!weekly){
+    for(var i=0;i<days;i++){ var key=isoDate(new Date(fromDate.getTime()+i*86400000)); buckets[key]=0; order.push(key); }
+  } else {
+    var d0=new Date(fromDate.getTime()); var dow=(d0.getDay()+6)%7; d0.setDate(d0.getDate()-dow);
+    for(var wd=new Date(d0.getTime()); wd<=toDate; wd.setDate(wd.getDate()+7)){ var key2=isoDate(wd); buckets[key2]=0; order.push(key2); }
+  }
+  filtered.forEach(function(s){
+    var regDate=(s.created_at||"").slice(0,10);
+    if(!regDate) return;
+    var d=new Date(regDate+"T00:00:00");
+    if(d<fromDate || d>toDate) return;
+    var key;
+    if(!weekly) key=regDate;
+    else{ var dd=new Date(d.getTime()); var dow2=(dd.getDay()+6)%7; dd.setDate(dd.getDate()-dow2); key=isoDate(dd); }
+    if(buckets[key]!==undefined) buckets[key]++;
+  });
+  return { weekly:weekly, labels:order, counts:order.map(function(k){ return buckets[k]; }) };
+}
+
+function analyticsFunnel(filtered){
+  var registered = filtered.length;
+  var started = filtered.filter(function(s){ return (s.completed_lessons||[]).length>0; }).length;
+  var completedDemo = filtered.filter(function(s){ return !!s.completed; }).length;
+  var certified = filtered.filter(function(s){ return s.certificate_status==="issued"; }).length;
+  return [
+    { label:"Зарегистрировались", count:registered },
+    { label:"Начали курс", count:started },
+    { label:"Прошли демо-курс", count:completedDemo },
+    { label:"Получили сертификат", count:certified }
+  ];
+}
+
+function analyticsLessonDropoff(filtered){
+  return staffState.materials.map(function(l,idx){
+    var reached = filtered.filter(function(s){ return (s.completed_lessons||[]).length > idx; }).length;
+    return { label:(idx+1)+". "+l.title, count:reached };
+  });
+}
+
+// Только admin/super_admin — только они видят правильные ответы (staffState.quizAdmin),
+// без которых нельзя определить верно/неверно ответил врач.
+function analyticsQuizStats(filtered){
+  if(!staffState.quizAdmin || !staffState.quizAdmin.length) return [];
+  return staffState.quizAdmin.map(function(q,idx){
+    var correct=0, incorrect=0;
+    filtered.forEach(function(s){
+      var answers=s.quiz_answers;
+      if(!answers || answers[q.id]===undefined || answers[q.id]===null) return;
+      if(answers[q.id]===q.correct) correct++; else incorrect++;
+    });
+    return { idx:idx, question:q.question, correct:correct, incorrect:incorrect };
+  });
+}
+
+function renderVBarChart(labels, counts, weekly){
+  var max = Math.max.apply(null, counts.concat([1]));
+  var html = '<div class="chart-vbars">';
+  counts.forEach(function(c,i){
+    var h = Math.round((c/max)*100);
+    html += '<div class="chart-vbar-col"><div class="chart-vbar" style="height:'+(h||1)+'%;" title="'+escapeHtml(fmtDate(labels[i]))+(weekly?' (неделя)':'')+': '+c+'"></div></div>';
+  });
+  html += '</div>';
+  // Абсолютное позиционирование вместо ячейки-на-колонку: при 30+ узких столбцах
+  // flex-ячейка шириной с саму колонку обрезала бы дату по text-overflow задолго
+  // до того, как текст реально перестал бы помещаться — так подпись не зависит
+  // от ширины своей колонки и не режется, сколько бы баров ни было.
+  var maxLabels = Math.min(labels.length, 6);
+  var shownIdx = [];
+  for(var k=0;k<maxLabels;k++){ shownIdx.push(Math.round(k*(labels.length-1)/Math.max(1,maxLabels-1))); }
+  shownIdx = shownIdx.filter(function(v,i,arr){ return arr.indexOf(v)===i; });
+  html += '<div class="chart-vbar-labels">';
+  shownIdx.forEach(function(i){
+    var pct = ((i+0.5)/labels.length)*100;
+    var text = new Date(labels[i]+"T00:00:00").toLocaleDateString("ru-RU",{day:"numeric",month:"short"});
+    html += '<div class="chart-vbar-label-abs" style="left:'+pct+'%;">'+escapeHtml(text)+'</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderHBarChart(items){
+  var max = Math.max.apply(null, items.map(function(x){ return x.count; }).concat([1]));
+  var html = '<div class="chart-hbars">';
+  items.forEach(function(it){
+    var w = Math.round((it.count/max)*100);
+    var pct = items[0].count ? Math.round((it.count/items[0].count)*100) : 0;
+    html += '<div class="chart-hbar-row">' +
+      '<div class="chart-hbar-name" title="'+escapeHtml(it.label)+'">'+escapeHtml(it.label)+'</div>' +
+      '<div class="chart-hbar-track"><div class="chart-hbar-fill" style="width:'+(w||1)+'%;" title="'+escapeHtml(it.label)+': '+it.count+'"></div></div>' +
+      '<div class="chart-hbar-value">'+it.count+' · '+pct+'%</div>' +
+    '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderQuizStackChart(stats){
+  if(!stats.length) return '<div class="empty-state" style="padding:24px 10px;">Вопросов пока нет.</div>';
+  var html = '<div class="chart-legend">' +
+    '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:var(--status-active);"></span>Верно</div>' +
+    '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:var(--status-blocked);"></span>Неверно</div>' +
+  '</div>';
+  stats.forEach(function(st){
+    var total = st.correct + st.incorrect;
+    var correctPct = total ? Math.round((st.correct/total)*100) : 0;
+    var caption = total ? (st.correct+' из '+total+' верно ('+correctPct+'%)'+(st.incorrect?' · '+st.incorrect+' ошиблись':'')) : 'Никто ещё не отвечал';
+    html += '<div class="chart-stack-row">' +
+      '<span class="chart-stack-q">'+(st.idx+1)+'. '+escapeHtml(st.question)+'</span>' +
+      '<div class="chart-stack">' +
+        (st.correct ? '<div class="chart-stack-seg correct" style="flex:'+st.correct+';" title="Верно: '+st.correct+'"></div>' : '') +
+        (st.incorrect ? '<div class="chart-stack-seg incorrect" style="flex:'+st.incorrect+';" title="Неверно: '+st.incorrect+'"></div>' : '') +
+      '</div>' +
+      '<span class="chart-stack-caption">'+caption+'</span>' +
+    '</div>';
+  });
+  return html;
+}
+
+function renderAnalyticsSection(filtered){
+  var reg = analyticsRegistrationsByDay(filtered);
+  var funnel = analyticsFunnel(filtered);
+  var dropoff = analyticsLessonDropoff(filtered);
+  var quizStats = (me.role==="admin"||me.role==="super_admin") ? analyticsQuizStats(filtered) : null;
+  var regTotal = reg.counts.reduce(function(a,b){ return a+b; }, 0);
+
+  var html = '<div class="chart-grid">';
+  html += '<div class="card chart-card">' +
+    '<b class="chart-card-title">Регистрации '+(reg.weekly?'по неделям':'по дням')+'</b>' +
+    '<p class="chart-card-sub">Всего за период: '+regTotal+'</p>' +
+    renderVBarChart(reg.labels, reg.counts, reg.weekly) +
+  '</div>';
+  html += '<div class="card chart-card">' +
+    '<b class="chart-card-title">Воронка</b>' +
+    '<p class="chart-card-sub">От регистрации до сертификата</p>' +
+    renderHBarChart(funnel) +
+  '</div>';
+  html += '</div>';
+
+  // Без вопросов теста (не admin/super_admin) второй график остаётся один —
+  // тогда сетку в 2 колонки не открываем вовсе, а не оставляем пустую половину.
+  html += quizStats ? '<div class="chart-grid">' : '<div style="margin-bottom:16px;">';
+  html += '<div class="card chart-card">' +
+    '<b class="chart-card-title">Отсев по урокам</b>' +
+    '<p class="chart-card-sub">Сколько врачей дошло хотя бы до этого урока</p>' +
+    (dropoff.length ? renderHBarChart(dropoff) : '<div class="empty-state" style="padding:24px 10px;">Уроков пока нет.</div>') +
+  '</div>';
+  if(quizStats){
+    html += '<div class="card chart-card">' +
+      '<b class="chart-card-title">Ответы на вопросы теста</b>' +
+      '<p class="chart-card-sub">Какие вопросы чаще всего отвечают неверно</p>' +
+      renderQuizStackChart(quizStats) +
+    '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
 function renderDashboardTab(){
   var specs = distinctSpecializations().map(function(s){ return {value:s,label:s}; });
   var streamOpts = calendarState.streams.map(function(s){ return {value:s.id,label:s.name}; });
@@ -1389,7 +1556,9 @@ function renderDashboardTab(){
   html += renderChipGroup("Оплата", [{value:"unpaid",label:"Не оплачено"},{value:"partial",label:"Частично"},{value:"paid",label:"Оплачено"}], dashboardState.paymentStatuses, "paymentStatuses");
   html += renderChipGroup("Статус доступа", [{value:"active",label:"Активен"},{value:"blocked",label:"Заблокирован"},{value:"expired",label:"Истёк"}], dashboardState.accessStatuses, "accessStatuses");
   html += renderChipGroup("Ответственный куратор", curatorOpts, dashboardState.curatorIds, "curatorIds");
-  html += '</div>';
+  html += '</div></div>';
+
+  html += renderAnalyticsSection(filtered);
 
   html += '<div class="card" style="padding:18px 20px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">' +

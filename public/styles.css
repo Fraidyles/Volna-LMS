@@ -290,6 +290,43 @@ label{font-size:13px;font-weight:500;color:var(--muted);display:block;margin-bot
 .dash-menu-item input{accent-color:var(--primary);flex-shrink:0;}
 .dash-menu-empty{font-size:12.5px;color:var(--muted-2);padding:6px 7px;}
 
+/* ---------------- Аналитика: мини-графики без внешних библиотек ---------------- */
+.chart-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:16px;margin-bottom:16px;}
+@media (max-width:900px){.chart-grid{grid-template-columns:1fr;}}
+.chart-card{padding:18px 20px;}
+.chart-card-title{font-size:14px;font-weight:600;margin-bottom:2px;display:block;}
+.chart-card-sub{font-size:12px;color:var(--muted);margin:0 0 16px;}
+.chart-legend{display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap;}
+.chart-legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);}
+.chart-legend-swatch{width:10px;height:10px;border-radius:2px;flex-shrink:0;}
+
+/* Вертикальные столбцы (регистрации по дням) — растут от общей базовой линии */
+.chart-vbars{display:flex;align-items:flex-end;gap:2px;height:130px;border-bottom:1px solid var(--line);padding:0 2px;}
+.chart-vbar-col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end;}
+.chart-vbar{width:100%;max-width:22px;background:var(--primary);border-radius:4px 4px 0 0;min-height:2px;transition:opacity .12s ease;cursor:default;}
+.chart-vbar:hover{opacity:.72;}
+.chart-vbar-labels{position:relative;height:15px;margin-top:6px;}
+.chart-vbar-label-abs{position:absolute;top:0;transform:translateX(-50%);font-size:10px;color:var(--muted-2);white-space:nowrap;}
+
+/* Горизонтальные бары (воронка, поурочный отсев) — один тон, убывающая длина */
+.chart-hbars{display:flex;flex-direction:column;gap:12px;}
+.chart-hbar-row{display:flex;align-items:center;gap:10px;}
+.chart-hbar-name{width:150px;flex-shrink:0;font-size:12.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.chart-hbar-track{flex:1;height:22px;background:var(--line-2);border-radius:4px;overflow:hidden;}
+.chart-hbar-fill{height:100%;background:var(--primary);border-radius:0 4px 4px 0;transition:opacity .12s ease;cursor:default;}
+.chart-hbar-fill:hover{opacity:.78;}
+.chart-hbar-value{width:96px;flex-shrink:0;font-size:12px;color:var(--muted);text-align:right;font-family:var(--mono);}
+
+/* Составные 2-сегментные бары (верно/неверно по вопросу теста) */
+.chart-stack-row{margin-bottom:16px;}
+.chart-stack-q{font-size:12.5px;color:var(--ink);margin-bottom:6px;display:block;}
+.chart-stack{display:flex;height:20px;gap:2px;border-radius:4px;overflow:hidden;}
+.chart-stack-seg{height:100%;transition:opacity .12s ease;cursor:default;}
+.chart-stack-seg:hover{opacity:.8;}
+.chart-stack-seg.correct{background:var(--status-active);}
+.chart-stack-seg.incorrect{background:var(--status-blocked);}
+.chart-stack-caption{font-size:11px;color:var(--muted-2);margin-top:5px;}
+
 /* ---------------- Реестр ---------------- */
 table.roster{width:100%;border-collapse:collapse;font-size:13.8px;}
 table.roster th{text-align:left;font-size:11px;color:var(--muted-2);font-weight:600;letter-spacing:.03em;text-transform:uppercase;padding:10px 14px;border-bottom:var(--border-hairline);}

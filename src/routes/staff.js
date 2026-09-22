@@ -17,12 +17,16 @@ function canAssignRole(actingRole, targetRole) {
   return false;
 }
 
+// p.quiz_answers добавлен ради пооурочной/повопросной аналитики на дашборде
+// (какие ответы дал врач на каждый вопрос) — сами по себе индексы ответов
+// без ключа правильных ответов (доступен только admin/super_admin) ничего
+// не раскрывают, так что отдаём их куратору наравне с остальным списком.
 const STUDENT_FIELDS = `
   u.id, u.name, u.email, u.phone, u.specialization, u.workplace, u.created_at, u.stream_id,
   u.product, u.payment_status, u.assigned_curator_id, u.referral_code,
   p.completed_lessons, p.quiz_score, p.completed, p.certificate_status,
   p.certificate_issued_at, p.certificate_issued_by, p.requested_full_access,
-  p.access_expires_at, p.access_blocked
+  p.access_expires_at, p.access_blocked, p.quiz_answers
 `;
 
 router.get("/team", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
