@@ -270,6 +270,13 @@ label{font-size:13px;font-weight:500;color:var(--muted);display:block;margin-bot
 .stat .num{font-weight:700;font-size:26px;line-height:1;letter-spacing:-.02em;color:var(--ink);}
 .stat .lbl{font-size:12.5px;color:var(--muted);margin-top:8px;}
 
+/* ---------------- Инбокс «требует внимания» (вкладка Ученики) ---------------- */
+.inbox-group{margin-bottom:18px;}
+.inbox-group:last-child{margin-bottom:0;}
+.inbox-group > .magnet{margin-bottom:8px;}
+.inbox-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line-2);}
+.inbox-row:last-child{border-bottom:none;}
+
 /* ---------------- Плотная сетка фильтров дашборда ---------------- */
 .dash-filters-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px 12px;align-items:start;}
 .dash-field-period{grid-column:span 2;min-width:260px;}

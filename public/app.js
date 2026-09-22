@@ -21,7 +21,7 @@ var me = null;                 // текущий пользователь {id,em
 var view = "loading";
 var course = null;             // {course, lessons, quiz, progress} — для врача
 var studentState = { tab:"course", lessonIndex:0, quizMode:false, quizSubmitted:false, messagesSubTab:"curator" };
-var staffState = { mainTab:"students", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"" };
+var staffState = { mainTab:"students", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],unanswered:[],pendingCertificates:[]} };
 var profileEditor = { open:false };
 var calendarState = { monthDate:new Date(), streams:[], events:[], showStreamForm:false, eventModalMode:null, eventModalDate:null, eventModalId:null, recurring:false };
 var materialsPicker = { open:false, targetId:null, targetTitle:"", search:"", selectedIds:[] };
@@ -229,6 +229,10 @@ async function loadStaffData(){
   try{
     var dir = await api("/staff/directory");
     directory = dir.staff;
+  }catch(e){}
+  try{
+    var ibx = await api("/staff/inbox");
+    staffState.inbox = ibx;
   }catch(e){}
   if(me.role==="admin" || me.role==="super_admin"){
     try{
@@ -955,6 +959,7 @@ function renderStaffShell(){
   } else if(staffState.mainTab === "audit" && (me.role==="admin"||me.role==="super_admin")){
     content.appendChild(renderAuditLogTab());
   } else {
+    content.appendChild(renderInboxCard());
     content.appendChild(renderStaffStats());
     content.appendChild(renderCertificateQueue());
     content.appendChild(renderRoster());
@@ -1597,6 +1602,56 @@ function renderDashboardTab(){
   return el(html);
 }
 
+function daysSince(iso){ if(!iso) return 0; return Math.floor((Date.now()-new Date(iso).getTime())/86400000); }
+
+// Три разных сигнала «пора обратить внимание», сведённые в одну карточку сверху
+// вкладки «Ученики» — раньше куратору приходилось заглядывать в чат каждого врача
+// по отдельности, чтобы понять, кто давно не отвечал или пропал с курса.
+function renderInboxCard(){
+  var inbox = staffState.inbox || {inactive:[],unanswered:[],pendingCertificates:[]};
+  var total = inbox.inactive.length + inbox.unanswered.length + inbox.pendingCertificates.length;
+  if(!total) return el('<div></div>');
+
+  var html = '<div class="card" style="padding:18px 20px;margin-bottom:20px;">' +
+    '<b style="font-size:14.5px;display:block;margin-bottom:14px;">Требует внимания ('+total+')</b>';
+
+  if(inbox.unanswered.length){
+    html += '<div class="inbox-group">'+magnet("blocked","Ждут ответа 24ч+");
+    inbox.unanswered.forEach(function(r){
+      html += '<div class="inbox-row">' +
+        '<div class="avatar">'+initials(r.name)+'</div>' +
+        '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(r.name)+'</b><span style="font-size:12px;color:var(--muted);">последнее сообщение '+daysSince(r.created_at)+' дн. назад</span></div>' +
+        '<button class="btn btn-sm btn-primary" data-action="open-student-chat" data-id="'+r.id+'">Ответить</button>' +
+      '</div>';
+    });
+    html += '</div>';
+  }
+  if(inbox.inactive.length){
+    html += '<div class="inbox-group">'+magnet("attention","Неактивны 7+ дней");
+    inbox.inactive.forEach(function(r){
+      html += '<div class="inbox-row">' +
+        '<div class="avatar">'+initials(r.name)+'</div>' +
+        '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(r.name)+'</b><span style="font-size:12px;color:var(--muted);">не заходил(а) '+daysSince(r.last_seen)+' дн.</span></div>' +
+        '<button class="btn btn-sm btn-ghost" data-action="open-student" data-id="'+r.id+'">Открыть</button>' +
+      '</div>';
+    });
+    html += '</div>';
+  }
+  if(inbox.pendingCertificates.length){
+    html += '<div class="inbox-group">'+magnet("done","Ждут сертификат");
+    inbox.pendingCertificates.forEach(function(r){
+      html += '<div class="inbox-row">' +
+        '<div class="avatar">'+initials(r.name)+'</div>' +
+        '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(r.name)+'</b><span style="font-size:12px;color:var(--muted);">тест: '+r.quiz_score+'%</span></div>' +
+        '<button class="btn btn-sm btn-primary" data-action="issue-certificate" data-id="'+r.id+'">Выдать</button>' +
+      '</div>';
+    });
+    html += '</div>';
+  }
+  html += '</div>';
+  return el(html);
+}
+
 function renderStaffStats(){
   var students = staffState.students;
   var total = students.length, completed=0, inProgress=0, scoreSum=0, scoreCount=0;
@@ -2108,6 +2163,12 @@ function wireEvents(root){
     if(action==="open-student"){
       staffState.selectedStudentId=t.getAttribute("data-id"); staffState.drawerTab="progress"; staffState.selectedStudent=null; staffState.notes=[]; render();
       try{ var d=await api("/staff/students/"+staffState.selectedStudentId); staffState.selectedStudent=d.student; render(); }catch(err){ showToast(err.message); }
+      return;
+    }
+    if(action==="open-student-chat"){
+      staffState.selectedStudentId=t.getAttribute("data-id"); staffState.drawerTab="chat"; staffState.selectedStudent=null; staffState.notes=[]; render();
+      startMessagePolling(staffState.selectedStudentId,"msgListCurator");
+      try{ var dc=await api("/staff/students/"+staffState.selectedStudentId); staffState.selectedStudent=dc.student; render(); }catch(err){ showToast(err.message); }
       return;
     }
     if(action==="close-drawer" || (action==="overlay-close" && !e.target.closest("[data-stop]"))){ staffState.selectedStudentId=null; stopMessagePolling(); render(); return; }
