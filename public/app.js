@@ -20,7 +20,7 @@ function assignableRoleOptions(actingRole){
 var me = null;                 // текущий пользователь {id,email,name,role,...}
 var view = "loading";
 var course = null;             // {course, lessons, quiz, progress} — для врача
-var studentState = { tab:"course", lessonIndex:0, quizMode:false, quizSubmitted:false, messagesSubTab:"curator" };
+var studentState = { tab:"course", lessonIndex:0, quizMode:false, quizSubmitted:false, messagesSubTab:"curator", materialsSearch:"", materialsFilter:"all" };
 var staffState = { mainTab:"students", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],unanswered:[],pendingCertificates:[]} };
 var profileEditor = { open:false };
 var calendarState = { monthDate:new Date(), streams:[], events:[], showStreamForm:false, eventModalMode:null, eventModalDate:null, eventModalId:null, recurring:false };
@@ -620,17 +620,18 @@ function renderStudentShell(){
   if(studentState.tab === "lesson"){
     content.appendChild(renderCoursePlayer());
   } else {
-    var tabs = previewMode ? ["course","schedule"] : ["course","schedule","messages"];
+    var tabs = previewMode ? ["course","schedule"] : ["course","materials","schedule","messages"];
     content.appendChild(renderTabsRow(tabs, studentState.tab, "student-tab", { messages: course.unreadMessages||0 }));
     if(studentState.tab === "messages" && !previewMode) content.appendChild(renderStudentMessages());
     else if(studentState.tab === "schedule") content.appendChild(renderStudentSchedule());
+    else if(studentState.tab === "materials" && !previewMode) content.appendChild(renderStudentMaterials());
     else content.appendChild(renderStudentHome());
   }
   return wrap;
 }
 
 function renderTabsRow(tabs, active, actionName, badges){
-  var labels = { course:"Курс", messages:"Сообщения", progress:"Прогресс", chat:"Чат", profile:"Профиль", schedule:"Эфиры" };
+  var labels = { course:"Курс", messages:"Сообщения", progress:"Прогресс", chat:"Чат", profile:"Профиль", schedule:"Эфиры", materials:"Материалы" };
   var html = '<div class="tabs" style="margin-top:24px;">';
   tabs.forEach(function(t){
     var count = badges && badges[t];
@@ -835,6 +836,66 @@ function renderStudentHome(){
   return el(html);
 }
 
+function stripHtml(html){
+  var div = document.createElement("div");
+  div.innerHTML = html || "";
+  return (div.textContent || div.innerText || "").replace(/\s+/g," ").trim();
+}
+
+function snippetAround(text, q){
+  if(!q) return text.slice(0,110)+(text.length>110?"…":"");
+  var idx = text.toLowerCase().indexOf(q.toLowerCase());
+  if(idx===-1) return text.slice(0,110)+(text.length>110?"…":"");
+  var start = Math.max(0, idx-40);
+  var end = Math.min(text.length, idx+q.length+70);
+  return (start>0?"…":"")+text.slice(start,end)+(end<text.length?"…":"");
+}
+
+// Поиск по материалам — целиком на клиенте: у врача уже загружен весь текст уроков
+// (course.lessons[].html) для плеера, гонять его туда-обратно через отдельный
+// поисковый эндпоинт не нужно — достаточно снять теги и сравнить подстроку.
+function renderStudentMaterials(){
+  var q = studentState.materialsSearch.trim();
+  var bookmarks = course.bookmarkedLessonIds || [];
+  var items = course.lessons.map(function(l,idx){
+    var text = stripHtml(l.html);
+    return { lesson:l, idx:idx, text:text, isBookmarked: bookmarks.indexOf(l.id)!==-1 };
+  });
+  if(studentState.materialsFilter==="bookmarked") items = items.filter(function(it){ return it.isBookmarked; });
+  if(q){
+    var qLower = q.toLowerCase();
+    items = items.filter(function(it){ return it.lesson.title.toLowerCase().indexOf(qLower)!==-1 || it.text.toLowerCase().indexOf(qLower)!==-1; });
+  }
+
+  var html = '<div style="margin-top:6px;max-width:720px;">' +
+    '<div class="card" style="padding:18px 20px;">' +
+      '<b style="font-size:14.5px;display:block;margin-bottom:12px;">Материалы обучения</b>' +
+      '<input class="input" id="materialsSearchInput" placeholder="Искать по названию или тексту урока…" value="'+escapeHtml(studentState.materialsSearch)+'" style="margin-bottom:12px;">' +
+      '<div class="tabs" style="margin-top:0;margin-bottom:14px;">' +
+        '<button class="tab'+(studentState.materialsFilter==="all"?' active':'')+'" data-action="materials-filter" data-filter="all">Все материалы</button>' +
+        '<button class="tab'+(studentState.materialsFilter==="bookmarked"?' active':'')+'" data-action="materials-filter" data-filter="bookmarked">Мои материалы'+(bookmarks.length?' ('+bookmarks.length+')':'')+'</button>' +
+      '</div>';
+
+  if(!items.length){
+    html += '<div class="empty-state" style="padding:30px 10px;">'+(q?'Ничего не нашлось по запросу «'+escapeHtml(q)+'».':(studentState.materialsFilter==="bookmarked"?'Вы ещё ничего не сохранили. Откройте урок и нажмите на закладку.':'Материалов пока нет.'))+'</div>';
+  } else {
+    items.forEach(function(it){
+      var l = it.lesson;
+      var isLocked = l.hiddenForMe || l.dripLockedForMe;
+      html += '<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--line-2);">' +
+        '<button class="btn btn-sm btn-ghost" style="padding:6px 9px;flex-shrink:0;" data-action="toggle-bookmark" data-id="'+l.id+'" data-bookmarked="'+(it.isBookmarked?"1":"0")+'" title="'+(it.isBookmarked?"Убрать из моих материалов":"Сохранить в мои материалы")+'">'+(it.isBookmarked?"★":"☆")+'</button>' +
+        '<div style="flex:1;min-width:0;">' +
+          '<b style="font-size:13.5px;display:block;">'+(it.idx+1)+'. '+escapeHtml(l.title)+(isLocked?' '+magnet("neutral","недоступен"):'')+'</b>' +
+          '<span style="font-size:12.5px;color:var(--muted);line-height:1.5;">'+escapeHtml(snippetAround(it.text,q))+'</span>' +
+        '</div>' +
+        (isLocked ? '' : '<button class="btn btn-sm btn-ghost" style="flex-shrink:0;" data-action="goto-lesson-from-materials" data-idx="'+it.idx+'">Открыть →</button>') +
+      '</div>';
+    });
+  }
+  html += '</div></div>';
+  return el(html);
+}
+
 function renderCoursePlayer(){
   if(studentState.quizMode) return renderQuizOrCert();
   var idx = studentState.lessonIndex;
@@ -862,9 +923,13 @@ function renderCoursePlayer(){
 
   var isLast = idx === course.lessons.length-1;
   var noteVal = (course.progress && course.progress.lesson_notes && course.progress.lesson_notes[lesson.id]) || "";
+  var isBookmarked = (course.bookmarkedLessonIds||[]).indexOf(lesson.id)!==-1;
   var body = '<div class="lesson-body">' +
     '<button class="back-link" data-action="close-course">← К курсу</button>' +
-    '<h3>'+escapeHtml(lesson.title)+'</h3>' +
+    '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">' +
+      '<h3 style="margin:0;">'+escapeHtml(lesson.title)+'</h3>' +
+      '<button class="btn btn-sm btn-ghost" style="flex-shrink:0;" data-action="toggle-bookmark" data-id="'+lesson.id+'" data-bookmarked="'+(isBookmarked?"1":"0")+'" title="'+(isBookmarked?"Убрать из моих материалов":"Сохранить в мои материалы")+'">'+(isBookmarked?"★ В моих материалах":"☆ Сохранить")+'</button>' +
+    '</div>' +
     '<div class="meta">Урок '+(idx+1)+' из '+course.lessons.length+' · '+escapeHtml(lesson.duration||"")+'</div>' +
     '<div class="prose">'+lesson.html+'</div>' +
     '<div class="lesson-note">' +
@@ -2187,6 +2252,19 @@ function wireEvents(root){
       }catch(err){ showToast(err.message); }
       return;
     }
+    if(action==="materials-filter"){ studentState.materialsFilter=t.getAttribute("data-filter"); render(); return; }
+    if(action==="toggle-bookmark"){
+      var bkId=t.getAttribute("data-id"); var wasBookmarked=t.getAttribute("data-bookmarked")==="1";
+      if(!course.bookmarkedLessonIds) course.bookmarkedLessonIds=[];
+      if(wasBookmarked) course.bookmarkedLessonIds=course.bookmarkedLessonIds.filter(function(id){ return id!==bkId; });
+      else course.bookmarkedLessonIds.push(bkId);
+      render();
+      api("/course/lessons/"+bkId+"/bookmark", { method:"PUT", body: JSON.stringify({ bookmarked: !wasBookmarked }) }).catch(function(){});
+      return;
+    }
+    if(action==="goto-lesson-from-materials"){
+      studentState.tab="lesson"; studentState.lessonIndex=parseInt(t.getAttribute("data-idx"),10); studentState.quizMode=false; render(); return;
+    }
     if(action==="goto-quiz"){
       if(course.quizHiddenForMe){ showToast("Тест временно недоступен"); return; }
       studentState.quizMode=true; studentState.quizSubmitted=false; render(); return;
@@ -2923,6 +3001,10 @@ function wireEvents(root){
       setTimeout(function(){ var s=document.getElementById("scheduleSearch"); if(s){ s.focus(); s.selectionStart=s.selectionEnd=s.value.length; } },0);
     }
     if(e.target.id==="scheduleUnlockDate"){ scheduleModal.unlockDate=e.target.value; }
+    if(e.target.id==="materialsSearchInput"){
+      studentState.materialsSearch=e.target.value; render();
+      setTimeout(function(){ var s=document.getElementById("materialsSearchInput"); if(s){ s.focus(); s.selectionStart=s.selectionEnd=s.value.length; } },0);
+    }
     if(e.target.id==="dashPeriodFrom"){ dashboardState.periodFrom=e.target.value; render(); }
     if(e.target.id==="dashPeriodTo"){ dashboardState.periodTo=e.target.value; render(); }
     if(e.target.id==="auditSearchInput"){

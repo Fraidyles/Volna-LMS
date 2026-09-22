@@ -116,10 +116,12 @@ router.get("/", authRequired, requireRole("student"), async (req, res) => {
     "SELECT COUNT(*)::int AS cnt FROM messages WHERE student_id=$1 AND from_role='curator' AND created_at > COALESCE($2::timestamptz, '-infinity')",
     [req.user.id, pr.messages_read_at]
   );
+  const bookmarks = await pool.query("SELECT lesson_id FROM student_bookmarks WHERE user_id=$1", [req.user.id]);
 
   res.json({
     course: course.rows[0],
     lessons: lessonsOut,
+    bookmarkedLessonIds: bookmarks.rows.map((r) => r.lesson_id),
     quiz: quiz.rows.map((q) => ({ id: q.id, question: q.question, options: q.options })),
     quizHiddenForMe: (hiddenFor.quiz || []).indexOf(req.user.id) !== -1,
     progress: pr,
@@ -214,6 +216,24 @@ router.post("/quiz-submit", authRequired, requireRole("student"), async (req, re
 router.put("/onboarding-dismiss", authRequired, requireRole("student"), async (req, res) => {
   await pool.query("UPDATE progress SET onboarding_dismissed=true WHERE user_id=$1", [req.user.id]);
   res.json({ ok: true });
+});
+
+// «Мои материалы»: врач сохраняет урок к себе для быстрого доступа отдельно от
+// последовательного прохождения курса — например, шпаргалку, к которой хочет
+// вернуться позже, не пролистывая весь список уроков заново.
+router.put("/lessons/:id/bookmark", authRequired, requireRole("student"), async (req, res) => {
+  const bookmarked = !!(req.body && req.body.bookmarked);
+  const lesson = await pool.query("SELECT id FROM lessons WHERE id=$1", [req.params.id]);
+  if (!lesson.rowCount) return res.status(404).json({ error: "not_found" });
+  if (bookmarked) {
+    await pool.query(
+      "INSERT INTO student_bookmarks (user_id, lesson_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+      [req.user.id, req.params.id]
+    );
+  } else {
+    await pool.query("DELETE FROM student_bookmarks WHERE user_id=$1 AND lesson_id=$2", [req.user.id, req.params.id]);
+  }
+  res.json({ ok: true, bookmarked });
 });
 
 // Личная заметка врача к уроку — видна только ему самому, хранится в progress.lesson_notes.

@@ -265,6 +265,26 @@ describe("Курс врача", () => {
     expect(after.body.progress.onboarding_dismissed).toBe(true);
   });
 
+  test("«Мои материалы»: врач может сохранить и убрать урок из закладок", async () => {
+    const user = await createUser({ role: "student", courseId: course.courseId });
+    const cookie = await loginAs(user);
+
+    const before = await request(app).get("/api/course").set("Cookie", cookie);
+    expect(before.body.bookmarkedLessonIds).toEqual([]);
+
+    const addRes = await request(app).put(`/api/course/lessons/${course.lessonIds[0]}/bookmark`).set("Cookie", cookie)
+      .send({ bookmarked: true });
+    expect(addRes.status).toBe(200);
+
+    const after = await request(app).get("/api/course").set("Cookie", cookie);
+    expect(after.body.bookmarkedLessonIds).toEqual([course.lessonIds[0]]);
+
+    await request(app).put(`/api/course/lessons/${course.lessonIds[0]}/bookmark`).set("Cookie", cookie)
+      .send({ bookmarked: false });
+    const afterRemove = await request(app).get("/api/course").set("Cookie", cookie);
+    expect(afterRemove.body.bookmarkedLessonIds).toEqual([]);
+  });
+
   test("HTML урока при сохранении черновика очищается от <script> (XSS)", async () => {
     const admin = await createUser({ role: "super_admin" });
     const cookie = await loginAs(admin);
