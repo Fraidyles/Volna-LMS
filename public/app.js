@@ -38,6 +38,9 @@ var auditActionsList = [];
 var auditSearchDebounceTimer = null;
 var dashboardState = { periodFrom:"", periodTo:"", specializations:[], streams:[], stages:[], products:[], certStatuses:[], paymentStatuses:[], demoStatuses:[], accessStatuses:[], curatorIds:[], openFilterMenu:null };
 
+// Ступени обмена очков на скидку — бизнес-правило, не техническое ограничение
+// (см. также MAX_POINTS в src/routes/course.js, где сумма очков реально считается).
+var POINT_TIERS = [ { points:500, discount:10 }, { points:750, discount:20 }, { points:1000, discount:25 } ];
 var PRODUCTS = { longevity:"Медицина Долголетия", peptide:"Пептидная терапия", personal_brand:"Личный бренд" };
 var PAYMENT_LABELS = { unpaid:"Не оплачено", partial:"Частично оплачено", paid:"Оплачено" };
 var STAGE_LABELS = { new:"Новый", in_progress:"В процессе", demo_done:"Демо завершено", certified:"Сертифицирован" };
@@ -1168,6 +1171,38 @@ function renderStudentMessages(){
   return el(html);
 }
 
+// Три ступени вместо одной планки "всё или ничего" — врач видит скидку,
+// которую уже заслужил, и сколько очков осталось до следующей ступени.
+function renderPointTiers(points){
+  var html = '<div style="display:flex;flex-direction:column;gap:2px;margin-bottom:4px;">';
+  POINT_TIERS.forEach(function(t,idx){
+    var unlocked = points >= t.points;
+    html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;'+(idx<POINT_TIERS.length-1?'border-bottom:1px solid var(--line-2);':'')+'">' +
+      '<span style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;background:'+(unlocked?'var(--status-done)':'var(--line-2)')+';">'+(unlocked?icon("check","ic-sm"):'')+'</span>' +
+      '<span style="font-size:13.5px;flex:1;'+(unlocked?'':'color:var(--muted);')+'">'+t.points+' очков</span>' +
+      '<b style="font-size:13.5px;'+(unlocked?'color:var(--ink);':'color:var(--muted);')+'">скидка '+t.discount+'%</b>' +
+    '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+function renderPointTiersCta(points){
+  var current = null;
+  POINT_TIERS.forEach(function(t){ if(points>=t.points) current=t; });
+  var next = POINT_TIERS.filter(function(t){ return points<t.points; })[0];
+  var html = '';
+  if(current){
+    html += '<div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
+      magnet("done","Доступна скидка "+current.discount+"%") +
+      '<button class="btn btn-sm btn-primary" data-action="student-tab" data-tab="messages">Написать куратору, чтобы оформить скидку '+current.discount+'%</button>' +
+    '</div>';
+    if(next) html += '<p style="font-size:12.5px;color:var(--muted-2);margin:10px 0 0;">Ещё '+(next.points-points)+' очков — и скидка вырастет до '+next.discount+'%.</p>';
+  } else {
+    html += '<p style="font-size:12.5px;color:var(--muted-2);margin:0;">Наберите '+POINT_TIERS[0].points+' очков, чтобы открыть первую скидку — '+POINT_TIERS[0].discount+'%. Осталось '+(POINT_TIERS[0].points-points)+'.</p>';
+  }
+  return html;
+}
+
 function renderMyProgressPage(){
   var pr = course.progress || {};
   var total = course.lessons.length;
@@ -1180,6 +1215,7 @@ function renderMyProgressPage(){
   var points = Math.min(POINTS_MAX, gam.points||0);
   var pointsPct = Math.round((points/POINTS_MAX)*100);
   var maxedOut = points >= POINTS_MAX;
+  var anyDiscountUnlocked = points >= POINT_TIERS[0].points;
 
   var html = '<div style="margin-top:6px;max-width:640px;">' +
     '<div class="card" style="padding:22px 24px;margin-bottom:14px;">' +
@@ -1195,9 +1231,12 @@ function renderMyProgressPage(){
         '<span style="font-family:var(--display);font-weight:800;font-size:22px;letter-spacing:-.02em;">'+(gam.currentStreak||0)+'</span>' +
         '<span style="font-size:12px;color:var(--muted);">'+(gam.currentStreak===1?"день подряд":"дней подряд")+'</span></div>' +
         '<span style="font-size:12px;color:var(--muted);display:block;margin-top:2px;">рекорд: '+(gam.longestStreak||0)+'</span></div>' +
-      '<div class="card" style="padding:18px;">'+magnet(maxedOut?"done":"neutral","Очки") +
+      '<div class="card" style="padding:18px;">'+magnet(anyDiscountUnlocked?"done":"neutral","Очки") +
         '<div style="font-family:var(--display);font-weight:800;font-size:22px;margin-top:10px;letter-spacing:-.02em;">'+points+' <span style="font-size:13px;font-weight:500;color:var(--muted);">/ '+POINTS_MAX+'</span></div>' +
-        '<div style="height:5px;border-radius:100px;background:var(--line-2);margin-top:10px;overflow:hidden;"><div style="height:100%;width:'+pointsPct+'%;background:var(--primary);border-radius:100px;"></div></div>' +
+        '<div style="position:relative;height:5px;border-radius:100px;background:var(--line-2);margin-top:12px;overflow:visible;">' +
+          '<div style="height:100%;width:'+pointsPct+'%;background:var(--primary);border-radius:100px;"></div>' +
+          POINT_TIERS.map(function(t){ return '<span style="position:absolute;top:-3px;left:'+(t.points/POINTS_MAX*100)+'%;width:11px;height:11px;margin-left:-5.5px;border-radius:50%;background:'+(points>=t.points?'var(--primary)':'var(--surface)')+';border:2px solid '+(points>=t.points?'var(--primary)':'var(--line)')+';"></span>'; }).join("") +
+        '</div>' +
       '</div>' +
       '<div class="card" style="padding:18px;">' +
         magnet(quizDone?(pr.certificate_status==="issued"?"done":"attention"):"neutral", quizDone?(pr.certificate_status==="issued"?"Сертификат выдан":"На проверке"):"Сертификат") +
@@ -1208,11 +1247,9 @@ function renderMyProgressPage(){
     '</div>' +
     '<div class="card" style="padding:20px 22px;margin-top:14px;'+(maxedOut?'background:var(--primary-tint);border-color:transparent;':'')+'">' +
       '<b style="font-size:14.5px;display:block;margin-bottom:10px;">Что такое очки и зачем они нужны</b>' +
-      '<p style="font-size:13px;color:var(--muted);line-height:1.6;margin:0 0 10px;">Очки начисляются за вашу активность в курсе: <b style="color:var(--ink);">+20</b> за каждый пройденный урок, столько же процентов, сколько результат теста — за итоговый тест, <b style="color:var(--ink);">+100</b> — за полученный сертификат, и <b style="color:var(--ink);">+5</b> за каждый день серии подряд. Максимум — <b style="color:var(--ink);">'+POINTS_MAX+' очков</b>.</p>' +
-      '<p style="font-size:13px;color:var(--muted);line-height:1.6;margin:0;">Набрав '+POINTS_MAX+' очков, вы получаете <b style="color:var(--ink);">скидку 25% на любое другое обучение в нашей компании</b> — можно использовать её для себя или подарить знакомому.</p>' +
-      (maxedOut
-        ? '<div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'+magnet("done","Максимум набран")+'<button class="btn btn-sm btn-primary" data-action="student-tab" data-tab="messages">Написать куратору, чтобы оформить скидку</button></div>'
-        : '<p style="font-size:12.5px;color:var(--muted-2);margin:10px 0 0;">Осталось '+(POINTS_MAX-points)+' очков до максимума.</p>') +
+      '<p style="font-size:13px;color:var(--muted);line-height:1.6;margin:0 0 14px;">Очки начисляются за вашу активность в курсе: <b style="color:var(--ink);">+20</b> за каждый пройденный урок, столько же процентов, сколько результат теста — за итоговый тест, <b style="color:var(--ink);">+100</b> — за полученный сертификат, и <b style="color:var(--ink);">+5</b> за каждый день серии подряд.</p>' +
+      renderPointTiers(points) +
+      renderPointTiersCta(points) +
     '</div>' +
     '<div class="card" style="padding:18px 20px;margin-top:14px;">' +
       '<b style="font-size:14px;display:block;margin-bottom:12px;">Уроки</b>';
