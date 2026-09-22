@@ -612,6 +612,7 @@ function renderSidebar(){
     var isAdmin = me.role==="admin" || me.role==="super_admin";
     var unanswered = (staffState.inbox && staffState.inbox.unanswered) || [];
     var chatsBadge = unanswered.filter(function(r){ return !isChatMutedLocal("curator", r.id); }).length;
+    var staffNotifBadge = upcomingEventReminders().length;
     items += sidebarItem("profile","user","Мой профиль", snavKey==="profile");
     items += sidebarItem("home","home","Главная", snavKey==="home");
     items += sidebarItem("students","users","Ученики", snavKey==="students");
@@ -623,7 +624,7 @@ function renderSidebar(){
       items += sidebarItem("audit","list","Журнал", snavKey==="audit");
     }
     items += sidebarItem("chats","message","Чаты", snavKey==="chats", chatsBadge);
-    items += sidebarItem("notifications","bell","Уведомления", snavKey==="notifications");
+    items += sidebarItem("notifications","bell","Уведомления", snavKey==="notifications", staffNotifBadge);
     items += sidebarItem("settings","gear","Настройки", snavKey==="settings");
   }
 
