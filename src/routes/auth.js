@@ -6,7 +6,7 @@ const rateLimit = require("express-rate-limit");
 const pool = require("../db");
 const { authRequired } = require("../middleware/auth");
 const { logAction } = require("../audit");
-const { generateReferralCode } = require("../util");
+const { generateReferralCode, describeUserAgent } = require("../util");
 
 const router = express.Router();
 
@@ -122,6 +122,11 @@ router.post("/login", authLimiter, async (req, res) => {
 
   const user = { id: row.id, email: row.email, name: row.name, role: row.role, tokenVersion: row.token_version };
   res.cookie("token", signToken(user), COOKIE_OPTS);
+  // Для «Мой профиль» → «Текущие сеансы» — не блокирует сам вход, если запись не удалась.
+  pool.query(
+    "INSERT INTO login_sessions (id, user_id, user_agent, ip) VALUES ($1,$2,$3,$4)",
+    [crypto.randomUUID(), row.id, req.headers["user-agent"] || null, req.ip || null]
+  ).catch(() => {});
   // Профиль целиком, а не только поля из JWT — иначе специализация/место работы/телефон
   // выглядели бы пустыми в модалке профиля сразу после входа, до первого GET /auth/me.
   res.json({
@@ -154,6 +159,19 @@ router.get("/me", authRequired, async (req, res) => {
   );
   if (!result.rowCount) return res.status(404).json({ error: "not_found" });
   res.json({ user: result.rows[0] });
+});
+
+// «Мой профиль» → «Текущие сеансы»: с какого устройства, откуда (IP) и когда входили.
+router.get("/sessions", authRequired, async (req, res) => {
+  const result = await pool.query(
+    "SELECT id, user_agent, ip, created_at FROM login_sessions WHERE user_id=$1 ORDER BY created_at DESC LIMIT 20",
+    [req.user.id]
+  );
+  res.json({
+    sessions: result.rows.map((r) => ({
+      id: r.id, ip: r.ip, createdAt: r.created_at, device: describeUserAgent(r.user_agent)
+    }))
+  });
 });
 
 // Самостоятельное редактирование своих же контактных данных — имя, телефон, место

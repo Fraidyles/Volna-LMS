@@ -53,8 +53,10 @@ async function createUser({ role = "student", name = "Тест Тестов", sp
 }
 
 // Возвращает cookie-строку для использования в supertest: .set("Cookie", cookie)
-async function loginAs(user) {
-  const res = await request(app).post("/api/auth/login").send({ email: user.email, password: user.password });
+async function loginAs(user, userAgent) {
+  const req = request(app).post("/api/auth/login");
+  if (userAgent) req.set("User-Agent", userAgent);
+  const res = await req.send({ email: user.email, password: user.password });
   const cookie = res.headers["set-cookie"];
   return cookie;
 }

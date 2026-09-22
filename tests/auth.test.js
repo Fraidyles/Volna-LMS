@@ -69,6 +69,27 @@ describe("Аутентификация", () => {
     expect(meRes.body.user.payment_status).toBe("paid");
   });
 
+  test("вход записывает сеанс — виден через GET /auth/sessions с распознанным устройством", async () => {
+    const user = await createUser({ role: "student" });
+    const cookie = await loginAs(user, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36");
+
+    const res = await request(app).get("/api/auth/sessions").set("Cookie", cookie);
+    expect(res.status).toBe(200);
+    expect(res.body.sessions.length).toBeGreaterThan(0);
+    expect(res.body.sessions[0].device).toBe("Windows · Chrome");
+    expect(res.body.sessions[0].createdAt).toBeTruthy();
+  });
+
+  test("сеансы разных пользователей не пересекаются", async () => {
+    const userA = await createUser({ role: "student" });
+    const userB = await createUser({ role: "student" });
+    const cookieA = await loginAs(userA);
+    await loginAs(userB);
+
+    const res = await request(app).get("/api/auth/sessions").set("Cookie", cookieA);
+    expect(res.body.sessions.length).toBe(1);
+  });
+
   test("PATCH /auth/me — врач может поправить телефон, место работы, специализацию", async () => {
     const user = await createUser({ role: "student" });
     const cookie = await loginAs(user);
