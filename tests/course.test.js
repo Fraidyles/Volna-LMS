@@ -26,6 +26,33 @@ describe("Курс врача", () => {
     expect(res.body.completedLessons).toContain(course.lessonIds[0]);
   });
 
+  test("GET /course и PUT /heartbeat отмечают врача «онлайн» для куратора", async () => {
+    const curator = await createUser({ role: "curator" });
+    const curatorCookie = await loginAs(curator);
+    const user = await createUser({ role: "student", courseId: course.courseId });
+    await pool.query("UPDATE users SET assigned_curator_id=$1 WHERE id=$2", [curator.id, user.id]);
+    const cookie = await loginAs(user);
+
+    // Пока врач ни разу не заходил в курс — last_seen_at пуст, online=false.
+    const before = await request(app).get(`/api/staff/students/${user.id}`).set("Cookie", curatorCookie);
+    expect(before.body.student.online).toBe(false);
+
+    await request(app).get("/api/course").set("Cookie", cookie);
+    const afterLoad = await request(app).get(`/api/staff/students/${user.id}`).set("Cookie", curatorCookie);
+    expect(afterLoad.body.student.online).toBe(true);
+
+    // Хартбит без реального прохождения курса — тоже продлевает "онлайн",
+    // но НЕ трогает last_active_at (тот завязан на стрик и дайджест).
+    await pool.query("UPDATE progress SET last_seen_at = now() - interval '10 minutes' WHERE user_id=$1", [user.id]);
+    const stale = await request(app).get(`/api/staff/students/${user.id}`).set("Cookie", curatorCookie);
+    expect(stale.body.student.online).toBe(false);
+
+    const hb = await request(app).put("/api/course/heartbeat").set("Cookie", cookie);
+    expect(hb.status).toBe(200);
+    const afterHeartbeat = await request(app).get(`/api/staff/students/${user.id}`).set("Cookie", curatorCookie);
+    expect(afterHeartbeat.body.student.online).toBe(true);
+  });
+
   test("lesson-done с несуществующим id урока — 404, а не молчаливое зачисление очков", async () => {
     const user = await createUser({ role: "student", courseId: course.courseId });
     const cookie = await loginAs(user);

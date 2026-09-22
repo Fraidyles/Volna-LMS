@@ -27,8 +27,17 @@ const STUDENT_FIELDS = `
   u.product, u.payment_status, u.assigned_curator_id, u.referral_code,
   p.completed_lessons, p.quiz_score, p.completed, p.certificate_status,
   p.certificate_issued_at, p.certificate_issued_by, p.requested_full_access,
-  p.access_expires_at, p.access_blocked, p.quiz_answers
+  p.access_expires_at, p.access_blocked, p.quiz_answers, p.last_seen_at
 `;
+
+// "Онлайн" — эвристика, а не гарантия: фронтенд шлёт heartbeat раз в 45с, пока
+// открыта вкладка, поэтому 3 минуты — запас на пропущенный тик/фон вкладки,
+// а не строгий предел активности (для этого есть last_active_at/"неактивны 7+ дней").
+const ONLINE_THRESHOLD_MS = 3 * 60 * 1000;
+function withOnlineStatus(row) {
+  const online = !!row.last_seen_at && Date.now() - new Date(row.last_seen_at).getTime() < ONLINE_THRESHOLD_MS;
+  return Object.assign({}, row, { online });
+}
 
 router.get("/team", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
   const result = await pool.query(
@@ -86,7 +95,7 @@ router.get("/students", authRequired, requireRole("curator", "admin", "super_adm
      WHERE u.role = 'student' ${scopeClause} ORDER BY u.created_at DESC`,
     params
   );
-  res.json({ students: result.rows });
+  res.json({ students: result.rows.map(withOnlineStatus) });
 });
 
 router.get("/students/:id", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
@@ -96,7 +105,7 @@ router.get("/students/:id", authRequired, requireRole("curator", "admin", "super
     [req.params.id]
   );
   if (!result.rowCount) return res.status(404).json({ error: "not_found" });
-  res.json({ student: result.rows[0] });
+  res.json({ student: withOnlineStatus(result.rows[0]) });
 });
 
 router.patch("/students/:id/access", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {

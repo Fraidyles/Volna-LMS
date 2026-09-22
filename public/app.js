@@ -140,6 +140,27 @@ function magnet(kind, label){
 }
 function fmtDate(iso){ if(!iso) return "—"; try{ return new Date(iso).toLocaleDateString("ru-RU",{day:"numeric",month:"short",year:"numeric"}); }catch(e){ return "—"; } }
 function fmtTime(iso){ if(!iso) return ""; try{ return new Date(iso).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}); }catch(e){ return ""; } }
+function ruPluralClient(n, one, few, many){
+  var mod100 = n % 100, mod10 = n % 10;
+  if(mod100>=11 && mod100<=14) return many;
+  if(mod10===1) return one;
+  if(mod10>=2 && mod10<=4) return few;
+  return many;
+}
+// «Был(а) в сети N назад» для куратора — за пределами последнего месяца просто
+// показываем дату (а не "35 дней назад"), дальше относительное время не помогает.
+function timeSince(iso){
+  if(!iso) return "никогда";
+  var diffMs = Math.max(0, Date.now() - new Date(iso).getTime());
+  var mins = Math.floor(diffMs/60000);
+  if(mins < 1) return "только что";
+  if(mins < 60) return mins+" "+ruPluralClient(mins,"минуту","минуты","минут")+" назад";
+  var hours = Math.floor(mins/60);
+  if(hours < 24) return hours+" "+ruPluralClient(hours,"час","часа","часов")+" назад";
+  var days = Math.floor(hours/24);
+  if(days < 30) return days+" "+ruPluralClient(days,"день","дня","дней")+" назад";
+  return fmtDate(iso);
+}
 function showToast(text){
   var old = document.getElementById("toast"); if(old) old.remove();
   var node = el('<div class="toast" id="toast">'+escapeHtml(text)+'</div>');
@@ -186,6 +207,7 @@ async function routeAfterLogin(){
     await loadCalendarData();
     await loadNotifications();
     startNotificationPolling();
+    startHeartbeat();
   } else {
     view = "staff";
     await loadStaffData();
@@ -226,6 +248,16 @@ function startNotificationPolling(){
   stopNotificationPolling();
   notifPollTimer = setInterval(async function(){ await loadNotifications(); render(); }, 30000);
 }
+
+// «Онлайн сейчас» у куратора держится на этом пинге — раз в 45с, пока у врача
+// открыта вкладка. GET /course при заходе уже само отмечает last_seen_at,
+// это только продлевает статус, пока сессия остаётся открытой.
+var heartbeatTimer = null;
+function startHeartbeat(){
+  stopHeartbeat();
+  heartbeatTimer = setInterval(function(){ api("/course/heartbeat", { method:"PUT" }).catch(function(){}); }, 45000);
+}
+function stopHeartbeat(){ if(heartbeatTimer){ clearInterval(heartbeatTimer); heartbeatTimer=null; } }
 function stopNotificationPolling(){ if(notifPollTimer){ clearInterval(notifPollTimer); notifPollTimer=null; } }
 
 async function loadCourse(){
@@ -2374,18 +2406,19 @@ function renderRoster(){
   if(!students.length){
     html += '<div class="empty-state"><div class="big">'+icon("doctor","ic-lg")+'</div>Пока никто не зарегистрировался.</div>';
   } else {
-    html += '<div style="overflow-x:auto;"><table class="roster"><thead><tr><th style="width:32px;"><input type="checkbox" data-action="select-all-students"'+(allSelected?' checked':'')+'></th><th>Врач</th><th>Прогресс</th><th>Тест</th><th>Статус</th><th>Поток</th><th>Регистрация</th><th></th></tr></thead><tbody>';
+    html += '<div style="overflow-x:auto;"><table class="roster"><thead><tr><th style="width:32px;"><input type="checkbox" data-action="select-all-students"'+(allSelected?' checked':'')+'></th><th>Врач</th><th>Прогресс</th><th>Тест</th><th>Статус</th><th>Поток</th><th>Была в сети</th><th>Регистрация</th><th></th></tr></thead><tbody>';
     students.forEach(function(s){
       var done = (s.completed_lessons||[]).length;
       var isChecked = staffState.selectedIds.indexOf(s.id)!==-1;
       var status = s.completed ? magnet("done","Завершил") : (done>0 ? magnet("active","В процессе") : magnet("neutral","Новый"));
       html += '<tr>' +
         '<td><input type="checkbox" data-action="select-student" data-id="'+s.id+'"'+(isChecked?' checked':'')+'></td>' +
-        '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;"><div class="who-cell"><div class="avatar">'+initials(s.name)+'</div><div><b>'+escapeHtml(s.name)+'</b><span>'+escapeHtml(s.specialization||"—")+'</span></div></div></td>' +
+        '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;"><div class="who-cell"><div class="avatar-wrap"><div class="avatar">'+initials(s.name)+'</div>'+(s.online?'<span class="presence-dot" title="Онлайн"></span>':'')+'</div><div><b>'+escapeHtml(s.name)+'</b><span>'+escapeHtml(s.specialization||"—")+'</span></div></div></td>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+done+'/5</td>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+(typeof s.quiz_score==="number"?s.quiz_score+'%':'—')+'</td>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+status+'</td>' +
         '<td><select class="input" style="font-size:12.5px;padding:5px 8px;" data-stream-select data-id="'+s.id+'">'+buildStreamOptions(s.stream_id||"", "Без потока")+'</select></td>' +
+        '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+(s.online?magnet("active","В сети"):'<span style="color:var(--muted);font-size:12.5px;">'+escapeHtml(timeSince(s.last_seen_at))+'</span>')+'</td>' +
         '<td style="color:var(--muted);">'+fmtDate(s.created_at)+'</td>' +
         '<td style="text-align:right;"><button class="btn btn-sm btn-ghost" data-action="open-student" data-id="'+s.id+'">Открыть →</button></td>' +
       '</tr>';
@@ -2447,8 +2480,9 @@ function renderStudentDrawer(){
   var done = (s.completed_lessons||[]).length;
 
   var head = '<div class="drawer-head">' +
-    '<div style="display:flex;gap:12px;align-items:center;"><div class="avatar" style="width:42px;height:42px;font-size:15px;">'+initials(s.name)+'</div>' +
-    '<div><b style="font-size:16px;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:13px;color:var(--muted);">'+escapeHtml(s.specialization||"—")+'</span></div></div>' +
+    '<div style="display:flex;gap:12px;align-items:center;"><div class="avatar-wrap"><div class="avatar" style="width:42px;height:42px;font-size:15px;">'+initials(s.name)+'</div>'+(s.online?'<span class="presence-dot" title="Онлайн"></span>':'')+'</div>' +
+    '<div><b style="font-size:16px;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:13px;color:var(--muted);">'+escapeHtml(s.specialization||"—")+'</span>' +
+    '<span style="font-size:12px;color:var(--muted-2);display:block;margin-top:2px;">'+(s.online?'<span style="color:var(--status-active);font-weight:600;">● В сети сейчас</span>':'Была в сети: '+escapeHtml(timeSince(s.last_seen_at)))+'</span></div></div>' +
     '<button class="btn btn-ghost btn-sm" data-action="close-drawer">Закрыть ✕</button></div>';
 
   var body = '<div class="drawer-body">' +
@@ -2641,7 +2675,7 @@ function wireEvents(root){
 
     if(action==="go-register"){ view="register"; render(); return; }
     if(action==="go-login"){ view="login"; render(); return; }
-    if(action==="logout"){ stopNotificationPolling(); await api("/auth/logout", { method:"POST" }); me=null; course=null; view="login"; mySessionsList=[]; mySessionsLoaded=false; render(); return; }
+    if(action==="logout"){ stopNotificationPolling(); stopHeartbeat(); await api("/auth/logout", { method:"POST" }); me=null; course=null; view="login"; mySessionsList=[]; mySessionsLoaded=false; render(); return; }
     if(action==="toggle-theme"){ toggleTheme(); render(); return; }
     if(action==="mark-notif-read"){
       var nid=t.getAttribute("data-id");

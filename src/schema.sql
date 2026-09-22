@@ -278,3 +278,10 @@ CREATE TABLE IF NOT EXISTS login_sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_login_sessions_user ON login_sessions(user_id, created_at DESC);
 
+-- ---------- Этап 9: «онлайн сейчас» и «был(а) в сети» для куратора ----------
+-- Отдельно от last_active_at: last_active_at — это содержательное действие
+-- (пройден урок/тест), от него зависят стрик и «неактивны 7+ дней» в инбоксе.
+-- last_seen_at — просто "приложение было открыто", обновляется даже если врач
+-- ничего не проходит, а читает материалы/чат — обновляется хартбитом с фронтенда.
+ALTER TABLE progress ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
+

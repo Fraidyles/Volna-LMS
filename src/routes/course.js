@@ -80,6 +80,10 @@ router.get("/", authRequired, requireRole("student"), async (req, res) => {
   if (!progressRow.rowCount) return res.status(404).json({ error: "no_progress" });
   const pr = progressRow.rows[0];
 
+  // Открыл главную — значит точно "в сети"; дальше это поддерживает периодический
+  // heartbeat с фронтенда, пока вкладка открыта (см. PUT /heartbeat ниже).
+  pool.query("UPDATE progress SET last_seen_at=now() WHERE user_id=$1", [req.user.id]).catch(() => {});
+
   const course = await pool.query("SELECT id, title FROM courses WHERE id=$1", [pr.course_id]);
   if (!course.rowCount) return res.status(404).json({ error: "no_course" });
   const courseId = course.rows[0].id;
@@ -220,6 +224,14 @@ router.post("/quiz-submit", authRequired, requireRole("student"), async (req, re
   );
 
   res.json({ score, completed, certificateStatus, gamification: { currentStreak: streak.currentStreak, longestStreak: streak.longestStreak } });
+});
+
+// Лёгкий пинг "я всё ещё здесь" — фронтенд дёргает это раз в 45с, пока у врача
+// открыта любая вкладка приложения, независимо от того, что он там делает
+// (читает материалы, пишет в чат — не обязательно проходит урок).
+router.put("/heartbeat", authRequired, requireRole("student"), async (req, res) => {
+  await pool.query("UPDATE progress SET last_seen_at=now() WHERE user_id=$1", [req.user.id]);
+  res.json({ ok: true });
 });
 
 // Врач сам закрывает карточку онбординг-чеклиста, не дожидаясь выполнения всех пунктов.
