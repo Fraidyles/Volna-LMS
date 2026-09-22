@@ -925,7 +925,8 @@ function renderStudentHome(){
     '<span style="font-size:12px;color:var(--muted);display:block;margin-top:2px;">рекорд: '+(gam.longestStreak||0)+'</span>' +
     '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2);">' +
       '<span style="font-family:var(--display);font-weight:800;font-size:18px;">'+(gam.points||0)+'</span>' +
-      '<span style="font-size:12px;color:var(--muted);"> очков</span>' +
+      '<span style="font-size:12px;color:var(--muted);"> / 1000 очков</span>' +
+      '<button class="btn btn-sm btn-ghost" style="display:block;margin-top:8px;padding:4px 0;" data-action="student-tab" data-tab="progress">Как получить скидку →</button>' +
     '</div>' +
   '</div>';
 
@@ -1175,6 +1176,10 @@ function renderMyProgressPage(){
   var quizDone = !!pr.completed;
   var pct = Math.round((done + (quizDone?1:0)) / (total+1) * 100);
   var gam = course.gamification || { points:0, currentStreak:0, longestStreak:0 };
+  var POINTS_MAX = 1000;
+  var points = Math.min(POINTS_MAX, gam.points||0);
+  var pointsPct = Math.round((points/POINTS_MAX)*100);
+  var maxedOut = points >= POINTS_MAX;
 
   var html = '<div style="margin-top:6px;max-width:640px;">' +
     '<div class="card" style="padding:22px 24px;margin-bottom:14px;">' +
@@ -1190,14 +1195,24 @@ function renderMyProgressPage(){
         '<span style="font-family:var(--display);font-weight:800;font-size:22px;letter-spacing:-.02em;">'+(gam.currentStreak||0)+'</span>' +
         '<span style="font-size:12px;color:var(--muted);">'+(gam.currentStreak===1?"день подряд":"дней подряд")+'</span></div>' +
         '<span style="font-size:12px;color:var(--muted);display:block;margin-top:2px;">рекорд: '+(gam.longestStreak||0)+'</span></div>' +
-      '<div class="card" style="padding:18px;">'+magnet("neutral","Очки") +
-        '<div style="font-family:var(--display);font-weight:800;font-size:22px;margin-top:10px;letter-spacing:-.02em;">'+(gam.points||0)+'</div></div>' +
+      '<div class="card" style="padding:18px;">'+magnet(maxedOut?"done":"neutral","Очки") +
+        '<div style="font-family:var(--display);font-weight:800;font-size:22px;margin-top:10px;letter-spacing:-.02em;">'+points+' <span style="font-size:13px;font-weight:500;color:var(--muted);">/ '+POINTS_MAX+'</span></div>' +
+        '<div style="height:5px;border-radius:100px;background:var(--line-2);margin-top:10px;overflow:hidden;"><div style="height:100%;width:'+pointsPct+'%;background:var(--primary);border-radius:100px;"></div></div>' +
+      '</div>' +
       '<div class="card" style="padding:18px;">' +
         magnet(quizDone?(pr.certificate_status==="issued"?"done":"attention"):"neutral", quizDone?(pr.certificate_status==="issued"?"Сертификат выдан":"На проверке"):"Сертификат") +
         (quizDone
           ? '<div style="font-family:var(--display);font-weight:800;font-size:22px;margin-top:10px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>'
           : '<p style="font-size:12.5px;color:var(--muted);margin:10px 0 0;">Появится после теста.</p>') +
       '</div>' +
+    '</div>' +
+    '<div class="card" style="padding:20px 22px;margin-top:14px;'+(maxedOut?'background:var(--primary-tint);border-color:transparent;':'')+'">' +
+      '<b style="font-size:14.5px;display:block;margin-bottom:10px;">Что такое очки и зачем они нужны</b>' +
+      '<p style="font-size:13px;color:var(--muted);line-height:1.6;margin:0 0 10px;">Очки начисляются за вашу активность в курсе: <b style="color:var(--ink);">+20</b> за каждый пройденный урок, столько же процентов, сколько результат теста — за итоговый тест, <b style="color:var(--ink);">+100</b> — за полученный сертификат, и <b style="color:var(--ink);">+5</b> за каждый день серии подряд. Максимум — <b style="color:var(--ink);">'+POINTS_MAX+' очков</b>.</p>' +
+      '<p style="font-size:13px;color:var(--muted);line-height:1.6;margin:0;">Набрав '+POINTS_MAX+' очков, вы получаете <b style="color:var(--ink);">скидку 25% на любое другое обучение в нашей компании</b> — можно использовать её для себя или подарить знакомому.</p>' +
+      (maxedOut
+        ? '<div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'+magnet("done","Максимум набран")+'<button class="btn btn-sm btn-primary" data-action="student-tab" data-tab="messages">Написать куратору, чтобы оформить скидку</button></div>'
+        : '<p style="font-size:12.5px;color:var(--muted-2);margin:10px 0 0;">Осталось '+(POINTS_MAX-points)+' очков до максимума.</p>') +
     '</div>' +
     '<div class="card" style="padding:18px 20px;margin-top:14px;">' +
       '<b style="font-size:14px;display:block;margin-bottom:12px;">Уроки</b>';

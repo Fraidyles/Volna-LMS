@@ -63,12 +63,17 @@ function nextStreak(pr) {
 
 // Очки считаются на лету из уже имеющихся данных прогресса, а не хранятся отдельно —
 // это исключает рассинхронизацию между "истинным" прогрессом и накопленным счётом.
+// Потолок в 1000 — не техническое ограничение, а бизнес-правило: 1000 очков
+// обмениваются на скидку 25% на другое обучение в компании (см. renderMyProgressPage
+// на фронтенде, там же и объяснение для врача). Без потолка стрик рос бы бесконечно
+// (5 очков/день) и обесценивал бы "полную" отметку в 1000.
+const MAX_POINTS = 1000;
 function computePoints(pr) {
   const lessonsPoints = (pr.completed_lessons || []).length * 20;
   const quizPoints = pr.completed ? (pr.quiz_score || 0) : 0;
   const certPoints = pr.certificate_status === "issued" ? 100 : 0;
   const streakPoints = (pr.current_streak || 0) * 5;
-  return lessonsPoints + quizPoints + certPoints + streakPoints;
+  return Math.min(MAX_POINTS, lessonsPoints + quizPoints + certPoints + streakPoints);
 }
 
 // Курс с уроками (без правильных ответов теста) + текущий прогресс врача +

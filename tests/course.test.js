@@ -311,6 +311,19 @@ describe("Курс врача", () => {
     expect(res.body.gamification.points).toBe(230);
   });
 
+  test("геймификация: очки не превышают 1000 (порог обмена на скидку 25%)", async () => {
+    const user = await createUser({ role: "student", courseId: course.courseId });
+    // Огромный стрик один даёт 300*5=1500 очков — без потолка ушло бы далеко за 1000.
+    await pool.query(
+      `UPDATE progress SET completed_lessons=$1, completed=true, quiz_score=100,
+       certificate_status='issued', current_streak=300 WHERE user_id=$2`,
+      [JSON.stringify(course.lessonIds), user.id]
+    );
+    const cookie = await loginAs(user);
+    const res = await request(app).get("/api/course").set("Cookie", cookie);
+    expect(res.body.gamification.points).toBe(1000);
+  });
+
   test("онбординг-чеклист: по умолчанию не скрыт, врач может закрыть его вручную", async () => {
     const user = await createUser({ role: "student", courseId: course.courseId });
     const cookie = await loginAs(user);
