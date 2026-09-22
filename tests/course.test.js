@@ -131,6 +131,68 @@ describe("Курс врача", () => {
     }
   });
 
+  test("расписание урока: куратор назначает дату открытия конкретному врачу — переопределяет дрип", async () => {
+    const student = await createUser({ role: "student", courseId: course.courseId });
+    const staff = await createUser({ role: "curator" });
+    const cookie = await loginAs(staff);
+    const futureIso = new Date(Date.now() + 3 * 86400000).toISOString();
+
+    const setRes = await request(app).put(`/api/course/lessons/${course.lessonIds[0]}/schedule`).set("Cookie", cookie)
+      .send({ studentIds: [student.id], unlockAt: futureIso });
+    expect(setRes.status).toBe(200);
+    expect(setRes.body.updated).toBe(1);
+
+    const studentCookie = await loginAs(student);
+    const getRes = await request(app).get("/api/course").set("Cookie", studentCookie);
+    const lesson = getRes.body.lessons.find((l) => l.id === course.lessonIds[0]);
+    expect(lesson.dripLockedForMe).toBe(true);
+    expect(lesson.scheduledForMe).toBe(true);
+
+    const doneRes = await request(app).post("/api/course/lesson-done").set("Cookie", studentCookie)
+      .send({ lessonId: course.lessonIds[0] });
+    expect(doneRes.status).toBe(403);
+  });
+
+  test("расписание урока: массовое назначение без studentIds применяется ко всем врачам в скоупе куратора", async () => {
+    const curatorA = await createUser({ role: "curator" });
+    const curatorB = await createUser({ role: "curator" });
+    const own = await createUser({ role: "student", courseId: course.courseId });
+    const stranger = await createUser({ role: "student", courseId: course.courseId });
+    await pool.query("UPDATE users SET assigned_curator_id=$1 WHERE id=$2", [curatorA.id, own.id]);
+    await pool.query("UPDATE users SET assigned_curator_id=$1 WHERE id=$2", [curatorB.id, stranger.id]);
+
+    const cookie = await loginAs(curatorA);
+    const futureIso = new Date(Date.now() + 2 * 86400000).toISOString();
+    const res = await request(app).put(`/api/course/lessons/${course.lessonIds[1]}/schedule`).set("Cookie", cookie)
+      .send({ unlockAt: futureIso });
+    expect(res.status).toBe(200);
+
+    const scheduleRes = await request(app).get(`/api/course/lessons/${course.lessonIds[1]}/schedule`).set("Cookie", cookie);
+    const ownRow = scheduleRes.body.schedule.find((r) => r.student_id === own.id);
+    expect(ownRow.unlock_at).toBeTruthy();
+    const strangerRow = scheduleRes.body.schedule.find((r) => r.student_id === stranger.id);
+    expect(strangerRow).toBeUndefined(); // куратор A не видит чужого врача даже в списке расписания
+  });
+
+  test("расписание урока: очистка (unlockAt пустой) удаляет переопределение и возвращает обычный дрип", async () => {
+    const student = await createUser({ role: "student", courseId: course.courseId });
+    const staff = await createUser({ role: "super_admin" });
+    const cookie = await loginAs(staff);
+    const futureIso = new Date(Date.now() + 3 * 86400000).toISOString();
+    await request(app).put(`/api/course/lessons/${course.lessonIds[0]}/schedule`).set("Cookie", cookie)
+      .send({ studentIds: [student.id], unlockAt: futureIso });
+
+    const clearRes = await request(app).put(`/api/course/lessons/${course.lessonIds[0]}/schedule`).set("Cookie", cookie)
+      .send({ studentIds: [student.id], unlockAt: null });
+    expect(clearRes.status).toBe(200);
+
+    const studentCookie = await loginAs(student);
+    const getRes = await request(app).get("/api/course").set("Cookie", studentCookie);
+    const lesson = getRes.body.lessons.find((l) => l.id === course.lessonIds[0]);
+    expect(lesson.scheduledForMe).toBe(false);
+    expect(lesson.dripLockedForMe).toBe(false);
+  });
+
   test("геймификация: первая активность за день ставит стрик=1, повторная в тот же день не меняет его", async () => {
     const user = await createUser({ role: "student", courseId: course.courseId });
     const cookie = await loginAs(user);

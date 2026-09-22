@@ -28,6 +28,18 @@ function computeDripLock(lesson, pr) {
   return { locked: new Date() < availableAt, availableAt: availableAt.toISOString() };
 }
 
+// Куратор мог вручную назначить дату открытия именно этому врачу — это переопределяет
+// автоматический дрип полностью (а не комбинируется с ним), потому что куратор здесь
+// явно вмешался в конкретный случай и знает лучше общего правила.
+function computeLessonLock(lesson, pr, overrideUnlockAt) {
+  if (overrideUnlockAt) {
+    const at = new Date(overrideUnlockAt);
+    return { locked: new Date() < at, availableAt: at.toISOString(), scheduled: true };
+  }
+  const drip = computeDripLock(lesson, pr);
+  return Object.assign({ scheduled: false }, drip);
+}
+
 async function getHiddenForMap(courseId) {
   const row = await pool.query("SELECT hidden_for FROM course_visibility WHERE course_id=$1", [courseId]);
   return row.rowCount ? row.rows[0].hidden_for : {};
@@ -80,15 +92,22 @@ router.get("/", authRequired, requireRole("student"), async (req, res) => {
     [courseId]
   );
   const hiddenFor = await getHiddenForMap(courseId);
+  const overrides = await pool.query(
+    "SELECT lesson_id, unlock_at FROM lesson_schedule_overrides WHERE student_id=$1",
+    [req.user.id]
+  );
+  const overrideMap = {};
+  overrides.rows.forEach((r) => { overrideMap[r.lesson_id] = r.unlock_at; });
 
   // Дополнительный (второй) слой санитизации прямо перед показом врачу — на случай,
   // если в базе оказался контент, сохранённый до включения санитайзера.
   const lessonsOut = lessons.rows.map((l) => {
-    const drip = computeDripLock(l, pr);
+    const drip = computeLessonLock(l, pr, overrideMap[l.id]);
     return {
       id: l.id, idx: l.idx, title: l.title, duration: l.duration, html: sanitizeLessonHtml(l.html),
       hiddenForMe: (hiddenFor[l.id] || []).indexOf(req.user.id) !== -1,
       dripLockedForMe: drip.locked,
+      scheduledForMe: drip.scheduled,
       availableAt: drip.availableAt
     };
   });
@@ -131,7 +150,12 @@ router.post("/lesson-done", authRequired, requireRole("student"), async (req, re
   }
 
   const lessonRow = await pool.query("SELECT drip_days FROM lessons WHERE id=$1", [lessonId]);
-  if (lessonRow.rowCount && computeDripLock(lessonRow.rows[0], pr).locked) {
+  const overrideRow = await pool.query(
+    "SELECT unlock_at FROM lesson_schedule_overrides WHERE student_id=$1 AND lesson_id=$2",
+    [req.user.id, lessonId]
+  );
+  const overrideUnlockAt = overrideRow.rowCount ? overrideRow.rows[0].unlock_at : null;
+  if (lessonRow.rowCount && computeLessonLock(lessonRow.rows[0], pr, overrideUnlockAt).locked) {
     return res.status(403).json({ error: "content_drip_locked", message: "Этот урок ещё не открылся" });
   }
 
@@ -420,6 +444,64 @@ router.put("/lessons/:id/drip", authRequired, requireRole("admin", "super_admin"
   const result = await pool.query("UPDATE lessons SET drip_days=$1 WHERE id=$2 RETURNING id", [dripDays, req.params.id]);
   if (!result.rowCount) return res.status(404).json({ error: "not_found" });
   res.json({ ok: true, dripDays });
+});
+
+// Куратор назначает дату открытия урока конкретным врачам (или всем сразу в своём
+// скоупе) — переопределяет автоматический дрип для них. studentIds:null означает
+// "всем в скоупе актёра" (не буквально всем в базе — куратор не должен управлять
+// чужими врачами даже через bulk-режим).
+router.put("/lessons/:id/schedule", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+  const lessonId = req.params.id;
+  const lesson = await pool.query("SELECT id FROM lessons WHERE id=$1", [lessonId]);
+  if (!lesson.rowCount) return res.status(404).json({ error: "not_found" });
+
+  const unlockAt = req.body && req.body.unlockAt;
+  let studentIds = req.body && req.body.studentIds;
+  if (!Array.isArray(studentIds)) {
+    const scopeClause = req.user.role === "curator" ? "AND (assigned_curator_id = $1 OR assigned_curator_id IS NULL)" : "";
+    const scopeParams = req.user.role === "curator" ? [req.user.id] : [];
+    const all = await pool.query(`SELECT id FROM users WHERE role='student' ${scopeClause}`, scopeParams);
+    studentIds = all.rows.map((r) => r.id);
+  } else {
+    studentIds = await filterToScope(req.user, studentIds);
+  }
+  if (!studentIds.length) return res.json({ ok: true, updated: 0 });
+
+  if (!unlockAt) {
+    await pool.query(
+      "DELETE FROM lesson_schedule_overrides WHERE lesson_id=$1 AND student_id = ANY($2::text[])",
+      [lessonId, studentIds]
+    );
+    await logAction(req.user, "content.lesson_schedule_cleared", "lesson", lessonId, null, { studentIds });
+    return res.json({ ok: true, updated: studentIds.length });
+  }
+
+  for (const studentId of studentIds) {
+    await pool.query(
+      `INSERT INTO lesson_schedule_overrides (id, student_id, lesson_id, unlock_at, set_by)
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (student_id, lesson_id) DO UPDATE SET unlock_at=$4, set_by=$5`,
+      [crypto.randomUUID(), studentId, lessonId, unlockAt, req.user.name]
+    );
+  }
+  await logAction(req.user, "content.lesson_scheduled", "lesson", lessonId, null, { studentIds, unlockAt });
+  res.json({ ok: true, updated: studentIds.length });
+});
+
+// Текущее расписание урока — по одному врачу на строку, чтобы куратор видел, кому
+// когда откроется (и кто ещё идёт по обычному дрипу без переопределения).
+router.get("/lessons/:id/schedule", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+  const scopeClause = req.user.role === "curator" ? "AND (u.assigned_curator_id = $1 OR u.assigned_curator_id IS NULL)" : "";
+  const scopeParams = req.user.role === "curator" ? [req.user.id, req.params.id] : [req.params.id];
+  const paramIdx = req.user.role === "curator" ? "$2" : "$1";
+  const result = await pool.query(
+    `SELECT u.id AS student_id, u.name, lso.unlock_at
+     FROM users u LEFT JOIN lesson_schedule_overrides lso ON lso.student_id=u.id AND lso.lesson_id=${paramIdx}
+     WHERE u.role='student' ${scopeClause}
+     ORDER BY u.name`,
+    scopeParams
+  );
+  res.json({ schedule: result.rows });
 });
 
 // Сохранить черновик — врачи его не видят, пока не будет опубликован

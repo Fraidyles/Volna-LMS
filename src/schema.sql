@@ -232,3 +232,49 @@ CREATE TABLE IF NOT EXISTS notifications (
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, created_at DESC);
 
+-- ---------- Этап 8: расписание уроков куратором, поиск/избранное, мьют чатов, сеансы входа ----------
+
+-- Куратор вручную назначает дату открытия урока конкретному врачу — переопределяет
+-- автоматический дрип (lessons.drip_days от даты регистрации). По одной записи на
+-- пару (врач, урок): повторная установка обновляет unlock_at, а не плодит дубли.
+CREATE TABLE IF NOT EXISTS lesson_schedule_overrides (
+  id            TEXT PRIMARY KEY,
+  student_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  lesson_id     TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+  unlock_at     TIMESTAMPTZ NOT NULL,
+  set_by        TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(student_id, lesson_id)
+);
+CREATE INDEX IF NOT EXISTS idx_lesson_schedule_student ON lesson_schedule_overrides(student_id);
+CREATE INDEX IF NOT EXISTS idx_lesson_schedule_lesson ON lesson_schedule_overrides(lesson_id);
+
+-- «Мои материалы»: врач помечает урок как сохранённый себе для быстрого доступа.
+CREATE TABLE IF NOT EXISTS student_bookmarks (
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  lesson_id     TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, lesson_id)
+);
+
+-- Мьют чата: замьюченный чат не подсвечивается бейджем +N нигде в интерфейсе.
+-- chat_type/chat_key: ('curator', studentId) — 1:1 чат конкретного врача с куратором
+-- (с обеих сторон — и у врача, и у персонала свой собственный мьют); ('stream', streamId) — беседа потока.
+CREATE TABLE IF NOT EXISTS chat_mutes (
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  chat_type     TEXT NOT NULL,
+  chat_key      TEXT NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, chat_type, chat_key)
+);
+
+-- История входов — для экрана «Мой профиль» → «Текущие сеансы» (устройство/откуда/когда).
+CREATE TABLE IF NOT EXISTS login_sessions (
+  id            TEXT PRIMARY KEY,
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  user_agent    TEXT,
+  ip            TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_login_sessions_user ON login_sessions(user_id, created_at DESC);
+

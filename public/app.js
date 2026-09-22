@@ -25,6 +25,7 @@ var staffState = { mainTab:"students", students:[], staff:[], invites:[], search
 var profileEditor = { open:false };
 var calendarState = { monthDate:new Date(), streams:[], events:[], showStreamForm:false, eventModalMode:null, eventModalDate:null, eventModalId:null, recurring:false };
 var materialsPicker = { open:false, targetId:null, targetTitle:"", search:"", selectedIds:[] };
+var scheduleModal = { open:false, lessonId:null, lessonTitle:"", search:"", selectedIds:[], applyToAll:true, unlockDate:"", schedule:[] };
 var streamChat = { open:false, streamId:null, streamName:"" };
 var notifState = { open:false, items:[], unreadCount:0 };
 var notifPollTimer = null;
@@ -992,6 +993,9 @@ function renderStaffShell(){
   if(materialsPicker.open){
     wrap.appendChild(renderMaterialsPickerModal());
   }
+  if(scheduleModal.open){
+    wrap.appendChild(renderScheduleModal());
+  }
   if(streamChat.open){
     wrap.appendChild(renderStreamChatModal());
   }
@@ -1166,6 +1170,8 @@ var AUDIT_ACTION_LABELS = {
   "content.quiz_created": "Добавлен вопрос теста",
   "content.quiz_deleted": "Удалён вопрос теста",
   "content.quiz_reordered": "Изменён порядок вопросов теста",
+  "content.lesson_scheduled": "Назначена дата открытия урока",
+  "content.lesson_schedule_cleared": "Сброшено расписание урока",
   "stream.create": "Создан поток",
   "stream.delete": "Удалён поток",
   "event.create": "Создан эфир",
@@ -1259,6 +1265,7 @@ function renderMaterialsTab(){
         '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-lesson" data-id="'+l.id+'" data-dir="down"'+(isLast?' disabled':'')+' title="Ниже">↓</button></div>' : '') +
       '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+(i+1)+'. '+escapeHtml(l.title)+(l.has_draft?' '+magnet("attention","черновик"):'')+'</b><span style="font-size:12px;color:var(--muted);">'+(hiddenCount?'Скрыт от '+hiddenCount+' врачей':'Виден всем')+(l.drip_days?' · открывается через '+l.drip_days+' дн. после регистрации':'')+'</span></div>' +
       (canEdit ? '<button class="btn btn-sm btn-ghost" data-action="open-lesson-editor" data-id="'+l.id+'">Редактировать</button>' : '') +
+      '<button class="btn btn-sm btn-ghost" data-action="open-schedule-modal" data-id="'+l.id+'" data-title="'+escapeHtml(l.title)+'">Расписание</button>' +
       '<button class="btn btn-sm '+(hiddenCount?'btn-primary':'btn-ghost')+'" data-action="open-materials-picker" data-id="'+l.id+'" data-title="'+escapeHtml(l.title)+'">Настроить видимость</button>' +
       (canEdit ? '<button class="btn btn-sm btn-ghost" data-action="delete-lesson" data-id="'+l.id+'" data-title="'+escapeHtml(l.title)+'" title="Удалить урок">'+icon("trash","ic-sm")+'</button>' : '') +
     '</div>';
@@ -1324,6 +1331,45 @@ function renderMaterialsPickerModal(){
     '<button class="btn btn-primary" data-action="apply-materials-picker">Сохранить</button></div></div>';
 
   return el('<div class="overlay" data-action="overlay-close-materials"><div class="drawer" data-stop="1" style="width:min(440px,100%);">'+body+'</div></div>');
+}
+
+// Куратор назначает дату открытия урока — конкретным врачам или всем сразу
+// (в своём скоупе). Список ниже показывает, у кого уже есть переопределение,
+// а у кого урок идёт по обычному дрипу.
+function renderScheduleModal(){
+  var q = scheduleModal.search.toLowerCase();
+  var students = staffState.students.filter(function(s){
+    if(!q) return true;
+    return (s.name||"").toLowerCase().indexOf(q)!==-1 || (s.email||"").toLowerCase().indexOf(q)!==-1;
+  });
+  var scheduleByStudent = {};
+  scheduleModal.schedule.forEach(function(r){ scheduleByStudent[r.student_id]=r.unlock_at; });
+
+  var body = '<div class="drawer-head"><b style="font-size:16px;">Расписание урока «'+escapeHtml(scheduleModal.lessonTitle)+'»</b><button class="btn btn-ghost btn-sm" data-action="close-schedule-modal">Закрыть ✕</button></div>' +
+    '<div class="drawer-body">' +
+      '<div class="field"><label>Дата открытия</label><input class="input" type="date" id="scheduleUnlockDate" value="'+escapeHtml(scheduleModal.unlockDate)+'"></div>' +
+      '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius-s);margin-bottom:14px;cursor:pointer;background:var(--primary-tint);">' +
+        '<input type="checkbox" data-action="toggle-schedule-all"'+(scheduleModal.applyToAll?' checked':'')+'>' +
+        '<span style="font-size:13.5px;font-weight:600;">Применить ко всем врачам</span></label>' +
+      (!scheduleModal.applyToAll ?
+        '<input class="input" id="scheduleSearch" placeholder="Поиск по имени или email" value="'+escapeHtml(scheduleModal.search)+'" style="margin-bottom:12px;">' +
+        '<div style="max-height:220px;overflow-y:auto;margin-bottom:14px;">' +
+        (students.length ? students.map(function(s){
+          var checked = scheduleModal.selectedIds.indexOf(s.id)!==-1;
+          var current = scheduleByStudent[s.id];
+          return '<label style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--line-2);cursor:pointer;">' +
+            '<input type="checkbox" data-action="toggle-schedule-student" data-id="'+s.id+'"'+(checked?' checked':'')+'>' +
+            '<div class="avatar" style="width:26px;height:26px;font-size:11px;">'+initials(s.name)+'</div>' +
+            '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:11.5px;color:var(--muted);">'+(current?'открыт с '+fmtDate(current):'по дрипу')+'</span></div></label>';
+        }).join('') : '<div class="empty-state" style="padding:24px 10px;">Никого не нашлось.</div>') +
+        '</div>'
+      : '<p class="hint" style="margin-top:-6px;">Затронет всех врачей в вашей зоне ответственности ('+staffState.students.length+').</p>') +
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;">' +
+        '<button class="btn btn-primary" data-action="apply-schedule">Назначить дату</button>' +
+        '<button class="btn btn-ghost" data-action="clear-schedule">Сбросить на автоматический дрип</button>' +
+      '</div>' +
+    '</div>';
+  return el('<div class="overlay" data-action="overlay-close-schedule"><div class="drawer" data-stop="1" style="width:min(460px,100%);">'+body+'</div></div>');
 }
 
 /* ============================= РЕНДЕР: DASHBOARD (срезы по параметрам) ============================= */
@@ -2583,6 +2629,40 @@ function wireEvents(root){
       render(); return;
     }
 
+    if(action==="open-schedule-modal"){
+      var schLessonId=t.getAttribute("data-id");
+      scheduleModal = { open:true, lessonId:schLessonId, lessonTitle:t.getAttribute("data-title"), search:"", selectedIds:[], applyToAll:true, unlockDate:"", schedule:[] };
+      render();
+      try{ var sch=await api("/course/lessons/"+schLessonId+"/schedule"); scheduleModal.schedule=sch.schedule; render(); }catch(err){ showToast(err.message); }
+      return;
+    }
+    if(action==="close-schedule-modal"){ scheduleModal.open=false; render(); return; }
+    if(action==="overlay-close-schedule" && !e.target.closest("[data-stop]")){ scheduleModal.open=false; render(); return; }
+    if(action==="toggle-schedule-all"){ scheduleModal.applyToAll=t.checked; render(); return; }
+    if(action==="toggle-schedule-student"){
+      var schId=t.getAttribute("data-id"); var schIdx=scheduleModal.selectedIds.indexOf(schId);
+      if(t.checked && schIdx===-1) scheduleModal.selectedIds.push(schId);
+      if(!t.checked && schIdx!==-1) scheduleModal.selectedIds.splice(schIdx,1);
+      render(); return;
+    }
+    if(action==="apply-schedule" || action==="clear-schedule"){
+      var dateInp=document.getElementById("scheduleUnlockDate");
+      var isClear = action==="clear-schedule";
+      if(!isClear && (!dateInp || !dateInp.value)){ showToast("Укажите дату открытия"); return; }
+      if(!scheduleModal.applyToAll && !scheduleModal.selectedIds.length){ showToast("Выберите хотя бы одного врача"); return; }
+      var payload = {
+        studentIds: scheduleModal.applyToAll ? null : scheduleModal.selectedIds,
+        unlockAt: isClear ? null : new Date(dateInp.value+"T00:00:00").toISOString()
+      };
+      t.disabled=true;
+      try{
+        var r=await api("/course/lessons/"+scheduleModal.lessonId+"/schedule", { method:"PUT", body: JSON.stringify(payload) });
+        showToast(isClear ? "Расписание сброшено у "+r.updated+" врачей" : "Дата назначена "+r.updated+" врачам");
+        var sch2=await api("/course/lessons/"+scheduleModal.lessonId+"/schedule"); scheduleModal.schedule=sch2.schedule;
+      }catch(err){ showToast(err.message); }
+      t.disabled=false; render(); return;
+    }
+
     if(action==="toggle-dash-filter-menu"){
       var mGroup=t.getAttribute("data-group");
       dashboardState.openFilterMenu = (dashboardState.openFilterMenu===mGroup) ? null : mGroup;
@@ -2838,6 +2918,11 @@ function wireEvents(root){
       materialsPicker.search=e.target.value; render();
       setTimeout(function(){ var s=document.getElementById("materialsPickerSearch"); if(s){ s.focus(); s.selectionStart=s.selectionEnd=s.value.length; } },0);
     }
+    if(e.target.id==="scheduleSearch"){
+      scheduleModal.search=e.target.value; render();
+      setTimeout(function(){ var s=document.getElementById("scheduleSearch"); if(s){ s.focus(); s.selectionStart=s.selectionEnd=s.value.length; } },0);
+    }
+    if(e.target.id==="scheduleUnlockDate"){ scheduleModal.unlockDate=e.target.value; }
     if(e.target.id==="dashPeriodFrom"){ dashboardState.periodFrom=e.target.value; render(); }
     if(e.target.id==="dashPeriodTo"){ dashboardState.periodTo=e.target.value; render(); }
     if(e.target.id==="auditSearchInput"){
