@@ -2,6 +2,7 @@ const express = require("express");
 const crypto = require("crypto");
 const pool = require("../db");
 const { authRequired } = require("../middleware/auth");
+const { setChatMuted } = require("../chatMutes");
 
 const router = express.Router();
 
@@ -17,6 +18,16 @@ async function canAccessStream(user, streamId) {
   const row = await pool.query("SELECT stream_id FROM users WHERE id=$1", [user.id]);
   return row.rowCount && row.rows[0].stream_id === streamId;
 }
+
+router.put("/:streamId/mute", authRequired, async (req, res) => {
+  const { streamId } = req.params;
+  const muted = !!(req.body && req.body.muted);
+  if (!(await canAccessStream(req.user, streamId))) {
+    return res.status(403).json({ error: "forbidden" });
+  }
+  await setChatMuted(req.user.id, "stream", streamId, muted);
+  res.json({ ok: true, muted });
+});
 
 router.get("/:streamId", authRequired, async (req, res) => {
   const { streamId } = req.params;

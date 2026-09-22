@@ -3,8 +3,26 @@ const crypto = require("crypto");
 const pool = require("../db");
 const { authRequired } = require("../middleware/auth");
 const { canManageStudent } = require("../access");
+const { setChatMuted } = require("../chatMutes");
 
 const router = express.Router();
+
+// Мьют — личная настройка того, КТО мьютит, а не общий переключатель чата: врач
+// может заглушить свой чат с куратором, а куратор — заглушить конкретного врача
+// со своей стороны, независимо друг от друга (chat_key=studentId в обоих случаях,
+// user_id всегда "чей это мьют").
+router.put("/:studentId/mute", authRequired, async (req, res) => {
+  const { studentId } = req.params;
+  const muted = !!(req.body && req.body.muted);
+  if (req.user.role === "student" && req.user.id !== studentId) {
+    return res.status(403).json({ error: "forbidden" });
+  }
+  if (req.user.role !== "student" && !(await canManageStudent(req.user, studentId))) {
+    return res.status(403).json({ error: "forbidden", message: "Этот врач закреплён за другим куратором" });
+  }
+  await setChatMuted(req.user.id, "curator", studentId, muted);
+  res.json({ ok: true, muted });
+});
 
 router.get("/:studentId", authRequired, async (req, res) => {
   const { studentId } = req.params;

@@ -167,6 +167,7 @@ async function init(){
 }
 
 async function routeAfterLogin(){
+  await loadChatMutes();
   if(me.role === "student"){
     view = "student";
     await loadCourse();
@@ -179,6 +180,19 @@ async function routeAfterLogin(){
     await loadCalendarData();
   }
   render();
+}
+
+// Мьют — чисто клиентское состояние "type:key" -> true, подгружается один раз при
+// входе и обновляется оптимistично сразу при клике, без re-fetch всего списка.
+var mutedChats = {};
+function chatMuteKey(type,key){ return type+":"+key; }
+function isChatMutedLocal(type,key){ return !!mutedChats[chatMuteKey(type,key)]; }
+async function loadChatMutes(){
+  try{
+    var data = await api("/chat-mutes");
+    mutedChats = {};
+    data.mutes.forEach(function(m){ mutedChats[chatMuteKey(m.chat_type,m.chat_key)]=true; });
+  }catch(e){}
 }
 
 async function loadNotifications(){
@@ -1001,18 +1015,24 @@ function renderStudentMessages(){
     if(!mySid){
       html += '<div class="empty-state" style="padding:30px 20px;">Вы пока не привязаны ни к одному потоку — куратор добавит вас, когда сформируется поток, и здесь появится общая беседа.</div>';
     } else {
-      html += '<div style="padding:16px 20px;border-bottom:1px solid var(--line);">' +
-          '<b style="font-size:14.5px;">Беседа потока</b>' +
-          '<p style="font-size:12px;color:var(--muted);margin:2px 0 0;">Видят и пишут все врачи вашего потока и куратор.</p>' +
+      var streamMuted = isChatMutedLocal("stream", mySid);
+      html += '<div style="padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;">' +
+          '<div><b style="font-size:14.5px;">Беседа потока</b>' +
+          '<p style="font-size:12px;color:var(--muted);margin:2px 0 0;">Видят и пишут все врачи вашего потока и куратор.</p></div>' +
+          '<button class="btn btn-sm btn-ghost" data-action="toggle-chat-mute" data-type="stream" data-key="'+mySid+'" data-muted="'+(streamMuted?"1":"0")+'">'+(streamMuted?"Включить уведомления":"Отключить уведомления")+'</button>' +
         '</div>' +
         '<div class="msg-list" id="msgListStream"><div class="msg-empty">Загрузка…</div></div>' +
         '<div class="msg-input-row"><textarea class="input" id="msgInputStream" placeholder="Написать в общий чат потока…"></textarea>' +
         '<button class="btn btn-primary" data-action="send-student-stream-msg">Отправить</button></div>';
     }
   } else {
-    html += '<div style="padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;">' +
+    var curatorMuted = isChatMutedLocal("curator", me.id);
+    html += '<div style="padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
         '<b style="font-size:14.5px;">Чат с куратором</b>' +
-        '<button class="btn btn-sm btn-ghost" data-action="mark-messages-unread" title="Показать бейдж снова, чтобы вернуться к чату позже">Пометить непрочитанным</button>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<button class="btn btn-sm btn-ghost" data-action="toggle-chat-mute" data-type="curator" data-key="'+me.id+'" data-muted="'+(curatorMuted?"1":"0")+'">'+(curatorMuted?"Включить уведомления":"Отключить уведомления")+'</button>' +
+          '<button class="btn btn-sm btn-ghost" data-action="mark-messages-unread" title="Показать бейдж снова, чтобы вернуться к чату позже">Пометить непрочитанным</button>' +
+        '</div>' +
       '</div>' +
       '<div class="msg-list" id="msgList"><div class="msg-empty">Загрузка…</div></div>' +
       '<div class="msg-input-row"><textarea class="input" id="msgInput" placeholder="Напишите сообщение…"></textarea>' +
@@ -1120,8 +1140,12 @@ function renderStreamsPanel(){
 }
 
 function renderStreamChatModal(){
+  var thisStreamMuted = isChatMutedLocal("stream", streamChat.streamId);
   var body = '<div class="drawer-head"><b style="font-size:16px;">Чат: '+escapeHtml(streamChat.streamName)+'</b><button class="btn btn-ghost btn-sm" data-action="close-stream-chat">Закрыть ✕</button></div>' +
     '<div class="drawer-body" style="display:flex;flex-direction:column;height:100%;">' +
+      '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">' +
+        '<button class="btn btn-sm btn-ghost" data-action="toggle-chat-mute" data-type="stream" data-key="'+streamChat.streamId+'" data-muted="'+(thisStreamMuted?"1":"0")+'">'+(thisStreamMuted?"Включить уведомления":"Отключить уведомления")+'</button>' +
+      '</div>' +
       '<div class="msg-list" id="streamChatList" style="flex:1;"><div class="msg-empty">Загрузка…</div></div>' +
       '<div class="msg-input-row"><textarea class="input" id="streamChatInput" placeholder="Написать в чат потока…"></textarea>' +
       '<button class="btn btn-primary" data-action="send-stream-chat-msg">Отправить</button></div>' +
@@ -2027,7 +2051,11 @@ function renderStudentDrawer(){
           '<button class="btn btn-ghost" data-action="toggle-access-block" data-id="'+s.id+'" data-blocked="true">Заблокировать доступ к курсу</button>') +
       '</div>';
   } else if(staffState.drawerTab === "chat"){
-    body += '<div class="msg-panel" style="height:420px;border:1px solid var(--line);border-radius:var(--radius-m);overflow:hidden;">' +
+    var thisChatMuted = isChatMutedLocal("curator", s.id);
+    body += '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">' +
+        '<button class="btn btn-sm btn-ghost" data-action="toggle-chat-mute" data-type="curator" data-key="'+s.id+'" data-muted="'+(thisChatMuted?"1":"0")+'">'+(thisChatMuted?"Включить уведомления":"Отключить уведомления")+'</button>' +
+      '</div>' +
+      '<div class="msg-panel" style="height:420px;border:1px solid var(--line);border-radius:var(--radius-m);overflow:hidden;">' +
       '<div class="msg-list" id="msgListCurator"><div class="msg-empty">Загрузка…</div></div>' +
       '<div class="msg-input-row"><textarea class="input" id="curatorMsgInput" placeholder="Ответить врачу…"></textarea>' +
       '<button class="btn btn-primary" data-action="send-curator-msg" data-id="'+s.id+'">Отправить</button></div></div>';
@@ -2305,6 +2333,19 @@ function wireEvents(root){
         await api("/messages/"+me.id+"/mark-unread", { method:"POST" });
         var mu=await api("/course"); course.unreadMessages=mu.unreadMessages;
         showToast("Чат помечен непрочитанным");
+      }catch(err){ showToast(err.message); }
+      render(); return;
+    }
+    if(action==="toggle-chat-mute"){
+      var muteType=t.getAttribute("data-type"); var muteKey=t.getAttribute("data-key");
+      var wasMuted=t.getAttribute("data-muted")==="1";
+      mutedChats[chatMuteKey(muteType,muteKey)] = !wasMuted || undefined;
+      if(wasMuted) delete mutedChats[chatMuteKey(muteType,muteKey)];
+      var endpoint = muteType==="stream" ? "/stream-messages/"+muteKey+"/mute" : "/messages/"+muteKey+"/mute";
+      try{
+        await api(endpoint, { method:"PUT", body: JSON.stringify({ muted: !wasMuted }) });
+        if(muteType==="curator" && me.role==="student" && !wasMuted && course) course.unreadMessages=0;
+        showToast(wasMuted ? "Уведомления включены" : "Уведомления отключены для этого чата");
       }catch(err){ showToast(err.message); }
       render(); return;
     }

@@ -6,6 +6,7 @@ const { logAction } = require("../audit");
 const { sanitizeLessonHtml } = require("../sanitize");
 const { notify, notifyAllStudents } = require("../notifications");
 const { requireStudentScope, filterToScope } = require("../access");
+const { isChatMuted } = require("../chatMutes");
 
 const router = express.Router();
 
@@ -116,6 +117,7 @@ router.get("/", authRequired, requireRole("student"), async (req, res) => {
     "SELECT COUNT(*)::int AS cnt FROM messages WHERE student_id=$1 AND from_role='curator' AND created_at > COALESCE($2::timestamptz, '-infinity')",
     [req.user.id, pr.messages_read_at]
   );
+  const curatorChatMuted = await isChatMuted(req.user.id, "curator", req.user.id);
   const bookmarks = await pool.query("SELECT lesson_id FROM student_bookmarks WHERE user_id=$1", [req.user.id]);
 
   res.json({
@@ -125,7 +127,8 @@ router.get("/", authRequired, requireRole("student"), async (req, res) => {
     quiz: quiz.rows.map((q) => ({ id: q.id, question: q.question, options: q.options })),
     quizHiddenForMe: (hiddenFor.quiz || []).indexOf(req.user.id) !== -1,
     progress: pr,
-    unreadMessages: unread.rows[0].cnt,
+    unreadMessages: curatorChatMuted ? 0 : unread.rows[0].cnt,
+    curatorChatMuted: curatorChatMuted,
     locked: computeLocked(pr),
     gamification: {
       points: computePoints(pr),
