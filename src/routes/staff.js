@@ -298,12 +298,45 @@ router.post("/team/:id/reset-password", authRequired, requireRole("admin", "supe
 
 /* ---------- Журнал действий персонала ---------- */
 
+// Список отдельных действий для выпадающего фильтра — раньше лог был не более чем
+// нефильтруемой лентой, найти "все правки этого куратора за апрель" значило листать
+// вручную. distinct-запрос дешёвый: таблица растёт по одной строке на действие,
+// а число РАЗНЫХ значений action фиксировано и невелико.
+router.get("/audit-log/actions", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const result = await pool.query("SELECT DISTINCT action FROM audit_log ORDER BY action");
+  res.json({ actions: result.rows.map((r) => r.action) });
+});
+
 router.get("/audit-log", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 100, 300);
+  const where = [];
+  const params = [];
+  if (req.query.action) {
+    params.push(req.query.action);
+    where.push(`action = $${params.length}`);
+  }
+  if (req.query.actorId) {
+    params.push(req.query.actorId);
+    where.push(`actor_id = $${params.length}`);
+  }
+  if (req.query.dateFrom) {
+    params.push(req.query.dateFrom);
+    where.push(`created_at >= $${params.length}::date`);
+  }
+  if (req.query.dateTo) {
+    params.push(req.query.dateTo);
+    where.push(`created_at < ($${params.length}::date + interval '1 day')`);
+  }
+  if (req.query.q) {
+    params.push(`%${req.query.q}%`);
+    where.push(`(actor_name ILIKE $${params.length} OR target_name ILIKE $${params.length})`);
+  }
+  const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  params.push(limit);
   const result = await pool.query(
-    `SELECT id, actor_name, actor_role, action, target_type, target_id, target_name, details, revertible, reverted_at, reverted_by, created_at
-     FROM audit_log ORDER BY created_at DESC LIMIT $1`,
-    [limit]
+    `SELECT id, actor_id, actor_name, actor_role, action, target_type, target_id, target_name, details, revertible, reverted_at, reverted_by, created_at
+     FROM audit_log ${whereClause} ORDER BY created_at DESC LIMIT $${params.length}`,
+    params
   );
   res.json({ log: result.rows });
 });

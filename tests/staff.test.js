@@ -118,6 +118,42 @@ describe("Права доступа персонала", () => {
     expect(Array.isArray(allowed.body.log)).toBe(true);
   });
 
+  test("журнал действий: фильтр по action, actorId, датам и свободному тексту", async () => {
+    const admin = await createUser({ role: "admin" });
+    const adminCookie = await loginAs(admin);
+    const student = await createUser({ role: "student" });
+
+    await pool.query("UPDATE progress SET access_blocked=true WHERE user_id=$1", [student.id]);
+    await request(app).patch(`/api/staff/students/${student.id}/access/block`).set("Cookie", adminCookie)
+      .send({ blocked: false });
+
+    const byAction = await request(app).get("/api/staff/audit-log").query({ action: "access.unblock" }).set("Cookie", adminCookie);
+    expect(byAction.status).toBe(200);
+    expect(byAction.body.log.length).toBeGreaterThan(0);
+    expect(byAction.body.log.every((r) => r.action === "access.unblock")).toBe(true);
+
+    const byActor = await request(app).get("/api/staff/audit-log").query({ actorId: admin.id }).set("Cookie", adminCookie);
+    expect(byActor.body.log.every((r) => r.actor_id === admin.id)).toBe(true);
+
+    const byQ = await request(app).get("/api/staff/audit-log").query({ q: student.name }).set("Cookie", adminCookie);
+    expect(byQ.body.log.some((r) => r.target_name === student.name)).toBe(true);
+
+    const futureOnly = await request(app).get("/api/staff/audit-log").query({ dateFrom: "2099-01-01" }).set("Cookie", adminCookie);
+    expect(futureOnly.body.log.length).toBe(0);
+
+    const noMatch = await request(app).get("/api/staff/audit-log").query({ action: "no.such.action" }).set("Cookie", adminCookie);
+    expect(noMatch.body.log.length).toBe(0);
+  });
+
+  test("журнал действий: /audit-log/actions отдаёт список различных действий", async () => {
+    const admin = await createUser({ role: "admin" });
+    const cookie = await loginAs(admin);
+    const res = await request(app).get("/api/staff/audit-log/actions").set("Cookie", cookie);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.actions)).toBe(true);
+    expect(res.body.actions.length).toBeGreaterThan(0);
+  });
+
   test("куратор может поправить контактные данные врача", async () => {
     const curator = await createUser({ role: "curator" });
     const cookie = await loginAs(curator);

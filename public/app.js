@@ -30,6 +30,9 @@ var notifState = { open:false, items:[], unreadCount:0 };
 var notifPollTimer = null;
 var courseVisibility = {}; // {lessonId|"quiz": [uid,...]} — для вкладки «Материалы» у персонала
 var directory = []; // все сотрудники (admin+curator+super_admin) — для фильтра/назначения куратора
+var auditFilters = { q:"", action:"", actorId:"", dateFrom:"", dateTo:"" };
+var auditActionsList = [];
+var auditSearchDebounceTimer = null;
 var dashboardState = { periodFrom:"", periodTo:"", specializations:[], streams:[], stages:[], products:[], certStatuses:[], paymentStatuses:[], demoStatuses:[], accessStatuses:[], curatorIds:[], openFilterMenu:null };
 
 var PRODUCTS = { longevity:"Медицина Долголетия", peptide:"Пептидная терапия", personal_brand:"Личный бренд" };
@@ -239,11 +242,26 @@ async function loadStaffData(){
       var qa = await api("/course/quiz-admin");
       staffState.quizAdmin = qa.quiz;
     }catch(e){}
+    await loadAuditLog();
     try{
-      var log = await api("/staff/audit-log");
-      staffState.auditLog = log.log;
+      var acts = await api("/staff/audit-log/actions");
+      auditActionsList = acts.actions;
     }catch(e){}
   }
+}
+
+async function loadAuditLog(){
+  var params = new URLSearchParams();
+  if(auditFilters.q) params.set("q", auditFilters.q);
+  if(auditFilters.action) params.set("action", auditFilters.action);
+  if(auditFilters.actorId) params.set("actorId", auditFilters.actorId);
+  if(auditFilters.dateFrom) params.set("dateFrom", auditFilters.dateFrom);
+  if(auditFilters.dateTo) params.set("dateTo", auditFilters.dateTo);
+  var qs = params.toString();
+  try{
+    var log = await api("/staff/audit-log"+(qs?"?"+qs:""));
+    staffState.auditLog = log.log;
+  }catch(e){}
 }
 
 async function refreshSelectedStudent(){
@@ -1165,13 +1183,45 @@ function auditActionKind(a){
   return "active";
 }
 
+// Актёр может быть и сотрудником (куратор/админ), и врачом (свои auth.* события) —
+// поэтому список для фильтра собирается из обоих источников, а не только из
+// directory (который знает только про персонал).
+function auditActorOptions(){
+  var seen = {}; var opts = [];
+  directory.forEach(function(p){ if(!seen[p.id]){ seen[p.id]=true; opts.push({id:p.id,name:p.name}); } });
+  staffState.students.forEach(function(s){ if(!seen[s.id]){ seen[s.id]=true; opts.push({id:s.id,name:s.name}); } });
+  opts.sort(function(a,b){ return a.name.localeCompare(b.name,"ru"); });
+  return opts;
+}
+
 function renderAuditLogTab(){
   var html = '<div class="card" style="padding:18px 20px;margin-top:6px;">' +
     '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Журнал действий персонала</b>' +
-    '<p style="font-size:12.5px;color:var(--muted);margin:0 0 16px;">Последние 100 действий. '+(me.role==="super_admin"?'Обратимые действия можно откатить — это вернёт состояние к тому, что было до изменения.':'')+'</p>';
+    '<p style="font-size:12.5px;color:var(--muted);margin:0 0 16px;">Последние 100 действий (с учётом фильтров ниже). '+(me.role==="super_admin"?'Обратимые действия можно откатить — это вернёт состояние к тому, что было до изменения.':'')+'</p>';
+
+  var actorOpts = auditActorOptions();
+  html += '<div class="dash-filters-grid" style="margin-bottom:16px;">' +
+    '<div class="dash-field" style="grid-column:span 2;"><label>Поиск</label><input class="input" id="auditSearchInput" placeholder="Кто или что" value="'+escapeHtml(auditFilters.q)+'"></div>' +
+    '<div class="dash-field"><label>Действие</label><select class="input" id="auditActionFilter" style="padding:8px 9px;font-size:12.5px;">' +
+      '<option value="">Все</option>' +
+      auditActionsList.map(function(a){ return '<option value="'+escapeHtml(a)+'"'+(auditFilters.action===a?' selected':'')+'>'+escapeHtml(auditActionLabel(a))+'</option>'; }).join('') +
+    '</select></div>' +
+    '<div class="dash-field"><label>Кто</label><select class="input" id="auditActorFilter" style="padding:8px 9px;font-size:12.5px;">' +
+      '<option value="">Все</option>' +
+      actorOpts.map(function(p){ return '<option value="'+p.id+'"'+(auditFilters.actorId===p.id?' selected':'')+'>'+escapeHtml(p.name)+'</option>'; }).join('') +
+    '</select></div>' +
+    '<div class="dash-field dash-field-period"><label>Период</label><div class="dash-period-inputs">' +
+      '<input class="input" type="date" id="auditDateFrom" value="'+escapeHtml(auditFilters.dateFrom)+'">' +
+      '<span>—</span>' +
+      '<input class="input" type="date" id="auditDateTo" value="'+escapeHtml(auditFilters.dateTo)+'">' +
+    '</div></div>' +
+    (auditFilters.q||auditFilters.action||auditFilters.actorId||auditFilters.dateFrom||auditFilters.dateTo ?
+      '<div class="dash-field" style="align-self:end;"><button class="btn btn-sm btn-ghost" data-action="reset-audit-filters">Сбросить</button></div>' : '') +
+  '</div>';
 
   if(!staffState.auditLog.length){
-    html += '<div class="empty-state"><div class="big">'+icon("clipboard","ic-lg")+'</div>Пока пусто.</div>';
+    var hasFilters = auditFilters.q||auditFilters.action||auditFilters.actorId||auditFilters.dateFrom||auditFilters.dateTo;
+    html += '<div class="empty-state"><div class="big">'+icon("clipboard","ic-lg")+'</div>'+(hasFilters?'Ничего не нашлось по этим фильтрам.':'Пока пусто.')+'</div>';
   } else {
     html += '<div style="overflow-x:auto;"><table class="roster"><thead><tr><th>Когда</th><th>Кто</th><th>Действие</th><th>Кого/чего касается</th><th></th></tr></thead><tbody>';
     staffState.auditLog.forEach(function(l){
@@ -2549,6 +2599,10 @@ function wireEvents(root){
       render(); return;
     }
     if(action==="export-dash-csv"){ exportDashboardCSV(computeFilteredStudents()); return; }
+    if(action==="reset-audit-filters"){
+      auditFilters = { q:"", action:"", actorId:"", dateFrom:"", dateTo:"" };
+      await loadAuditLog(); render(); return;
+    }
   });
 
   root.addEventListener("submit", async function(e){
@@ -2786,6 +2840,19 @@ function wireEvents(root){
     }
     if(e.target.id==="dashPeriodFrom"){ dashboardState.periodFrom=e.target.value; render(); }
     if(e.target.id==="dashPeriodTo"){ dashboardState.periodTo=e.target.value; render(); }
+    if(e.target.id==="auditSearchInput"){
+      auditFilters.q=e.target.value;
+      clearTimeout(auditSearchDebounceTimer);
+      auditSearchDebounceTimer=setTimeout(async function(){
+        await loadAuditLog(); render();
+        var s=document.getElementById("auditSearchInput"); if(s){ s.focus(); s.selectionStart=s.selectionEnd=s.value.length; }
+      }, 400);
+      return;
+    }
+    if(e.target.id==="auditActionFilter"){ auditFilters.action=e.target.value; loadAuditLog().then(render); return; }
+    if(e.target.id==="auditActorFilter"){ auditFilters.actorId=e.target.value; loadAuditLog().then(render); return; }
+    if(e.target.id==="auditDateFrom"){ auditFilters.dateFrom=e.target.value; loadAuditLog().then(render); return; }
+    if(e.target.id==="auditDateTo"){ auditFilters.dateTo=e.target.value; loadAuditLog().then(render); return; }
     if(e.target.id==="lessonWysiwygEditor"){
       // Намеренно НЕ вызываем render() на каждое нажатие — это пересобрало бы весь DOM
       // и убило курсор/выделение в contenteditable. Скрытый textarea — единственный
