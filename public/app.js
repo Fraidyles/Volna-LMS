@@ -299,6 +299,28 @@ function render(){
   wireEvents(app);
 }
 
+// Рукописный WYSIWYG на contenteditable + document.execCommand — сознательно без внешних
+// библиотек (Quill/Pell и т.п.), чтобы не тащить CDN-зависимость и гарантировать, что
+// редактор производит ровно те теги, что разрешены в sanitizeLessonHtml (src/sanitize.js).
+// targetId/hiddenId — id contenteditable-поля и синхронизированного с ним скрытого textarea,
+// значение которого реально уходит на сервер при submit формы.
+function renderWysiwygToolbar(targetId, hiddenId){
+  function btn(cmd, label, title){
+    return '<button type="button" data-action="wysiwyg-cmd" data-cmd="'+cmd+'" data-target="'+targetId+'" data-hidden="'+hiddenId+'" title="'+escapeHtml(title)+'">'+label+'</button>';
+  }
+  return '<div class="wysiwyg-toolbar">' +
+    btn("bold","<b>Ж</b>","Жирный") + btn("italic","<i>К</i>","Курсив") + btn("underline","<u>Ч</u>","Подчёркнутый") +
+    '<span class="wysiwyg-sep"></span>' +
+    btn("h3","H3","Заголовок 3 уровня") + btn("h4","H4","Заголовок 4 уровня") + btn("h5","H5","Заголовок 5 уровня") + btn("p","¶","Обычный текст") +
+    '<span class="wysiwyg-sep"></span>' +
+    btn("ul","• Список","Маркированный список") + btn("ol","1. Список","Нумерованный список") + btn("quote","❝","Цитата") +
+    '<span class="wysiwyg-sep"></span>' +
+    btn("link","Ссылка","Вставить ссылку") + btn("image","Картинка","Вставить изображение по ссылке") + btn("video","Видео","Вставить видео (iframe-embed)") + btn("hr","—","Разделитель") +
+    '<span class="wysiwyg-sep"></span>' +
+    btn("clear","Очистить","Убрать форматирование") +
+  '</div>';
+}
+
 function renderLessonEditorModal(){
   var body = '<div class="drawer-head"><b style="font-size:16px;">'+(lessonEditor.isNew?"Новый урок":"Редактирование урока")+'</b><button class="btn btn-ghost btn-sm" data-action="close-lesson-editor">Закрыть ✕</button></div>' +
     '<div class="drawer-body">';
@@ -334,8 +356,11 @@ function renderLessonEditorModal(){
         '<div class="field"><label>Заголовок урока</label><input class="input" name="title" required value="'+escapeHtml(lessonEditor.title)+'"></div>' +
         '<div class="field"><label>Длительность</label><input class="input" name="duration" value="'+escapeHtml(lessonEditor.duration)+'" placeholder="Например, 5 мин"></div>' +
         (!lessonEditor.isNew ? '<div class="field"><label>Открыть через дней после регистрации врача <span style="font-weight:400;color:var(--muted-2);">(пусто — сразу)</span></label><input class="input" type="number" min="0" id="lessonDripInput" value="'+(lessonEditor.dripDays===null||lessonEditor.dripDays===undefined?"":lessonEditor.dripDays)+'" style="max-width:120px;" placeholder="0"></div>' : '') +
-        '<div class="field"><label>Содержимое (HTML)</label><textarea class="input" name="html" required style="height:260px;font-family:monospace;font-size:12.5px;">'+escapeHtml(lessonEditor.html)+'</textarea>' +
-        '<p class="hint">Тот же формат, что и в исходном контенте: &lt;p&gt;, &lt;h4&gt;, &lt;ul&gt;&lt;li&gt;, а также видео через &lt;div class="video-wrap"&gt;&lt;iframe...&gt;. Опасные теги (script и т.п.) вырезаются автоматически.</p></div>' +
+        '<div class="field"><label>Содержимое</label>' +
+          renderWysiwygToolbar("lessonWysiwygEditor","lessonHtmlHidden") +
+          '<div class="wysiwyg-editor" id="lessonWysiwygEditor" contenteditable="true">'+(lessonEditor.html||"")+'</div>' +
+          '<textarea name="html" id="lessonHtmlHidden" required style="display:none;">'+escapeHtml(lessonEditor.html)+'</textarea>' +
+        '<p class="hint">Форматирование, списки, ссылки, изображения и видео — через панель выше. Опасные теги вырезаются автоматически при сохранении.</p></div>' +
         '<div class="err-text" id="lessonEditorError" style="display:none;"></div>' +
         '<div style="display:flex;gap:10px;">' +
           (lessonEditor.isNew
@@ -1720,6 +1745,12 @@ function wireEvents(root){
   // once per render that has happened so far (theme toggle flips twice, forms submit twice…).
   if(root.__wired) return;
   root.__wired = true;
+  // Без preventDefault здесь клик по кнопке тулбара сначала уводит фокус/выделение
+  // из contenteditable (браузер снимает Range при потере фокуса), и к моменту клика
+  // execCommand уже нечего форматировать — поэтому mousedown гасим отдельно от click.
+  root.addEventListener("mousedown", function(e){
+    if(e.target.closest('[data-action="wysiwyg-cmd"]')) e.preventDefault();
+  });
   root.addEventListener("click", async function(e){
     // Клик вне открытого поповера дашборд-фильтра закрывает его — не return,
     // чтобы клик по чему-то ещё (например, кнопке в таблице ниже) всё равно сработал.
@@ -2021,6 +2052,38 @@ function wireEvents(root){
     }
     if(action==="close-lesson-editor"){ lessonEditor.open=false; render(); return; }
     if(action==="overlay-close-lesson-editor" && !e.target.closest("[data-stop]")){ lessonEditor.open=false; render(); return; }
+    if(action==="wysiwyg-cmd"){
+      var wTarget=document.getElementById(t.getAttribute("data-target"));
+      var wHidden=document.getElementById(t.getAttribute("data-hidden"));
+      if(!wTarget) return;
+      wTarget.focus();
+      var cmd=t.getAttribute("data-cmd");
+      if(cmd==="h3"||cmd==="h4"||cmd==="h5") document.execCommand("formatBlock", false, cmd.toUpperCase());
+      else if(cmd==="p") document.execCommand("formatBlock", false, "P");
+      else if(cmd==="quote") document.execCommand("formatBlock", false, "BLOCKQUOTE");
+      else if(cmd==="ul") document.execCommand("insertUnorderedList");
+      else if(cmd==="ol") document.execCommand("insertOrderedList");
+      else if(cmd==="hr") document.execCommand("insertHorizontalRule");
+      else if(cmd==="clear") document.execCommand("removeFormat");
+      else if(cmd==="link"){
+        var url=prompt("Ссылка (полный адрес, начиная с https://):");
+        if(url && url.trim()) document.execCommand("createLink", false, url.trim());
+      }
+      else if(cmd==="image"){
+        var imgUrl=prompt("Ссылка на изображение:");
+        if(imgUrl && imgUrl.trim()) document.execCommand("insertImage", false, imgUrl.trim());
+      }
+      else if(cmd==="video"){
+        var vidUrl=prompt("Ссылка для встраивания (embed-URL, например из YouTube: «Поделиться» → «Встроить»):");
+        if(vidUrl && vidUrl.trim()){
+          var embedHtml='<div class="video-wrap"><iframe src="'+escapeHtml(vidUrl.trim())+'" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen frameborder="0"></iframe></div><p><br></p>';
+          document.execCommand("insertHTML", false, embedHtml);
+        }
+      }
+      else document.execCommand(cmd);
+      if(wHidden) wHidden.value = wTarget.innerHTML;
+      return;
+    }
     if(action==="delete-lesson"){
       if(!confirm('Удалить урок «'+t.getAttribute("data-title")+'»? Действие можно откатить в журнале.')) return;
       try{ await api("/course/lessons/"+t.getAttribute("data-id"), { method:"DELETE" }); showToast("Урок удалён"); await loadStaffData(); }
@@ -2493,6 +2556,13 @@ function wireEvents(root){
     }
     if(e.target.id==="dashPeriodFrom"){ dashboardState.periodFrom=e.target.value; render(); }
     if(e.target.id==="dashPeriodTo"){ dashboardState.periodTo=e.target.value; render(); }
+    if(e.target.id==="lessonWysiwygEditor"){
+      // Намеренно НЕ вызываем render() на каждое нажатие — это пересобрало бы весь DOM
+      // и убило курсор/выделение в contenteditable. Скрытый textarea — единственный
+      // канал, через который реальный HTML доходит до отправки формы.
+      var hidden=document.getElementById("lessonHtmlHidden");
+      if(hidden) hidden.value = e.target.innerHTML;
+    }
   });
 
   root.addEventListener("keydown", function(e){
