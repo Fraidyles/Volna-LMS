@@ -28,6 +28,8 @@ var materialsPicker = { open:false, targetId:null, targetTitle:"", search:"", se
 var scheduleModal = { open:false, lessonId:null, lessonTitle:"", search:"", selectedIds:[], applyToAll:true, unlockDate:"", schedule:[] };
 var streamChat = { open:false, streamId:null, streamName:"" };
 var notifState = { items:[], unreadCount:0 };
+var mySessionsList = [];
+var mySessionsLoaded = false;
 var notifPollTimer = null;
 var courseVisibility = {}; // {lessonId|"quiz": [uid,...]} — для вкладки «Материалы» у персонала
 var directory = []; // все сотрудники (admin+curator+super_admin) — для фильтра/назначения куратора
@@ -212,6 +214,14 @@ async function loadNotifications(){
     notifState.unreadCount = data.unreadCount;
   }catch(e){}
 }
+// «Мой профиль» → «Текущие сеансы» — грузится лениво, только когда открыли эту
+// страницу, а не при каждом входе (в отличие от чатов/уведомлений, это не бейдж).
+async function loadMySessions(){
+  try{ var d = await api("/auth/sessions"); mySessionsList = d.sessions; }
+  catch(e){ mySessionsList = []; }
+  mySessionsLoaded = true;
+}
+
 function startNotificationPolling(){
   stopNotificationPolling();
   notifPollTimer = setInterval(async function(){ await loadNotifications(); render(); }, 30000);
@@ -585,7 +595,7 @@ function renderSidebar(){
       var msgBadge = course ? (course.unreadMessages||0) : 0;
       var notifBadge = notifState.unreadCount + upcomingEventReminders().length;
       items += sidebarItem("search","search","Поиск", navKey==="search");
-      items += sidebarItem("profile","user","Мой профиль", false);
+      items += sidebarItem("profile","user","Мой профиль", navKey==="profile");
       items += sidebarItem("course","home","Обучение", navKey==="course");
       items += sidebarItem("schedule","calendar","Расписание", navKey==="schedule");
       items += sidebarItem("materials","folder","Материалы обучения", navKey==="materials");
@@ -599,7 +609,7 @@ function renderSidebar(){
     var isAdmin = me.role==="admin" || me.role==="super_admin";
     var unanswered = (staffState.inbox && staffState.inbox.unanswered) || [];
     var chatsBadge = unanswered.filter(function(r){ return !isChatMutedLocal("curator", r.id); }).length;
-    items += sidebarItem("profile","user","Мой профиль", false);
+    items += sidebarItem("profile","user","Мой профиль", snavKey==="profile");
     items += sidebarItem("students","users","Ученики", snavKey==="students");
     items += sidebarItem("calendar","calendar","Расписание", snavKey==="calendar");
     items += sidebarItem("materials","folder","Учебные материалы", snavKey==="materials");
@@ -675,6 +685,8 @@ function renderStudentShell(){
     content.appendChild(renderNotificationsPage());
   } else if(studentState.tab === "settings" && !previewMode){
     content.appendChild(renderSettingsPage());
+  } else if(studentState.tab === "profile" && !previewMode){
+    content.appendChild(renderMyProfilePage());
   } else {
     content.appendChild(renderStudentHome());
   }
@@ -1173,6 +1185,117 @@ function renderMuteOverviewCard(){
   html += '</div>';
   return html;
 }
+
+// Список отражает реальные правила доступа на бэкенде (requireRole в src/routes/*),
+// а не придуман отдельно — честная витрина того, что уже проверяется на сервере.
+function roleCapabilities(role){
+  if(role==="student"){
+    return [
+      { label:"Просматривать уроки, материалы и расписание эфиров", allowed:true },
+      { label:"Проходить итоговый тест и получать сертификат", allowed:true },
+      { label:"Писать в чат куратору и в общий чат своего потока", allowed:true },
+      { label:"Сохранять уроки в «Мои материалы» и оставлять личные заметки", allowed:true },
+      { label:"Просматривать прогресс и данные других врачей", allowed:false },
+      { label:"Редактировать уроки, тест или график их открытия", allowed:false },
+      { label:"Управлять доступом, сертификатами или ролями сотрудников", allowed:false }
+    ];
+  }
+  if(role==="curator"){
+    return [
+      { label:"Просматривать назначенных врачей и врачей без куратора", allowed:true },
+      { label:"Отвечать в чатах, продлевать/блокировать доступ, выдавать сертификаты", allowed:true },
+      { label:"Назначать график открытия уроков (индивидуально и массово)", allowed:true },
+      { label:"Приглашать новых врачей, управлять потоками и эфирами", allowed:true },
+      { label:"Редактировать содержимое уроков, тест и их порядок", allowed:false },
+      { label:"Назначать роли сотрудникам, просматривать журнал действий", allowed:false }
+    ];
+  }
+  if(role==="admin"){
+    return [
+      { label:"Всё, что доступно куратору обучения", allowed:true },
+      { label:"Редактировать уроки, тест, черновики и историю правок", allowed:true },
+      { label:"Назначать и снимать роль куратора у сотрудников", allowed:true },
+      { label:"Просматривать полный журнал действий платформы", allowed:true },
+      { label:"Откатывать действия из журнала", allowed:false },
+      { label:"Назначать роль администратора", allowed:false }
+    ];
+  }
+  return [
+    { label:"Всё, что доступно администратору", allowed:true },
+    { label:"Откатывать любые обратимые действия из журнала", allowed:true },
+    { label:"Назначать роли администратора и куратора", allowed:true },
+    { label:"Полный доступ ко всем разделам платформы", allowed:true }
+  ];
+}
+
+function renderMyProfilePage(){
+  var isStudent = me.role==="student";
+  var caps = roleCapabilities(me.role);
+  var html = '<div style="margin-top:6px;max-width:640px;">';
+
+  html += '<div class="card" style="padding:18px 20px;margin-bottom:14px;">' +
+    '<b style="font-size:14.5px;display:block;margin-bottom:14px;">Основная информация</b>' +
+    '<form id="profileEditorForm">' +
+      '<div class="field"><label>Имя и фамилия</label><input class="input" name="name" required value="'+escapeHtml(me.name||"")+'"></div>' +
+      (isStudent ? '<div class="field"><label>Специализация</label><input class="input" name="specialization" value="'+escapeHtml(me.specialization||"")+'"></div>' : '') +
+      '<div class="field"><label>Телефон</label><input class="input" type="tel" name="phone" value="'+escapeHtml(me.phone||"")+'"></div>' +
+      (isStudent ? '<div class="field"><label>Место работы</label><input class="input" name="workplace" value="'+escapeHtml(me.workplace||"")+'"></div>' : '') +
+      '<div class="field"><label>Email</label><div class="input" style="background:var(--line-2);color:var(--muted);">'+escapeHtml(me.email||"")+'</div><p class="hint">Email нельзя изменить самостоятельно — обратитесь к куратору.</p></div>' +
+      '<div class="err-text" id="profileEditorError" style="display:none;"></div>' +
+      '<button class="btn btn-primary" type="submit">Сохранить</button>' +
+    '</form>' +
+    (isStudent ? renderMyProductBlock() : '') +
+  '</div>';
+
+  html += '<div class="card" style="padding:18px 20px;margin-bottom:14px;">' +
+    '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Доступы</b>' +
+    '<p class="hint" style="margin:0 0 12px;">Что вам доступно на платформе при роли «'+escapeHtml(roleLabel(me.role))+'», а что нет.</p>';
+  caps.forEach(function(c){
+    html += '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line-2);">' +
+      '<span style="width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;background:'+(c.allowed?'var(--status-active)':'var(--line-2)')+';">'+(c.allowed?icon("check","ic-sm"):'')+'</span>' +
+      '<span style="font-size:13px;'+(c.allowed?'':'color:var(--muted);')+'">'+escapeHtml(c.label)+'</span>' +
+    '</div>';
+  });
+  html += '</div>';
+
+  html += '<div class="card" style="padding:18px 20px;margin-bottom:14px;">' +
+    '<b style="font-size:14.5px;display:block;margin-bottom:14px;">Безопасность</b>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line-2);">' +
+      '<span style="font-size:13.5px;">Тема оформления</span>' +
+      '<button class="btn btn-sm btn-ghost" data-action="toggle-theme">'+icon(getTheme()==="dark"?"sun":"moon")+(getTheme()==="dark"?"Светлая":"Тёмная")+'</button>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;">' +
+      '<span style="font-size:13.5px;">Пароль</span>' +
+      '<button class="btn btn-sm btn-ghost" data-action="open-change-password">Сменить пароль</button>' +
+    '</div>' +
+  '</div>';
+
+  html += renderMuteOverviewCard();
+
+  html += '<div class="card" style="padding:18px 20px;margin-top:14px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
+      '<b style="font-size:14.5px;">Текущие сеансы</b>' +
+      '<button class="btn btn-sm btn-ghost" data-action="logout-everywhere">Выйти со всех устройств</button>' +
+    '</div>' +
+    '<p class="hint" style="margin:0 0 12px;">С каких устройств и когда входили в аккаунт.</p>';
+  if(!mySessionsLoaded){
+    html += '<p style="font-size:12.5px;color:var(--muted);">Загрузка…</p>';
+  } else if(!mySessionsList.length){
+    html += '<p style="font-size:12.5px;color:var(--muted);">Сеансов пока нет.</p>';
+  } else {
+    mySessionsList.forEach(function(s){
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line-2);flex-wrap:wrap;gap:6px;">' +
+        '<span style="font-size:13px;">'+escapeHtml(s.device)+'</span>' +
+        '<span style="font-size:12px;color:var(--muted);font-family:var(--mono);">'+escapeHtml(s.ip||"—")+' · '+fmtDate(s.createdAt)+' '+fmtTime(s.createdAt)+'</span>' +
+      '</div>';
+    });
+  }
+  html += '</div>';
+
+  html += '</div>';
+  return el(html);
+}
+
 function renderSettingsPage(){
   var isDark = getTheme()==="dark";
   var html = '<div style="margin-top:6px;max-width:520px;">' +
@@ -1223,6 +1346,8 @@ function renderStaffShell(){
     content.appendChild(renderStaffNotificationsPage());
   } else if(staffState.mainTab === "settings"){
     content.appendChild(renderSettingsPage());
+  } else if(staffState.mainTab === "profile"){
+    content.appendChild(renderMyProfilePage());
   } else {
     content.appendChild(renderInboxCard());
     content.appendChild(renderStaffStats());
@@ -2392,7 +2517,7 @@ function wireEvents(root){
 
     if(action==="go-register"){ view="register"; render(); return; }
     if(action==="go-login"){ view="login"; render(); return; }
-    if(action==="logout"){ stopNotificationPolling(); await api("/auth/logout", { method:"POST" }); me=null; course=null; view="login"; render(); return; }
+    if(action==="logout"){ stopNotificationPolling(); await api("/auth/logout", { method:"POST" }); me=null; course=null; view="login"; mySessionsList=[]; mySessionsLoaded=false; render(); return; }
     if(action==="toggle-theme"){ toggleTheme(); render(); return; }
     if(action==="mark-notif-read"){
       var nid=t.getAttribute("data-id");
@@ -2441,7 +2566,13 @@ function wireEvents(root){
     }
     if(action==="sidebar-nav"){
       var navKey = t.getAttribute("data-key");
-      if(navKey==="profile"){ profileEditor.open=true; render(); return; }
+      if(navKey==="profile"){
+        if(view==="student"){ studentState.tab="profile"; studentState.navKey="profile"; }
+        else { staffState.mainTab="profile"; staffState.navKey="profile"; }
+        render();
+        loadMySessions().then(render);
+        return;
+      }
       if(view==="student"){
         if(navKey==="search"){ studentState.materialsAutoFocus=true; await applyStudentTab("materials","search"); return; }
         if(navKey==="materials"){ studentState.materialsAutoFocus=false; await applyStudentTab("materials","materials"); return; }
