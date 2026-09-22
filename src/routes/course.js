@@ -149,18 +149,25 @@ router.post("/lesson-done", authRequired, requireRole("student"), async (req, re
   const lock = computeLocked(pr);
   if (lock.locked) return res.status(403).json({ error: "access_locked", message: "Доступ к курсу ограничен" });
 
+  // Урок обязательно должен принадлежать ИМЕННО курсу этого врача — иначе
+  // (lessonRow.rowCount===0 для несуществующего/чужого id) проверка дрип-лока
+  // ниже просто пропускалась бы, и любая произвольная строка в теле запроса
+  // молча попадала бы в completed_lessons, раздувая счёт "N / total уроков"
+  // и очки геймификации без реального прохождения урока.
+  const lessonRow = await pool.query("SELECT drip_days FROM lessons WHERE id=$1 AND course_id=$2", [lessonId, pr.course_id]);
+  if (!lessonRow.rowCount) return res.status(404).json({ error: "not_found", message: "Урок не найден в этом курсе" });
+
   const hiddenFor = await getHiddenForMap(pr.course_id);
   if ((hiddenFor[lessonId] || []).indexOf(req.user.id) !== -1) {
     return res.status(403).json({ error: "content_hidden", message: "Этот урок временно недоступен" });
   }
 
-  const lessonRow = await pool.query("SELECT drip_days FROM lessons WHERE id=$1", [lessonId]);
   const overrideRow = await pool.query(
     "SELECT unlock_at FROM lesson_schedule_overrides WHERE student_id=$1 AND lesson_id=$2",
     [req.user.id, lessonId]
   );
   const overrideUnlockAt = overrideRow.rowCount ? overrideRow.rows[0].unlock_at : null;
-  if (lessonRow.rowCount && computeLessonLock(lessonRow.rows[0], pr, overrideUnlockAt).locked) {
+  if (computeLessonLock(lessonRow.rows[0], pr, overrideUnlockAt).locked) {
     return res.status(403).json({ error: "content_drip_locked", message: "Этот урок ещё не открылся" });
   }
 

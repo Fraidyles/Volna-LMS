@@ -60,8 +60,17 @@ app.get("/health", (req, res) => res.json({ ok: true }));
 // Отдаём собранный фронтенд как статику того же сервера
 app.use(express.static(path.join(__dirname, "..", "public")));
 
-// Единая ошибка для необработанных сбоев — чтобы не ронять процесс и не светить стек в ответе
+// Единая ошибка для необработанных сбоев — чтобы не ронять процесс и не светить стек в ответе.
+// Ошибки самого body-parser (битый JSON, слишком большое тело) — это ошибка КЛИЕНТА,
+// а не сервера: до этого места они тоже падали в общий 500 и засоряли лог реальных
+// сбоев обычными опечатками в запросах, плюс сами клиенты получали неверный код ответа.
 app.use((err, req, res, next) => {
+  if (err.type === "entity.too.large" || err.status === 413) {
+    return res.status(413).json({ error: "payload_too_large", message: "Слишком большой запрос" });
+  }
+  if (err.type === "entity.parse.failed" || (err instanceof SyntaxError && "body" in err)) {
+    return res.status(400).json({ error: "invalid_json", message: "Некорректный формат запроса" });
+  }
   console.error("Необработанная ошибка:", err);
   res.status(500).json({ error: "internal_error", message: "Что-то пошло не так на сервере" });
 });

@@ -198,6 +198,16 @@ router.patch("/students/:id/payment", authRequired, requireRole("curator", "admi
 
 router.patch("/students/:id/curator", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
   const curatorId = (req.body && req.body.curatorId) || null;
+  // Без этой проверки строка проходила прямиком в UPDATE: несуществующий id ронял
+  // запрос 500-й (нарушение внешнего ключа), а id самого врача или другого врача
+  // тихо принимался бы, "назначая" куратором не сотрудника.
+  if (curatorId) {
+    const target = await pool.query(
+      "SELECT id FROM users WHERE id=$1 AND role IN ('curator','admin','super_admin')",
+      [curatorId]
+    );
+    if (!target.rowCount) return res.status(400).json({ error: "invalid_input", message: "Такого куратора не существует" });
+  }
   await pool.query("UPDATE users SET assigned_curator_id=$1 WHERE id=$2 AND role='student'", [curatorId, req.params.id]);
   res.json({ ok: true });
 });

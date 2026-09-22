@@ -19,6 +19,26 @@ describe("Права доступа персонала", () => {
     expect(Array.isArray(res.body.students)).toBe(true);
   });
 
+  test("PATCH /students/:id/curator отклоняет несуществующий и не-кураторский id (без 500 и без порчи данных)", async () => {
+    const curator = await createUser({ role: "curator" });
+    const cookie = await loginAs(curator);
+    const student = await createUser({ role: "student" });
+
+    const garbage = await request(app).patch(`/api/staff/students/${student.id}/curator`).set("Cookie", cookie)
+      .send({ curatorId: "no-such-id" });
+    expect(garbage.status).toBe(400);
+
+    // id самого врача не должен приниматься как id куратора — это не сотрудник.
+    const selfAsCurator = await request(app).patch(`/api/staff/students/${student.id}/curator`).set("Cookie", cookie)
+      .send({ curatorId: student.id });
+    expect(selfAsCurator.status).toBe(400);
+
+    const another = await createUser({ role: "curator" });
+    const ok = await request(app).patch(`/api/staff/students/${student.id}/curator`).set("Cookie", cookie)
+      .send({ curatorId: another.id });
+    expect(ok.status).toBe(200);
+  });
+
   test("список учеников включает quiz_answers — нужно для повопросной аналитики дашборда", async () => {
     const course = await seedCourse();
     const student = await createUser({ role: "student", courseId: course.courseId });

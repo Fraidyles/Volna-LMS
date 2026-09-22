@@ -26,6 +26,19 @@ describe("Курс врача", () => {
     expect(res.body.completedLessons).toContain(course.lessonIds[0]);
   });
 
+  test("lesson-done с несуществующим id урока — 404, а не молчаливое зачисление очков", async () => {
+    const user = await createUser({ role: "student", courseId: course.courseId });
+    const cookie = await loginAs(user);
+    const res = await request(app).post("/api/course/lesson-done").set("Cookie", cookie)
+      .send({ lessonId: "no-such-lesson-id" });
+    expect(res.status).toBe(404);
+
+    // Подделанный id не должен был попасть в completed_lessons — иначе счётчик
+    // "N / total уроков" на главной врача мог бы показать N больше total.
+    const after = await request(app).get("/api/course").set("Cookie", cookie);
+    expect(after.body.progress.completed_lessons).not.toContain("no-such-lesson-id");
+  });
+
   test("балл теста считается на сервере — подделать через клиент нельзя", async () => {
     const user = await createUser({ role: "student", courseId: course.courseId });
     const cookie = await loginAs(user);

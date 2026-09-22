@@ -4,7 +4,11 @@ const pool = require("./db");
 // за ним, либо ещё ни за кем не закреплены (свежие регистрации) — не всеми
 // подряд. Админы/супер-админы этим ограничением не связаны.
 async function canManageStudent(actor, studentId) {
-  if (actor.role !== "curator") return true;
+  // Явный список ролей, а не просто "не куратор" — вызывающий код сейчас всегда
+  // проверяет role!=="student" перед вызовом, но эта функция не должна полагаться
+  // на дисциплину всех будущих вызовов: врач не должен получить true в обход этой проверки.
+  if (actor.role === "admin" || actor.role === "super_admin") return true;
+  if (actor.role !== "curator") return false;
   const row = await pool.query("SELECT assigned_curator_id FROM users WHERE id=$1 AND role='student'", [studentId]);
   if (!row.rowCount) return false;
   const assignedTo = row.rows[0].assigned_curator_id;

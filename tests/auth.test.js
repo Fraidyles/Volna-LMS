@@ -141,6 +141,28 @@ describe("Аутентификация", () => {
     expect(res.status).toBe(401);
   });
 
+  test("смена роли сотрудника мгновенно отзывает права по старой cookie (не нужно ждать реloginа)", async () => {
+    const superAdmin = await createUser({ role: "super_admin" });
+    const admin = await createUser({ role: "admin" });
+    const adminCookie = await loginAs(admin);
+    const superCookie = await loginAs(superAdmin);
+
+    // До понижения — старая cookie видит admin-only журнал действий.
+    const before = await request(app).get("/api/staff/audit-log").set("Cookie", adminCookie);
+    expect(before.status).toBe(200);
+
+    await request(app).patch(`/api/staff/team/${admin.id}/role`).set("Cookie", superCookie).send({ role: "curator" });
+
+    // ТА ЖЕ cookie, без повторного входа — доступ к admin-only ручке должен пропасть немедленно,
+    // потому что роль в req.user теперь читается из базы, а не из старого JWT.
+    const after = await request(app).get("/api/staff/audit-log").set("Cookie", adminCookie);
+    expect(after.status).toBe(403);
+
+    // Но curator-доступные ручки той же cookie по-прежнему открыты — сессия не отозвана целиком.
+    const stillWorks = await request(app).get("/api/staff/students").set("Cookie", adminCookie);
+    expect(stillWorks.status).toBe(200);
+  });
+
   test("rate limit: много неудачных попыток входа подряд блокируются 429", async () => {
     const email = `ratelimit.${Date.now()}@example.com`;
     let last;

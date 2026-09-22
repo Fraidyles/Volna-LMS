@@ -37,12 +37,25 @@ router.delete("/streams/:id", authRequired, requireRole("curator", "admin", "sup
 
 /* ---------- Прямые эфиры ---------- */
 
+// Врач видит общие эфиры (без потока) и эфиры своего потока — не все подряд:
+// раньше фильтр по потоку был только на фронтенде, а сам API отдавал join_url
+// и остальные детали чужих потоковых эфиров любому авторизованному врачу.
+// Персонал управляет календарём целиком, поэтому видит всё без ограничений.
 router.get("/events", authRequired, async (req, res) => {
+  const isStaff = req.user.role === "curator" || req.user.role === "admin" || req.user.role === "super_admin";
+  let scopeClause = "";
+  let params = [];
+  if (!isStaff) {
+    const me = await pool.query("SELECT stream_id FROM users WHERE id=$1", [req.user.id]);
+    const mySid = me.rowCount ? me.rows[0].stream_id : null;
+    scopeClause = "WHERE stream_id IS NULL OR stream_id = $1";
+    params = [mySid];
+  }
   const result = await pool.query(`
     SELECT id, title, to_char(event_date,'YYYY-MM-DD') AS event_date, event_time, duration_min, speaker,
            stream_id, join_url, description, created_by, recurrence_group_id, recurrence
-    FROM events ORDER BY event_date, event_time
-  `);
+    FROM events ${scopeClause} ORDER BY event_date, event_time
+  `, params);
   res.json({ events: result.rows });
 });
 
