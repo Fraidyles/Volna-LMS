@@ -21,7 +21,7 @@ var me = null;                 // текущий пользователь {id,em
 var view = "loading";
 var course = null;             // {course, lessons, quiz, progress} — для врача
 var studentState = { tab:"course", navKey:"course", lessonIndex:0, quizMode:false, quizSubmitted:false, messagesSubTab:"curator", materialsSearch:"", materialsFilter:"all", materialsAutoFocus:false };
-var staffState = { mainTab:"students", navKey:"students", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],unanswered:[],pendingCertificates:[]} };
+var staffState = { mainTab:"home", navKey:"home", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],unanswered:[],pendingCertificates:[]}, digest:null };
 var profileEditor = { open:false };
 var calendarState = { monthDate:new Date(), streams:[], events:[], showStreamForm:false, eventModalMode:null, eventModalDate:null, eventModalId:null, recurring:false };
 var materialsPicker = { open:false, targetId:null, targetTitle:"", search:"", selectedIds:[] };
@@ -271,6 +271,9 @@ async function loadStaffData(){
   try{
     var ibx = await api("/staff/inbox");
     staffState.inbox = ibx;
+  }catch(e){}
+  try{
+    staffState.digest = await api("/staff/daily-digest");
   }catch(e){}
   if(me.role==="admin" || me.role==="super_admin"){
     try{
@@ -610,6 +613,7 @@ function renderSidebar(){
     var unanswered = (staffState.inbox && staffState.inbox.unanswered) || [];
     var chatsBadge = unanswered.filter(function(r){ return !isChatMutedLocal("curator", r.id); }).length;
     items += sidebarItem("profile","user","Мой профиль", snavKey==="profile");
+    items += sidebarItem("home","home","Главная", snavKey==="home");
     items += sidebarItem("students","users","Ученики", snavKey==="students");
     items += sidebarItem("calendar","calendar","Расписание", snavKey==="calendar");
     items += sidebarItem("materials","folder","Учебные материалы", snavKey==="materials");
@@ -1384,11 +1388,13 @@ function renderStaffShell(){
     content.appendChild(renderSettingsPage());
   } else if(staffState.mainTab === "profile"){
     content.appendChild(renderMyProfilePage());
-  } else {
+  } else if(staffState.mainTab === "students"){
     content.appendChild(renderInboxCard());
     content.appendChild(renderStaffStats());
     content.appendChild(renderCertificateQueue());
     content.appendChild(renderRoster());
+  } else {
+    renderStaffHome(content);
   }
 
   if(staffState.selectedStudentId){
@@ -1450,6 +1456,87 @@ function renderStaffNotificationsPage(){
   }
   html += '</div></div>';
   return el(html);
+}
+
+// Главная куратора/администратора: сводка по потокам в зоне ответственности,
+// задачи на сегодня (переиспользует уже существующий renderInboxCard), короткие
+// окна уведомлений/сообщений (как на главной врача) и дайджест-«ИИ-ассистент»
+// за вчера (детерминированный шаблон из src/dailyDigest.js, не LLM-вызов —
+// см. комментарий в самом dailyDigest.js).
+function renderStaffHome(container){
+  var totalLessons = (staffState.materials||[]).length || 1;
+  var students = staffState.students || [];
+  var byStream = {};
+  students.forEach(function(s){
+    var key = s.stream_id || "__none";
+    (byStream[key] = byStream[key] || []).push(s);
+  });
+  var streamKeys = Object.keys(byStream);
+
+  var streamsHtml = '<b style="font-size:14.5px;display:block;margin-bottom:10px;">Ваши потоки</b>';
+  if(!streamKeys.length){
+    streamsHtml += '<div class="card empty-state" style="padding:24px 20px;">В вашей зоне ответственности пока нет врачей.</div>';
+  } else {
+    streamsHtml += '<div class="board-strip">';
+    streamKeys.forEach(function(key){
+      var list = byStream[key];
+      var stream = calendarState.streams.find(function(x){ return x.id===key; });
+      var name = stream ? stream.name : "Без потока";
+      var activeCount = list.filter(function(s){ return (s.completed_lessons||[]).length>0 && !s.completed; }).length;
+      var avgPct = Math.round(list.reduce(function(sum,s){ return sum + Math.min(100, Math.round(((s.completed_lessons||[]).length/totalLessons)*100)); },0) / list.length);
+      streamsHtml += '<div class="card" style="padding:18px;">' +
+        '<b style="font-size:13.5px;display:block;margin-bottom:8px;">'+escapeHtml(name)+'</b>' +
+        '<div style="font-family:var(--display);font-weight:800;font-size:22px;">'+list.length+'</div>' +
+        '<span style="font-size:12px;color:var(--muted);">врачей · '+activeCount+' активных</span>' +
+        '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2);font-size:12.5px;color:var(--muted);">Средний прогресс: '+avgPct+'%</div>' +
+      '</div>';
+    });
+    streamsHtml += '</div>';
+  }
+  container.appendChild(el('<div style="margin-top:6px;">'+streamsHtml+'</div>'));
+
+  var inbox = staffState.inbox || {inactive:[],unanswered:[],pendingCertificates:[]};
+  var totalTasks = inbox.inactive.length + inbox.unanswered.length + inbox.pendingCertificates.length;
+  container.appendChild(el('<b style="font-size:14.5px;display:block;margin:20px 0 10px;">Задачи на сегодня</b>'));
+  if(totalTasks) container.appendChild(renderInboxCard());
+  else container.appendChild(el('<div class="card empty-state" style="padding:24px 20px;">На сегодня задач нет.</div>'));
+
+  var reminders = upcomingEventReminders();
+  var unmutedUnanswered = inbox.unanswered.filter(function(r){ return !isChatMutedLocal("curator", r.id); });
+  var gridHtml = '<div class="grid-2" style="margin-top:20px;">';
+  gridHtml += '<div class="card" style="padding:18px 20px;">' +
+    '<b style="font-size:14px;display:block;margin-bottom:10px;">Уведомления</b>';
+  if(!reminders.length){
+    gridHtml += '<p style="font-size:13px;color:var(--muted);margin:0;">У вас нет новых уведомлений.</p>';
+  } else {
+    reminders.slice(0,3).forEach(function(n){
+      gridHtml += '<div style="padding:8px 0;border-bottom:1px solid var(--line-2);"><b style="font-size:12.5px;display:block;">'+escapeHtml(n.title)+'</b></div>';
+    });
+  }
+  gridHtml += '</div>';
+  gridHtml += '<div class="card" style="padding:18px 20px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
+      '<b style="font-size:14px;">Сообщения</b>' +
+      (unmutedUnanswered.length ? '<button class="btn btn-sm btn-ghost" data-action="sidebar-nav" data-key="chats">Все →</button>' : '') +
+    '</div>';
+  if(!unmutedUnanswered.length){
+    gridHtml += '<p style="font-size:13px;color:var(--muted);margin:0;">У вас нет новых сообщений.</p>';
+  } else {
+    gridHtml += '<p style="font-size:13px;margin:0;">Ждут ответа: '+unmutedUnanswered.length+'.</p>';
+  }
+  gridHtml += '</div></div>';
+  container.appendChild(el(gridHtml));
+
+  var d = staffState.digest;
+  var digestHtml = '<div class="card" style="padding:18px 20px;margin-top:20px;max-width:640px;">' +
+    '<b style="font-size:14px;display:block;margin-bottom:10px;">ИИ-ассистент — отчёт за вчера</b>';
+  if(!d){
+    digestHtml += '<p style="font-size:13px;color:var(--muted);margin:0;">Формируется каждый день в 9:00 по МСК.</p>';
+  } else {
+    digestHtml += '<p style="font-size:13.5px;margin:0;line-height:1.5;">'+escapeHtml(d.summary)+'</p>';
+  }
+  digestHtml += '</div>';
+  container.appendChild(el(digestHtml));
 }
 
 function renderCalendarTab(){
