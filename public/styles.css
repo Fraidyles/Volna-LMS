@@ -409,8 +409,14 @@ table.roster tbody tr:hover{background:var(--surface-2);}
 .status-chip.new{color:var(--muted-2);}
 
 /* ---------------- Drawer / overlay ---------------- */
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;display:flex;justify-content:flex-end;}
-.drawer{width:min(560px,100%);background:var(--bg);height:100%;overflow-y:auto;box-shadow:var(--shadow-lift);border-left:var(--border-hairline);}
+/* Задник и панель — отдельные элементы с разным темпом (панель чуть медленнее
+   задника), так открытие читается как единое, но не синхронное движение —
+   как в большинстве нативных UI. Один и тот же .overlay/.drawer используется
+   всеми ~20 модалками приложения, так что анимация подхватывается везде сама. */
+@keyframes overlayFadeIn{0%{opacity:0;}100%{opacity:1;}}
+@keyframes drawerSlideIn{0%{opacity:0;transform:translateX(28px);}100%{opacity:1;transform:translateX(0);}}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;display:flex;justify-content:flex-end;animation:overlayFadeIn .18s ease both;}
+.drawer{width:min(560px,100%);background:var(--bg);height:100%;overflow-y:auto;box-shadow:var(--shadow-lift);border-left:var(--border-hairline);animation:drawerSlideIn .28s cubic-bezier(.16,1,.3,1) both;}
 .drawer-head{padding:22px 24px;border-bottom:var(--border-hairline);display:flex;justify-content:space-between;align-items:flex-start;position:sticky;top:0;background:var(--bg);}
 .drawer-body{padding:22px 24px;}
 
@@ -432,7 +438,8 @@ table.roster tbody tr:hover{background:var(--surface-2);}
 
 .empty-state{text-align:center;padding:60px 20px;color:var(--muted);}
 .empty-state .big{margin-bottom:14px;display:flex;justify-content:center;color:var(--muted-2);}
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--surface);border:var(--border-hairline);color:var(--ink);padding:11px 18px;border-radius:var(--radius-s);font-size:13.5px;font-weight:500;z-index:99;box-shadow:var(--shadow-lift);}
+@keyframes toastIn{0%{opacity:0;transform:translate(-50%,8px);}100%{opacity:1;transform:translate(-50%,0);}}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--surface);border:var(--border-hairline);color:var(--ink);padding:11px 18px;border-radius:var(--radius-s);font-size:13.5px;font-weight:500;z-index:99;box-shadow:var(--shadow-lift);animation:toastIn .22s cubic-bezier(.16,1,.3,1) both;}
 .err-text{color:var(--danger);font-size:13px;margin:-8px 0 14px;}
 .hint{font-size:12.5px;color:var(--muted-2);margin-top:6px;}
 
