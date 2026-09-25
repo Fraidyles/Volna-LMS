@@ -2,7 +2,12 @@ const request = require("supertest");
 const { app, pool, seedCourse, createUser, loginAs } = require("./helpers");
 
 let course;
-beforeAll(async () => { course = await seedCourse(); });
+beforeAll(async () => {
+  course = await seedCourse();
+  // Этот файл проверяет сами уведомления, а не факт того, включена ли выдача
+  // сертификатов на курсе (см. courses.certificates_enabled) — включаем сразу.
+  await pool.query("UPDATE courses SET certificates_enabled=true");
+});
 afterAll(async () => { await pool.end(); });
 
 describe("Центр уведомлений", () => {

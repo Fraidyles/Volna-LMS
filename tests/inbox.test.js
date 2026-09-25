@@ -86,6 +86,9 @@ describe("Инбокс куратора «требует внимания»", ()
   });
 
   test("завершивший тест, но без выданного сертификата — в pendingCertificates", async () => {
+    // Сигнал считается только если у курса включена выдача сертификатов
+    // (см. courses.certificates_enabled) — на демо-курсе по умолчанию выключено.
+    await pool.query("UPDATE courses SET certificates_enabled=true");
     const student = await createUser({ role: "student", courseId: course.courseId });
     await pool.query("UPDATE progress SET completed=true, quiz_score=80, certificate_status='pending' WHERE user_id=$1", [student.id]);
 
@@ -94,6 +97,17 @@ describe("Инбокс куратора «требует внимания»", ()
     const res = await request(app).get("/api/staff/inbox").set("Cookie", cookie);
     const ids = res.body.pendingCertificates.map((r) => r.id);
     expect(ids).toContain(student.id);
+  });
+
+  test("сертификаты выключены на курсе — pendingCertificates всегда пуст (не висит вечной ложной тревогой)", async () => {
+    await pool.query("UPDATE courses SET certificates_enabled=false");
+    const student = await createUser({ role: "student", courseId: course.courseId });
+    await pool.query("UPDATE progress SET completed=true, quiz_score=80, certificate_status='pending' WHERE user_id=$1", [student.id]);
+
+    const staff = await createUser({ role: "super_admin" });
+    const cookie = await loginAs(staff);
+    const res = await request(app).get("/api/staff/inbox").set("Cookie", cookie);
+    expect(res.body.pendingCertificates).toEqual([]);
   });
 
   test("куратор видит в инбоксе только своих + неназначенных врачей", async () => {

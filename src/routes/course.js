@@ -111,7 +111,7 @@ router.get("/", authRequired, requireRole("student"), async (req, res) => {
   // heartbeat с фронтенда, пока вкладка открыта (см. PUT /heartbeat и POST /offline ниже).
   pool.query("UPDATE progress SET last_seen_at=now(), is_online=true WHERE user_id=$1", [req.user.id]).catch(() => {});
 
-  const course = await pool.query("SELECT id, title FROM courses WHERE id=$1", [pr.course_id]);
+  const course = await pool.query("SELECT id, title, certificates_enabled FROM courses WHERE id=$1", [pr.course_id]);
   if (!course.rowCount) return res.status(404).json({ error: "no_course" });
   const courseId = course.rows[0].id;
 
@@ -189,7 +189,7 @@ router.get("/", authRequired, requireRole("student"), async (req, res) => {
   const bookmarks = await pool.query("SELECT lesson_id FROM student_bookmarks WHERE user_id=$1", [req.user.id]);
 
   res.json({
-    course: course.rows[0],
+    course: { id: course.rows[0].id, title: course.rows[0].title, certificatesEnabled: course.rows[0].certificates_enabled },
     lessons: lessonsOut,
     modules: modulesOut,
     moduleFeedbackGiven: moduleFeedbackGiven.rows.map((r) => r.module_id),
@@ -425,6 +425,10 @@ router.post(
   requireRole("curator", "admin", "super_admin"),
   requireStudentScope("studentId"),
   async (req, res) => {
+    const courseFlag = await pool.query("SELECT certificates_enabled FROM courses LIMIT 1");
+    if (!courseFlag.rowCount || !courseFlag.rows[0].certificates_enabled) {
+      return res.status(403).json({ error: "certificates_disabled", message: "Сертификаты пока не выдаются (демо-курс)" });
+    }
     const before = await pool.query(
       "SELECT certificate_status, certificate_issued_at, certificate_issued_by, certificate_number FROM progress WHERE user_id=$1",
       [req.params.studentId]
@@ -455,6 +459,10 @@ router.post(
 // Массовая выдача — тот же путь, что и у одиночной выдачи, просто в цикле по списку
 // (каждая выдача логируется отдельной записью, чтобы откат остался точечным).
 router.post("/certificate/bulk-issue", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+  const courseFlag = await pool.query("SELECT certificates_enabled FROM courses LIMIT 1");
+  if (!courseFlag.rowCount || !courseFlag.rows[0].certificates_enabled) {
+    return res.status(403).json({ error: "certificates_disabled", message: "Сертификаты пока не выдаются (демо-курс)" });
+  }
   const ids = (req.body && req.body.studentIds) || [];
   if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "invalid_input" });
   const scopedIds = await filterToScope(req.user, ids);
@@ -514,13 +522,13 @@ router.get("/certificate/download", authRequired, requireRole("student"), async 
 /* ---------- Видимость материалов по врачам ---------- */
 
 router.get("/materials", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
-  const course = await pool.query("SELECT id, title FROM courses LIMIT 1");
+  const course = await pool.query("SELECT id, title, certificates_enabled FROM courses LIMIT 1");
   if (!course.rowCount) return res.json({ lessons: [] });
   const lessons = await pool.query(
     "SELECT id, idx, title, has_draft, drip_days FROM lessons WHERE course_id=$1 ORDER BY idx",
     [course.rows[0].id]
   );
-  res.json({ lessons: lessons.rows });
+  res.json({ lessons: lessons.rows, certificatesEnabled: course.rows[0].certificates_enabled });
 });
 
 router.get("/visibility", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {

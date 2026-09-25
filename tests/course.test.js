@@ -429,7 +429,31 @@ describe("Курс врача", () => {
     expect(getRes2.body.progress.lesson_notes[course.lessonIds[0]]).toBeUndefined();
   });
 
+  // Текущий (демо) курс по умолчанию certificates_enabled=false — эта проверка
+  // должна идти РАНЬШЕ остальных тестов на сертификаты в этом файле, иначе они уже
+  // включат флаг. Обновляем ВСЕ строки courses (а не одну через LIMIT 1) — в тестах
+  // их накапливается несколько (каждый файл сеет свой курс), и сам маршрут читает
+  // флаг через "SELECT ... LIMIT 1" без ORDER BY: после UPDATE именно найденной по
+  // LIMIT 1 строки её физическая позиция в куче может измениться (MVCC), и следующий
+  // такой же запрос вернёт уже другую, непроставленную строку. В проде это не имеет
+  // значения — там курс всегда ровно один.
+  test("выдача сертификата заблокирована, пока courses.certificates_enabled=false (демо-курс)", async () => {
+    await pool.query("UPDATE courses SET certificates_enabled=false");
+    const student = await createUser({ role: "student", courseId: course.courseId });
+    await pool.query("UPDATE progress SET completed=true WHERE user_id=$1", [student.id]);
+
+    const admin = await createUser({ role: "super_admin" });
+    const cookie = await loginAs(admin);
+    const res = await request(app).post(`/api/course/certificate/${student.id}/issue`).set("Cookie", cookie);
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe("certificates_disabled");
+
+    const check = await pool.query("SELECT certificate_status FROM progress WHERE user_id=$1", [student.id]);
+    expect(check.rows[0].certificate_status).not.toBe("issued");
+  });
+
   test("массовая выдача сертификатов — только тем, кто сдал тест", async () => {
+    await pool.query("UPDATE courses SET certificates_enabled=true");
     const passed = await createUser({ role: "student", courseId: course.courseId });
     const notPassed = await createUser({ role: "student", courseId: course.courseId });
     await pool.query("UPDATE progress SET completed=true, certificate_status='pending' WHERE user_id=$1", [passed.id]);
@@ -446,6 +470,7 @@ describe("Курс врача", () => {
   });
 
   test("сертификат: скачивание недоступно до выдачи, доступно и стабильно после", async () => {
+    await pool.query("UPDATE courses SET certificates_enabled=true");
     const student = await createUser({ role: "student", courseId: course.courseId });
     const studentCookie = await loginAs(student);
 

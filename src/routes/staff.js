@@ -516,13 +516,20 @@ router.get("/inbox", authRequired, requireRole("curator", "admin", "super_admin"
     r.from_role === "student" && new Date(r.created_at) < new Date(Date.now() - 24 * 3600 * 1000)
   );
 
-  const pendingCert = await pool.query(
-    `SELECT u.id, u.name, u.email, p.quiz_score, p.certificate_status
-     FROM users u JOIN progress p ON p.user_id = u.id
-     WHERE u.role='student' AND p.completed=true AND p.certificate_status != 'issued' ${scopeClause}
-     ORDER BY u.name`,
-    scopeParams
-  );
+  // Пока сертификаты на курсе выключены (см. courses.certificates_enabled), этот сигнал
+  // не считаем вовсе — иначе каждый прошедший демо-курс врач вечно висел бы в инбоксе
+  // как "требует внимания", хотя выдавать ему на самом деле нечего.
+  const courseFlag = await pool.query("SELECT certificates_enabled FROM courses LIMIT 1");
+  const certsOn = courseFlag.rowCount && courseFlag.rows[0].certificates_enabled;
+  const pendingCert = certsOn
+    ? await pool.query(
+        `SELECT u.id, u.name, u.email, p.quiz_score, p.certificate_status
+         FROM users u JOIN progress p ON p.user_id = u.id
+         WHERE u.role='student' AND p.completed=true AND p.certificate_status != 'issued' ${scopeClause}
+         ORDER BY u.name`,
+        scopeParams
+      )
+    : { rows: [] };
 
   res.json({
     inactive: inactive.rows,

@@ -2,7 +2,13 @@ const request = require("supertest");
 const { app, pool, seedCourse, createUser, loginAs } = require("./helpers");
 
 let course;
-beforeAll(async () => { course = await seedCourse(); });
+beforeAll(async () => {
+  course = await seedCourse();
+  // Этот файл проверяет скоуп куратора на самой выдаче сертификата, а не факт того,
+  // включена ли она на курсе, — поэтому включаем сразу (иначе выдача 403-илась бы
+  // ещё до проверки скоупа, см. courses.certificates_enabled).
+  await pool.query("UPDATE courses SET certificates_enabled=true");
+});
 afterAll(async () => { await pool.end(); });
 
 async function assignCurator(studentId, curatorId) {

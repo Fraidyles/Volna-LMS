@@ -25,7 +25,7 @@ var studentState = { tab:"course", navKey:"course", lessonIndex:0, quizMode:fals
   lessonStage:"intro", videoEnded:false, lessonQuizAnswers:{}, lessonQuizResult:null, protocolsLoaded:false,
   // Гейт после последнего урока модуля: null | "quiz" | "feedback".
   moduleGateStage:null, moduleGateId:null, moduleQuizResult:null, moduleFeedbackRating:0, moduleFeedbackComment:"" };
-var staffState = { mainTab:"home", navKey:"home", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],unanswered:[],pendingCertificates:[]}, digest:null, chatTemplates:[], inviteCode:null, editSpecializationIds:[], editName:"", editPhone:"", editWorkplace:"" };
+var staffState = { mainTab:"home", navKey:"home", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], certificatesEnabled:false, quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],unanswered:[],pendingCertificates:[]}, digest:null, chatTemplates:[], inviteCode:null, editSpecializationIds:[], editName:"", editPhone:"", editWorkplace:"" };
 // Открытый выпадающий список шаблонов над конкретным полем ввода (id textarea) —
 // null, если ни один не открыт. Редактор — отдельная мини-форма добавления/правки
 // шаблона (общая библиотека команды, см. src/schema.sql «Этап 10»).
@@ -412,6 +412,7 @@ async function loadStaffData(){
   try{
     var mat = await api("/course/materials");
     staffState.materials = mat.lessons;
+    staffState.certificatesEnabled = !!mat.certificatesEnabled;
   }catch(e){}
   try{
     var vis = await api("/course/visibility");
@@ -1279,15 +1280,27 @@ function renderStudentHome(){
   html += '</div>';
 
   if(pr.completed){
-    var issued = pr.certificate_status==="issued";
+    var certsOn = course && course.course && course.course.certificatesEnabled;
     html += '<div class="card" style="padding:18px;">';
-    html += magnet(issued?"done":"attention", issued?"Сертификат выдан":"На проверке") +
-      '<div style="font-family:var(--display);font-weight:800;font-size:26px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
-      '<span style="font-size:12px;color:var(--muted);">результат теста</span>';
-    if(!issued && !pr.requested_full_access){
-      html += '<button class="btn btn-sm btn-primary btn-block" style="margin-top:12px;" data-action="request-full">Заявка на полную программу</button>';
-    } else if(pr.requested_full_access){
-      html += '<div style="margin-top:12px;">'+magnet("done","Заявка отправлена")+'</div>';
+    if(certsOn){
+      var issued = pr.certificate_status==="issued";
+      html += magnet(issued?"done":"attention", issued?"Сертификат выдан":"На проверке") +
+        '<div style="font-family:var(--display);font-weight:800;font-size:26px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
+        '<span style="font-size:12px;color:var(--muted);">результат теста</span>';
+      if(!issued && !pr.requested_full_access){
+        html += '<button class="btn btn-sm btn-primary btn-block" style="margin-top:12px;" data-action="request-full">Заявка на полную программу</button>';
+      } else if(pr.requested_full_access){
+        html += '<div style="margin-top:12px;">'+magnet("done","Заявка отправлена")+'</div>';
+      }
+    } else {
+      html += magnet("done","Демо пройдено") +
+        '<div style="font-family:var(--display);font-weight:800;font-size:26px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
+        '<span style="font-size:12px;color:var(--muted);">результат теста · скидка 10% на полный курс</span>';
+      if(!pr.requested_full_access){
+        html += '<button class="btn btn-sm btn-primary btn-block" style="margin-top:12px;" data-action="request-full">Хочу полное обучение</button>';
+      } else {
+        html += '<div style="margin-top:12px;">'+magnet("done","Заявка отправлена")+'</div>';
+      }
     }
     html += '</div>';
   }
@@ -1708,9 +1721,30 @@ function renderQuizOrCert(){
 
 function renderCertificate(){
   var pr = course.progress || {};
+  var certsOn = course && course.course && course.course.certificatesEnabled;
+  var html = '<div class="player" style="margin-top:6px;grid-template-columns:1fr;"><div class="cert">';
+
+  if(!certsOn){
+    // Текущий курс — демо: сертификат за него не выдаётся, вместо этого предлагаем
+    // скидку и заявку на полноценное обучение (см. существующий request-full-access).
+    var requested = !!pr.requested_full_access;
+    html += '<div class="seal">'+icon("badge","ic-lg")+'</div>' +
+      '<h2>Поздравляем с прохождением демо-курса!</h2>' +
+      '<p style="color:var(--muted);font-size:14px;">'+escapeHtml(me.name)+', «'+escapeHtml(course.course.title)+'»</p>' +
+      '<div class="score">'+pr.quiz_score+'%</div>' +
+      '<p style="color:var(--muted);font-size:13px;margin-bottom:24px;">правильных ответов в итоговом тесте</p>' +
+      '<p style="font-size:13.5px;color:var(--muted);max-width:380px;margin:0 auto 24px;">Вы получили скидку 10% на обучение по курсу «Медицина Долголетия». Желаете присоединиться к полноценному обучению?</p>';
+    if(requested){
+      html += '<div style="margin-bottom:16px;">'+magnet("done","Заявка отправлена")+'</div>';
+    } else {
+      html += '<button class="btn btn-primary" data-action="request-full" style="margin-right:8px;">Да, хочу полное обучение</button>';
+    }
+    html += '<button class="btn" data-action="close-course">Вернуться к курсу</button></div></div>';
+    return el(html);
+  }
+
   var issued = pr.certificate_status === "issued";
-  var html = '<div class="player" style="margin-top:6px;grid-template-columns:1fr;"><div class="cert">' +
-    '<div class="seal'+(issued?'':' pending')+'">'+icon(issued?"badge":"clock","ic-lg")+'</div>' +
+  html += '<div class="seal'+(issued?'':' pending')+'">'+icon(issued?"badge":"clock","ic-lg")+'</div>' +
     '<h2>'+(issued?'Сертификат выдан':'Тест сдан — сертификат на проверке')+'</h2>' +
     '<p style="color:var(--muted);font-size:14px;">'+escapeHtml(me.name)+', «'+escapeHtml(course.course.title)+'»</p>' +
     '<div class="score">'+pr.quiz_score+'%</div>' +
@@ -3177,6 +3211,10 @@ function renderStaffStats(){
 }
 
 function renderCertificateQueue(){
+  // Пока курс демо-версии (certificatesEnabled=false) — сертификаты не выдаются
+  // никому, и этой очереди попросту не должно быть: иначе каждый прошедший демо-курс
+  // врач вечно висел бы тут "в очереди", хотя выдавать ему на самом деле нечего.
+  if(!staffState.certificatesEnabled) return el('<div></div>');
   var pending = staffState.students.filter(function(s){ return s.completed && s.certificate_status!=="issued"; });
   if(!pending.length) return el('<div></div>');
   var pendingIds = pending.map(function(s){ return s.id; });
@@ -3565,12 +3603,19 @@ function renderStudentDrawer(){
   if(staffState.drawerTab === "progress"){
     body += '<div class="progress-label">'+done+' из 5 уроков'+(typeof s.quiz_score==="number"?' · тест: '+s.quiz_score+'%':'')+'</div>';
     if(s.completed){
-      body += '<div class="card" style="padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;">' +
-        '<b style="font-size:13.5px;">Сертификат: '+(s.certificate_status==="issued"?"выдан":"ожидает выдачи")+'</b>' +
-        (s.certificate_status==="issued"
-          ? '<a class="btn btn-sm btn-ghost" href="/api/staff/students/'+s.id+'/certificate/download" target="_blank" rel="noopener">'+icon("download","ic-sm")+' Скачать PDF</a>'
-          : '<button class="btn btn-sm btn-primary" data-action="issue-certificate" data-id="'+s.id+'">Выдать сертификат</button>') +
-      '</div>';
+      if(staffState.certificatesEnabled){
+        body += '<div class="card" style="padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;">' +
+          '<b style="font-size:13.5px;">Сертификат: '+(s.certificate_status==="issued"?"выдан":"ожидает выдачи")+'</b>' +
+          (s.certificate_status==="issued"
+            ? '<a class="btn btn-sm btn-ghost" href="/api/staff/students/'+s.id+'/certificate/download" target="_blank" rel="noopener">'+icon("download","ic-sm")+' Скачать PDF</a>'
+            : '<button class="btn btn-sm btn-primary" data-action="issue-certificate" data-id="'+s.id+'">Выдать сертификат</button>') +
+        '</div>';
+      } else {
+        body += '<div class="card" style="padding:14px 16px;">' +
+          '<b style="font-size:13.5px;">Демо-курс пройден · тест '+s.quiz_score+'%</b>' +
+          '<p style="font-size:12.5px;color:var(--muted);margin:4px 0 0;">Сертификаты на демо-курсе не выдаются.</p>' +
+        '</div>';
+      }
     }
     if(s.requested_full_access){
       body += '<div class="card" style="padding:14px 16px;margin-top:12px;background:var(--accent-tint);border-color:transparent;"><b style="font-size:13.5px;">Оставил(а) заявку на полную программу</b></div>';
