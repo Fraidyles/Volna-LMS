@@ -1,5 +1,8 @@
 const express = require("express");
 const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+const multer = require("multer");
 const pool = require("../db");
 const { authRequired, requireRole } = require("../middleware/auth");
 const { logAction } = require("../audit");
@@ -9,6 +12,23 @@ const { requireStudentScope, filterToScope } = require("../access");
 const { isChatMuted } = require("../chatMutes");
 
 const router = express.Router();
+
+const VIDEO_UPLOAD_DIR = path.join(__dirname, "..", "..", "uploads", "lesson-videos");
+fs.mkdirSync(VIDEO_UPLOAD_DIR, { recursive: true });
+const VIDEO_EXTENSIONS = new Set([".mp4", ".webm", ".mov", ".m4v"]);
+const videoUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, VIDEO_UPLOAD_DIR),
+    filename: (req, file, cb) => cb(null, crypto.randomUUID() + path.extname(file.originalname).toLowerCase())
+  }),
+  limits: { fileSize: 500 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => {
+    if (!VIDEO_EXTENSIONS.has(path.extname(file.originalname).toLowerCase())) {
+      return cb(new Error("unsupported_file_type"));
+    }
+    cb(null, true);
+  }
+});
 
 function computeLocked(pr) {
   if (!pr) return { locked: false, reason: null };
@@ -528,7 +548,7 @@ router.put("/visibility/:targetId", authRequired, requireRole("curator", "admin"
 
 router.get("/lessons/:id", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
   const result = await pool.query(
-    "SELECT id, idx, title, duration, html, drip_days, draft_title, draft_duration, draft_html, has_draft, video_url, video_timecodes FROM lessons WHERE id=$1",
+    "SELECT id, idx, title, duration, html, drip_days, draft_title, draft_duration, draft_html, has_draft, video_url, video_timecodes, video_filename FROM lessons WHERE id=$1",
     [req.params.id]
   );
   if (!result.rowCount) return res.status(404).json({ error: "not_found" });
@@ -575,6 +595,9 @@ router.delete("/lessons/:id", authRequired, requireRole("admin", "super_admin"),
   ); }
 
   await pool.query("DELETE FROM lessons WHERE id=$1", [req.params.id]);
+  // Загруженный файл видео удаляем с диска — если урок восстановят через откат,
+  // видео придётся перезалить заново (тот же компромисс, что и с поурочным тестом ниже).
+  if (l.video_filename) fs.unlink(path.join(VIDEO_UPLOAD_DIR, l.video_filename), () => {});
   // Поурочный тест урока (quiz_questions.lesson_id) при этом каскадно удаляется на
   // уровне БД и на восстановлении ниже не воскресает — это отдельно взятый компромисс
   // отката (best-effort), как и для других вложенных сущностей урока.
@@ -913,13 +936,72 @@ router.put("/lessons/:id/video", authRequired, requireRole("admin", "super_admin
     }))
     .sort((a, b) => a.time - b.time);
 
+  const cleanUrl = videoUrl && videoUrl.trim() ? videoUrl.trim() : null;
+  const before = await pool.query("SELECT video_url, video_filename FROM lessons WHERE id=$1", [req.params.id]);
+  if (!before.rowCount) return res.status(404).json({ error: "not_found" });
+  // Ссылка сменилась (или очищена) вручную — если раньше тут был загруженный файл,
+  // это уже не он: убираем его с диска, иначе он бы остался висеть мусором навсегда.
+  const urlChanged = before.rows[0].video_url !== cleanUrl;
+  const keepFilename = !urlChanged && before.rows[0].video_filename;
+  if (urlChanged && before.rows[0].video_filename) {
+    fs.unlink(path.join(VIDEO_UPLOAD_DIR, before.rows[0].video_filename), () => {});
+  }
+
   const result = await pool.query(
-    "UPDATE lessons SET video_url=$1, video_timecodes=$2 WHERE id=$3 RETURNING id",
-    [videoUrl && videoUrl.trim() ? videoUrl.trim() : null, JSON.stringify(clean), req.params.id]
+    "UPDATE lessons SET video_url=$1, video_timecodes=$2, video_filename=$3 WHERE id=$4 RETURNING id",
+    [cleanUrl, JSON.stringify(clean), keepFilename || null, req.params.id]
   );
   if (!result.rowCount) return res.status(404).json({ error: "not_found" });
   await logAction(req.user, "content.lesson_video_updated", "lesson", req.params.id, null, { chaptersCount: clean.length });
-  res.json({ ok: true, videoUrl: videoUrl || null, timecodes: clean });
+  res.json({ ok: true, videoUrl: cleanUrl, timecodes: clean });
+});
+
+// Загрузка видео файлом (вместо/вместе с ручной ссылкой) — файл ложится на диск
+// приложения, а video_url становится ссылкой на свою же раздачу ниже. Заменяет
+// прежний файл, если он был (не трогает video_timecodes — они относятся к самому
+// уроку, а не к конкретному файлу).
+router.post(
+  "/lessons/:id/video-upload",
+  authRequired,
+  requireRole("admin", "super_admin"),
+  (req, res, next) => {
+    videoUpload.single("file")(req, res, (err) => {
+      if (err instanceof multer.MulterError) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ error: "file_too_large", message: "Файл больше 500 МБ" });
+        }
+        return res.status(400).json({ error: "upload_failed", message: err.message });
+      }
+      if (err) return res.status(400).json({ error: "unsupported_file_type", message: "Поддерживаются только .mp4, .webm, .mov, .m4v" });
+      next();
+    });
+  },
+  async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "invalid_input", message: "Файл не передан" });
+    const before = await pool.query("SELECT video_filename FROM lessons WHERE id=$1", [req.params.id]);
+    if (!before.rowCount) {
+      fs.unlink(req.file.path, () => {});
+      return res.status(404).json({ error: "not_found" });
+    }
+    if (before.rows[0].video_filename) {
+      fs.unlink(path.join(VIDEO_UPLOAD_DIR, before.rows[0].video_filename), () => {});
+    }
+    const videoUrl = `/api/course/lessons/${req.params.id}/video-file`;
+    await pool.query("UPDATE lessons SET video_url=$1, video_filename=$2 WHERE id=$3", [videoUrl, req.file.filename, req.params.id]);
+    await logAction(req.user, "content.lesson_video_updated", "lesson", req.params.id, null, { uploaded: true, originalName: req.file.originalname });
+    res.json({ ok: true, videoUrl });
+  }
+);
+
+// Отдача загруженного видео — доступна любому вошедшему (как и сам html урока,
+// который уже сейчас уходит врачу независимо от блокировок, см. GET / выше).
+// res.sendFile понимает заголовок Range сам — перемотка работает без доп. кода.
+router.get("/lessons/:id/video-file", authRequired, async (req, res) => {
+  const lesson = await pool.query("SELECT video_filename FROM lessons WHERE id=$1", [req.params.id]);
+  if (!lesson.rowCount || !lesson.rows[0].video_filename) return res.status(404).json({ error: "not_found" });
+  const filePath = path.join(VIDEO_UPLOAD_DIR, lesson.rows[0].video_filename);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: "not_found" });
+  res.sendFile(filePath);
 });
 
 // Поурочный тест — «развлекательный», не про допуск к сертификату: пройден урок,

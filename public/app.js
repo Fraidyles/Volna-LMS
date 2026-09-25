@@ -80,7 +80,7 @@ var tempPasswordResult = null; // {name, tempPassword} — показать од
 var lessonEditor = { open:false, isNew:false, id:null, title:"", duration:"", html:"", dripDays:null, hasDraft:false, publishedTitle:"", publishedDuration:"", publishedHtml:"", history:[], showHistory:false, showPreview:false };
 var quizEditor = { open:false, isNew:false, id:null, question:"", options:[], correct:0, lessonId:null, moduleId:null };
 // Видео с главами-таймкодами у конкретного урока (отдельно от WYSIWYG-содержимого урока).
-var videoEditor = { open:false, lessonId:null, lessonTitle:"", videoUrl:"", timecodes:[] };
+var videoEditor = { open:false, lessonId:null, lessonTitle:"", videoUrl:"", timecodes:[], uploadProgress:null };
 // Поурочный «развлекательный» тест — свой список вопросов на каждый урок,
 // отдельно от staffState.quizAdmin (это только итоговый тест курса).
 var lessonQuizManager = { open:false, lessonId:null, lessonTitle:"", questions:[] };
@@ -243,6 +243,27 @@ async function apiUpload(path, formData){
     throw err;
   }
   return data;
+}
+
+// Видео весит десятки-сотни МБ, загрузка может идти минуты — обычный fetch не даёт
+// узнать промежуточный прогресс, поэтому здесь XMLHttpRequest ради onprogress.
+function apiUploadWithProgress(path, formData, onProgress){
+  return new Promise(function(resolve, reject){
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", API + path);
+    xhr.withCredentials = true;
+    xhr.upload.onprogress = function(e){
+      if(onProgress && e.lengthComputable) onProgress(Math.round((e.loaded/e.total)*100));
+    };
+    xhr.onload = function(){
+      var data = null;
+      try{ data = JSON.parse(xhr.responseText); }catch(e){}
+      if(xhr.status>=200 && xhr.status<300) resolve(data);
+      else { var err=new Error((data && data.message) || "Не удалось загрузить файл"); err.code=data && data.error; reject(err); }
+    };
+    xhr.onerror = function(){ reject(new Error("Не удалось загрузить файл — проверьте соединение")); };
+    xhr.send(formData);
+  });
 }
 
 /* ============================= ИНИЦИАЛИЗАЦИЯ ============================= */
@@ -669,8 +690,18 @@ function syncVideoEditorFromDom(){
 }
 
 function renderVideoEditorModal(){
+  var uploading = videoEditor.uploadProgress!==null;
   var body = '<div class="drawer-head"><b style="font-size:16px;">Видео урока «'+escapeHtml(videoEditor.lessonTitle)+'»</b><button class="btn btn-ghost btn-sm" data-action="close-video-editor">Закрыть ✕</button></div>' +
-    '<div class="drawer-body"><form id="videoEditorForm">' +
+    '<div class="drawer-body">' +
+      '<div class="field"><label>Загрузить видео файлом <span style="font-weight:400;color:var(--muted-2);">(.mp4, .webm, .mov, .m4v — до 500 МБ)</span></label>' +
+        '<div style="display:flex;gap:8px;align-items:center;">' +
+          '<input type="file" id="videoFileInput" accept=".mp4,.webm,.mov,.m4v" style="font-size:12px;flex:1;min-width:0;"'+(uploading?' disabled':'')+'>' +
+          '<button type="button" class="btn btn-sm btn-primary" data-action="upload-lesson-video" data-id="'+videoEditor.lessonId+'"'+(uploading?' disabled':'')+'>'+(uploading?'Загружаем…':'Загрузить')+'</button>' +
+        '</div>' +
+        (uploading ? '<div style="margin-top:8px;height:6px;border-radius:3px;background:var(--line-2);overflow:hidden;"><div style="height:100%;width:'+videoEditor.uploadProgress+'%;background:var(--primary);transition:width .15s;"></div></div>' : '') +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--muted-2);font-size:12.5px;"><span style="flex:1;height:1px;background:var(--line-2);"></span>или<span style="flex:1;height:1px;background:var(--line-2);"></span></div>' +
+    '<form id="videoEditorForm">' +
       '<div class="field"><label>Ссылка на видео <span style="font-weight:400;color:var(--muted-2);">(прямой URL на mp4-файл)</span></label><input class="input" name="videoUrl" value="'+escapeHtml(videoEditor.videoUrl||"")+'" placeholder="https://…/video.mp4"></div>' +
       '<label>Главы по таймкодам <span style="font-weight:400;color:var(--muted-2);">(необязательно — под видео появится сводка по текущей главе)</span></label>';
   videoEditor.timecodes.forEach(function(tc,i){
@@ -4118,7 +4149,7 @@ function wireEvents(root){
 
     /* ---------- Видео урока ---------- */
     if(action==="open-lesson-video-editor"){
-      videoEditor = { open:true, lessonId:t.getAttribute("data-id"), lessonTitle:t.getAttribute("data-title"), videoUrl:"", timecodes:[] };
+      videoEditor = { open:true, lessonId:t.getAttribute("data-id"), lessonTitle:t.getAttribute("data-title"), videoUrl:"", timecodes:[], uploadProgress:null };
       render();
       try{
         var lv=await api("/course/lessons/"+videoEditor.lessonId);
@@ -4129,6 +4160,26 @@ function wireEvents(root){
     }
     if(action==="close-video-editor"){ videoEditor.open=false; render(); return; }
     if(action==="overlay-close-video-editor" && !e.target.closest("[data-stop]")){ videoEditor.open=false; render(); return; }
+    if(action==="upload-lesson-video"){
+      var vfInput = document.getElementById("videoFileInput");
+      if(!vfInput || !vfInput.files || !vfInput.files[0]){ showToast("Выберите файл"); return; }
+      var vfFile = vfInput.files[0];
+      var vfd = new FormData();
+      vfd.append("file", vfFile);
+      videoEditor.uploadProgress = 0;
+      render();
+      try{
+        var vur = await apiUploadWithProgress("/course/lessons/"+videoEditor.lessonId+"/video-upload", vfd, function(pct){
+          // Событий прогресса может быть сотни в секунду — перерисовываем не чаще,
+          // чем реально меняется процент, иначе пересборка всего DOM тормозит загрузку.
+          if(pct !== videoEditor.uploadProgress){ videoEditor.uploadProgress = pct; render(); }
+        });
+        videoEditor.videoUrl = vur.videoUrl;
+        showToast("Видео загружено");
+      }catch(err){ showToast(err.message); }
+      videoEditor.uploadProgress = null;
+      render(); return;
+    }
     if(action==="add-video-timecode"){
       syncVideoEditorFromDom();
       videoEditor.timecodes.push({ id:null, time:0, title:"", summary:"" });

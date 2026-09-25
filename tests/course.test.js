@@ -754,6 +754,79 @@ describe("Курс врача", () => {
       const check = await pool.query("SELECT id FROM quiz_questions WHERE id=$1", [createRes.body.id]);
       expect(check.rowCount).toBe(0);
     });
+
+    test("админ загружает видео файлом — врач получает рабочую ссылку на раздачу с сервера", async () => {
+      const admin = await createUser({ role: "admin" });
+      const adminCookie = await loginAs(admin);
+      const lessonId = await makeLesson();
+
+      const uploadRes = await request(app)
+        .post(`/api/course/lessons/${lessonId}/video-upload`)
+        .set("Cookie", adminCookie)
+        .attach("file", Buffer.from("поддельные байты видео"), { filename: "urok1.mp4", contentType: "video/mp4" });
+      expect(uploadRes.status).toBe(200);
+      expect(uploadRes.body.videoUrl).toBe(`/api/course/lessons/${lessonId}/video-file`);
+
+      const student = await createUser({ role: "student", courseId: course.courseId });
+      const cookie = await loginAs(student);
+      const courseRes = await request(app).get("/api/course").set("Cookie", cookie);
+      const lessonOut = courseRes.body.lessons.find((l) => l.id === lessonId);
+      expect(lessonOut.videoUrl).toBe(`/api/course/lessons/${lessonId}/video-file`);
+
+      const fileRes = await request(app).get(`/api/course/lessons/${lessonId}/video-file`).set("Cookie", cookie);
+      expect(fileRes.status).toBe(200);
+      expect(Buffer.from(fileRes.body).toString()).toBe("поддельные байты видео");
+    });
+
+    test("недопустимый формат видео отклоняется (400)", async () => {
+      const admin = await createUser({ role: "admin" });
+      const adminCookie = await loginAs(admin);
+      const lessonId = await makeLesson();
+      const res = await request(app)
+        .post(`/api/course/lessons/${lessonId}/video-upload`)
+        .set("Cookie", adminCookie)
+        .attach("file", Buffer.from("не видео"), { filename: "script.exe", contentType: "application/octet-stream" });
+      expect(res.status).toBe(400);
+    });
+
+    test("повторная загрузка видео заменяет файл, ручной ввод ссылки поверх загруженного файла убирает его раздачу", async () => {
+      const admin = await createUser({ role: "admin" });
+      const adminCookie = await loginAs(admin);
+      const lessonId = await makeLesson();
+
+      await request(app).post(`/api/course/lessons/${lessonId}/video-upload`).set("Cookie", adminCookie)
+        .attach("file", Buffer.from("первая версия"), { filename: "v1.mp4", contentType: "video/mp4" });
+      const firstFile = (await pool.query("SELECT video_filename FROM lessons WHERE id=$1", [lessonId])).rows[0].video_filename;
+
+      await request(app).post(`/api/course/lessons/${lessonId}/video-upload`).set("Cookie", adminCookie)
+        .attach("file", Buffer.from("вторая версия"), { filename: "v2.mp4", contentType: "video/mp4" });
+      const secondFile = (await pool.query("SELECT video_filename FROM lessons WHERE id=$1", [lessonId])).rows[0].video_filename;
+      expect(secondFile).not.toBe(firstFile);
+
+      // Ручной ввод внешней ссылки поверх загруженного файла — файл должен перестать раздаваться (404).
+      await request(app).put(`/api/course/lessons/${lessonId}/video`).set("Cookie", adminCookie)
+        .send({ videoUrl: "https://example.com/external.mp4", timecodes: [] });
+      const afterManualUrl = await pool.query("SELECT video_filename, video_url FROM lessons WHERE id=$1", [lessonId]);
+      expect(afterManualUrl.rows[0].video_filename).toBe(null);
+      expect(afterManualUrl.rows[0].video_url).toBe("https://example.com/external.mp4");
+
+      const staleFileRes = await request(app).get(`/api/course/lessons/${lessonId}/video-file`).set("Cookie", adminCookie);
+      expect(staleFileRes.status).toBe(404);
+    });
+
+    test("удаление урока с загруженным видео проходит без ошибок (файл подчищается)", async () => {
+      const admin = await createUser({ role: "admin" });
+      const adminCookie = await loginAs(admin);
+      const l1 = await makeLesson();
+      const l2 = await makeLesson(); // курс должен остаться не пустым после удаления l1
+      await request(app).post(`/api/course/lessons/${l1}/video-upload`).set("Cookie", adminCookie)
+        .attach("file", Buffer.from("видео на удаление"), { filename: "delete-me.mp4", contentType: "video/mp4" });
+
+      const delRes = await request(app).delete(`/api/course/lessons/${l1}`).set("Cookie", adminCookie);
+      expect(delRes.status).toBe(200);
+      const check = await pool.query("SELECT id FROM lessons WHERE id=$1", [l1]);
+      expect(check.rowCount).toBe(0);
+    });
   });
 });
 

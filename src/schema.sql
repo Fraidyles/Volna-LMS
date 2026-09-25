@@ -435,3 +435,8 @@ CREATE TABLE IF NOT EXISTS module_feedback (
   UNIQUE (module_id, user_id)
 );
 
+-- ---------- Этап 14: загрузка видео урока файлом (не только по внешней ссылке) ----------
+-- video_filename — имя файла на диске (uploads/lesson-videos/), если видео загружено
+-- через админку; NULL — если video_url это обычная внешняя ссылка, введённая руками.
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS video_filename TEXT;
+
