@@ -9,6 +9,24 @@ function parseCsvLines(text) {
   return text.replace(/^﻿/, "").split("\r\n").filter((l) => l.length);
 }
 
+describe("Экспорт CSV — защита от formula injection", () => {
+  test("значение, начинающееся с =/+/-/@ (имя, заданное самим врачом), не уходит в CSV как формула", async () => {
+    const course = await seedCourse();
+    // "=" — злонамеренная попытка; "+7..." — обычный номер телефона, тоже опасный
+    // для Excel символ в начале поля, должен получить защиту так же, как формула.
+    const student = await createUser({ role: "student", name: "=1+1", courseId: course.courseId });
+    await pool.query("UPDATE users SET phone=$1 WHERE id=$2", ["+79991112233", student.id]);
+    const staff = await createUser({ role: "super_admin" });
+    const cookie = await loginAs(staff);
+
+    const res = await request(app).get("/api/staff/students/export.csv").query({ courseId: course.courseId }).set("Cookie", cookie);
+    expect(res.status).toBe(200);
+    expect(res.text).not.toMatch(/,=1\+1,/);
+    expect(res.text).toContain("'=1+1");
+    expect(res.text).toContain("'+79991112233");
+  });
+});
+
 describe("Экспорт CSV", () => {
   test("экспорт списка врачей — CSV с BOM, заголовком и данными врача", async () => {
     const course = await seedCourse();
