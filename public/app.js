@@ -125,7 +125,14 @@ function escapeHtml(s){ return (s==null?"":String(s)).replace(/[&<>"']/g, functi
 // сводка по главе видео — но потом выводятся как HTML: экранируем спецсимволы
 // (чтобы случайный "<" в тексте не ломал вёрстку) и превращаем переносы строк
 // в <br>, раз это именно ПЛОСКИЙ текст, а не размеченный.
-function renderPlainToProse(s){ return escapeHtml(s).replace(/\n/g, "<br>"); }
+// Каждая строка — свой абзац (а не просто <br> внутри одного блока): именно так
+// куратор/админ обычно и печатает "Шаг 1: ...\nШаг 2: ..." — со своим отступом
+// и межстрочным интервалом на каждый пункт, а не сплошной стеной текста.
+function renderPlainToProse(s){
+  var lines = String(s||"").split(/\n+/).map(function(l){ return l.trim(); }).filter(Boolean);
+  if(!lines.length) return "";
+  return lines.map(function(l){ return "<p>"+escapeHtml(l)+"</p>"; }).join("");
+}
 function initials(name){ var p=(name||"?").trim().split(/\s+/); return ((p[0]||"?")[0]+(p[1]?p[1][0]:"")).toUpperCase(); }
 
 /* ============================= ИКОНКИ (авторский SVG-набор) ============================= */
@@ -1113,9 +1120,9 @@ function renderStudentHome(){
   }
   html += '</div>';
 
-  html += '<div class="card" style="padding:18px;">';
   if(pr.completed){
     var issued = pr.certificate_status==="issued";
+    html += '<div class="card" style="padding:18px;">';
     html += magnet(issued?"done":"attention", issued?"Сертификат выдан":"На проверке") +
       '<div style="font-family:var(--display);font-weight:800;font-size:26px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
       '<span style="font-size:12px;color:var(--muted);">результат теста</span>';
@@ -1124,10 +1131,8 @@ function renderStudentHome(){
     } else if(pr.requested_full_access){
       html += '<div style="margin-top:12px;">'+magnet("done","Заявка отправлена")+'</div>';
     }
-  } else {
-    html += magnet("neutral","Сертификат") + '<p style="font-size:12.5px;color:var(--muted);margin:10px 0 0;">Появится после теста.</p>';
+    html += '</div>';
   }
-  html += '</div>';
 
   html += '<div class="card" style="padding:18px;">' +
     magnet("neutral","Куратор") +
@@ -1634,12 +1639,12 @@ function renderMyProgressPage(){
           POINT_TIERS.map(function(t){ return '<span style="position:absolute;top:-3px;left:'+(t.points/POINTS_MAX*100)+'%;width:11px;height:11px;margin-left:-5.5px;border-radius:50%;background:'+(points>=t.points?'var(--primary)':'var(--surface)')+';border:2px solid '+(points>=t.points?'var(--primary)':'var(--line)')+';"></span>'; }).join("") +
         '</div>' +
       '</div>' +
-      '<div class="card" style="padding:18px;">' +
-        magnet(quizDone?(pr.certificate_status==="issued"?"done":"attention"):"neutral", quizDone?(pr.certificate_status==="issued"?"Сертификат выдан":"На проверке"):"Сертификат") +
-        (quizDone
-          ? '<div style="font-family:var(--display);font-weight:800;font-size:22px;margin-top:10px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>'
-          : '<p style="font-size:12.5px;color:var(--muted);margin:10px 0 0;">Появится после теста.</p>') +
-      '</div>' +
+      (quizDone
+        ? '<div class="card" style="padding:18px;">' +
+            magnet(pr.certificate_status==="issued"?"done":"attention", pr.certificate_status==="issued"?"Сертификат выдан":"На проверке") +
+            '<div style="font-family:var(--display);font-weight:800;font-size:22px;margin-top:10px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
+          '</div>'
+        : '') +
     '</div>' +
     '<div class="card" style="padding:20px 22px;margin-top:14px;'+(maxedOut?'background:var(--primary-tint);border-color:transparent;':'')+'">' +
       '<b style="font-size:14.5px;display:block;margin-bottom:10px;">Что такое очки и зачем они нужны</b>' +
