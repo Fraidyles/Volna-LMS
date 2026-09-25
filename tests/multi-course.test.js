@@ -139,4 +139,23 @@ describe("Мультикурс — врач учится сразу на нес�
     const check = await pool.query("SELECT id FROM courses WHERE id=$1", [courseId]);
     expect(check.rowCount).toBe(0);
   });
+
+  test("удаление курса, на который записаны врачи, каскадно уносит их прогресс (не 500 на FK)", async () => {
+    const course = await seedCourse();
+    const admin = await createUser({ role: "super_admin" });
+    const cookie = await loginAs(admin);
+    const enrolled = await createUser({ role: "student", courseId: course.courseId });
+
+    const res = await request(app).delete("/api/courses/" + course.courseId).set("Cookie", cookie)
+      .send({ confirmTitle: "Тестовый курс" });
+    expect(res.status).toBe(200);
+
+    const courseCheck = await pool.query("SELECT id FROM courses WHERE id=$1", [course.courseId]);
+    expect(courseCheck.rowCount).toBe(0);
+    const progressCheck = await pool.query("SELECT * FROM progress WHERE user_id=$1", [enrolled.id]);
+    expect(progressCheck.rowCount).toBe(0);
+    // Сам аккаунт врача остаётся — удаляется только его прогресс по этому курсу.
+    const userCheck = await pool.query("SELECT id FROM users WHERE id=$1", [enrolled.id]);
+    expect(userCheck.rowCount).toBe(1);
+  });
 });

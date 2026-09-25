@@ -478,7 +478,15 @@ router.post("/students/:id/enroll", authRequired, requireRole("curator", "admin"
   const existing = await pool.query("SELECT 1 FROM progress WHERE user_id=$1 AND course_id=$2", [req.params.id, courseId]);
   if (existing.rowCount) return res.status(400).json({ error: "already_enrolled", message: "Врач уже записан на этот курс" });
 
-  await pool.query("INSERT INTO progress (user_id, course_id) VALUES ($1,$2)", [req.params.id, courseId]);
+  // ON CONFLICT — сама вставка закрывает гонку, которую SELECT-проверка выше не
+  // может закрыть: два одновременных запроса (два куратора, случайный дублирующий
+  // клик) могут оба пройти проверку раньше, чем кто-то из них успеет вставить строку.
+  const inserted = await pool.query(
+    "INSERT INTO progress (user_id, course_id) VALUES ($1,$2) ON CONFLICT (user_id, course_id) DO NOTHING RETURNING user_id",
+    [req.params.id, courseId]
+  );
+  if (!inserted.rowCount) return res.status(400).json({ error: "already_enrolled", message: "Врач уже записан на этот курс" });
+
   await logAction(req.user, "course.enroll", "student", req.params.id, student.rows[0].name, { courseId, courseTitle: course.rows[0].title }, true);
   res.json({ ok: true });
 });

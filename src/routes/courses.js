@@ -54,10 +54,11 @@ router.put("/:id", authRequired, requireRole("admin", "super_admin"), async (req
   res.json({ ok: true });
 });
 
-// Удаление курса каскадно уносит все его уроки/тесты/модули/прогресс врачей (FK ON
-// DELETE CASCADE) — это разрушительно и безвозвратно, поэтому требуем подтверждение
-// названием курса (тот же паттерн, что и везде в проекте для опасных удалений), а не
-// просто кнопку "Удалить".
+// Удаление курса каскадно уносит все его уроки/тесты/модули и прогресс записанных
+// врачей (FK ON DELETE CASCADE везде, включая progress — см. Этап 23 в schema.sql,
+// сам аккаунт врача при этом не трогается) — это разрушительно и безвозвратно,
+// поэтому требуем подтверждение названием курса (тот же паттерн, что и везде в
+// проекте для опасных удалений), а не просто кнопку "Удалить".
 router.delete("/:id", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
   const { confirmTitle } = req.body || {};
   const course = await pool.query("SELECT title FROM courses WHERE id=$1", [req.params.id]);

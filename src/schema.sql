@@ -509,3 +509,13 @@ ALTER TABLE courses ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEF
 -- раньше был только булев флаг без времени.
 ALTER TABLE progress ADD COLUMN IF NOT EXISTS requested_full_access_at TIMESTAMPTZ;
 
+-- ---------- Этап 23: фикс — удаление курса каскадно уносит прогресс врачей ----------
+-- progress.course_id был объявлен без ON DELETE CASCADE (в отличие от lessons/
+-- quiz_questions/modules, у которых он есть с самого начала) — DELETE /api/courses/:id
+-- падал с нарушением внешнего ключа на любом курсе, где хоть один врач записан,
+-- вместо ожидаемого поведения "удалить курс и весь его прогресс". Составное имя
+-- ограничения Postgres генерирует сам как <table>_<column>_fkey — оно и есть
+-- progress_course_id_fkey; drop+add идемпотентен, как и везде в этом файле.
+ALTER TABLE progress DROP CONSTRAINT IF EXISTS progress_course_id_fkey;
+ALTER TABLE progress ADD CONSTRAINT progress_course_id_fkey FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE;
+
