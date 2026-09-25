@@ -22,14 +22,14 @@ describe("Справочник специализаций", () => {
     const admin = await createUser({ role: "admin" });
     const cookie = await loginAs(admin);
 
-    const createRes = await request(app).post("/api/specializations").set("Cookie", cookie).send({ name: "Аллерголог" });
+    const createRes = await request(app).post("/api/specializations").set("Cookie", cookie).send({ name: "Тестовая специализация" });
     expect(createRes.status).toBe(200);
     const id = createRes.body.id;
 
-    const dupRes = await request(app).post("/api/specializations").set("Cookie", cookie).send({ name: "Аллерголог" });
+    const dupRes = await request(app).post("/api/specializations").set("Cookie", cookie).send({ name: "Тестовая специализация" });
     expect(dupRes.status).toBe(400);
 
-    const renameRes = await request(app).put(`/api/specializations/${id}`).set("Cookie", cookie).send({ name: "Аллерголог-иммунолог" });
+    const renameRes = await request(app).put(`/api/specializations/${id}`).set("Cookie", cookie).send({ name: "Тестовая специализация (переименована)" });
     expect(renameRes.status).toBe(200);
 
     const deleteRes = await request(app).delete(`/api/specializations/${id}`).set("Cookie", cookie);

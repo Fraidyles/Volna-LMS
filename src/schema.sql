@@ -467,3 +467,50 @@ CREATE TABLE IF NOT EXISTS user_specializations (
   PRIMARY KEY (user_id, specialization_id)
 );
 
+-- ---------- Этап 17: расширить справочник специализаций до 50 ----------
+-- Раньше в справочнике было только 11 специализаций (под нишу anti-age) — с
+-- выпадающим списком и поиском по названию нужен более полный список, чтобы
+-- врач нашёл свою, а не выбирал "ближайшую по смыслу". Дополняем существующие
+-- 11 ещё 39 самыми частыми врачебными специальностями (итого 50).
+INSERT INTO specializations (id, name) VALUES
+  ('pediatrician', 'Педиатр'),
+  ('surgeon', 'Хирург'),
+  ('traumatologist', 'Травматолог-ортопед'),
+  ('urologist', 'Уролог'),
+  ('andrologist', 'Андролог'),
+  ('ophthalmologist', 'Офтальмолог'),
+  ('otolaryngologist', 'Оториноларинголог (ЛОР)'),
+  ('psychiatrist', 'Психиатр'),
+  ('psychotherapist', 'Психотерапевт'),
+  ('narcologist', 'Нарколог'),
+  ('dentist', 'Стоматолог'),
+  ('dermatovenerologist', 'Дерматовенеролог'),
+  ('cosmetologist', 'Косметолог'),
+  ('plastic_surgeon', 'Пластический хирург'),
+  ('allergist_immunologist', 'Аллерголог-иммунолог'),
+  ('rheumatologist', 'Ревматолог'),
+  ('nephrologist', 'Нефролог'),
+  ('pulmonologist', 'Пульмонолог'),
+  ('hematologist', 'Гематолог'),
+  ('oncologist', 'Онколог'),
+  ('mammologist', 'Маммолог'),
+  ('proctologist', 'Колопроктолог'),
+  ('phlebologist', 'Флеболог'),
+  ('cardiac_surgeon', 'Кардиохирург'),
+  ('neurosurgeon', 'Нейрохирург'),
+  ('anesthesiologist', 'Анестезиолог-реаниматолог'),
+  ('infectious_disease', 'Инфекционист'),
+  ('radiologist', 'Рентгенолог'),
+  ('ultrasound_diagnostics', 'Врач УЗИ-диагностики'),
+  ('functional_diagnostics', 'Врач функциональной диагностики'),
+  ('lab_diagnostics', 'Врач клинической лабораторной диагностики'),
+  ('general_practitioner', 'Врач общей практики'),
+  ('geriatrician', 'Гериатр'),
+  ('reproductologist', 'Репродуктолог (ЭКО)'),
+  ('rehabilitologist', 'Реабилитолог'),
+  ('physiotherapist', 'Физиотерапевт'),
+  ('sleep_medicine', 'Сомнолог'),
+  ('geneticist', 'Врач-генетик'),
+  ('bariatric_surgeon', 'Бариатрический хирург')
+ON CONFLICT (id) DO NOTHING;
+

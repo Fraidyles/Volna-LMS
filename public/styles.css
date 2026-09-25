@@ -167,20 +167,6 @@ button{font-family:var(--sans);cursor:pointer;}
 .btn-ghost:hover{background:var(--surface-2);}
 .btn-sm{padding:7px 13px;font-size:13px;}
 
-/* Чекбокс-«чип»: специализации в форме регистрации/профиля («хочу развиваться в...»).
-   Нативный чекбокс визуально скрыт (но остаётся в DOM кликабельным и доступным для
-   скринридеров/Tab) — вместо него рисуем квадратик с галочкой через ::before/::after,
-   переключается чистым CSS :has(), без лишней перерисовки на каждый клик. */
-.chip-check{position:relative;cursor:pointer;display:inline-flex;align-items:center;padding:8px 14px 8px 34px;border-radius:999px;border:1px solid var(--line);font-size:12.5px;user-select:none;transition:border-color .15s ease,background .15s ease,color .15s ease;}
-.chip-check:hover{border-color:var(--primary);}
-.chip-check input{position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none;}
-.chip-check::before{content:"";position:absolute;left:12px;top:50%;width:16px;height:16px;margin-top:-8px;border-radius:5px;border:1.5px solid var(--line);background:var(--surface);transition:background .15s ease,border-color .15s ease;}
-.chip-check::after{content:"";position:absolute;left:16.5px;top:50%;width:5px;height:9px;margin-top:-6px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg) scale(0);transition:transform .12s ease;}
-.chip-check:has(input:checked){background:var(--primary-tint);border-color:var(--primary);color:var(--ink);}
-.chip-check:has(input:checked)::before{background:var(--primary);border-color:var(--primary);}
-.chip-check:has(input:checked)::after{transform:rotate(45deg) scale(1);}
-.chip-check:has(input:focus-visible){outline:2px solid var(--primary);outline-offset:2px;}
-
 /* Видео урока с главами по таймкодам */
 .lesson-video-wrap{width:100%;aspect-ratio:16/9;margin:14px 0;border-radius:var(--radius-m);overflow:hidden;background:#000;box-shadow:var(--shadow);}
 .lesson-video-wrap video{width:100%;height:100%;display:block;}
@@ -195,8 +181,7 @@ label{font-size:13px;font-weight:500;color:var(--muted);display:block;margin-bot
 .field{margin-bottom:16px;}
 
 /* Единый вид чекбокса на всей платформе (таблицы, пикеры, фильтры) — вместо
-   голого браузерного квадратика. .chip-check переопределяет это для своего
-   случая (пилюля с невидимым инпутом), здесь речь про обычные checkbox. */
+   голого браузерного квадратика. */
 input[type="checkbox"]{appearance:none;-webkit-appearance:none;width:16px;height:16px;flex-shrink:0;margin:0;border-radius:5px;border:1.5px solid var(--line);background:var(--surface);cursor:pointer;position:relative;vertical-align:middle;transition:background .15s ease,border-color .15s ease;}
 input[type="checkbox"]:hover{border-color:var(--primary);}
 input[type="checkbox"]:checked{background:var(--primary);border-color:var(--primary);}
@@ -373,6 +358,14 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
 .dash-menu-item{display:flex;align-items:center;gap:8px;padding:6px 7px;border-radius:6px;font-size:13px;color:var(--ink);cursor:pointer;white-space:nowrap;}
 .dash-menu-item:hover{background:var(--surface-2);}
 .dash-menu-item input{accent-color:var(--primary);flex-shrink:0;}
+
+/* Выпадающий список специализаций с поиском (renderSpecPicker) — тот же язык,
+   что и dash-select/dash-menu у фильтров дашборда, но во всю ширину поля и с
+   полем поиска сверху, т.к. вариантов полсотни. */
+.spec-picker-field{position:relative;}
+.spec-picker-menu{position:absolute;z-index:20;top:calc(100% + 4px);left:0;width:100%;max-height:280px;overflow-y:auto;background:var(--surface);border:var(--border-hairline);border-radius:var(--radius-s);box-shadow:var(--shadow-lift);padding:8px;}
+.spec-picker-menu .input{margin-bottom:6px;padding:8px 9px;font-size:13px;}
+.spec-picker-menu .dash-menu-item{white-space:normal;}
 .dash-menu-empty{font-size:12.5px;color:var(--muted-2);padding:6px 7px;}
 
 /* ---------------- Аналитика: мини-графики без внешних библиотек ---------------- */

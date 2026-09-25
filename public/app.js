@@ -25,13 +25,26 @@ var studentState = { tab:"course", navKey:"course", lessonIndex:0, quizMode:fals
   lessonStage:"intro", videoEnded:false, lessonQuizAnswers:{}, lessonQuizResult:null, protocolsLoaded:false,
   // Гейт после последнего урока модуля: null | "quiz" | "feedback".
   moduleGateStage:null, moduleGateId:null, moduleQuizResult:null, moduleFeedbackRating:0, moduleFeedbackComment:"" };
-var staffState = { mainTab:"home", navKey:"home", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],unanswered:[],pendingCertificates:[]}, digest:null, chatTemplates:[], inviteCode:null };
+var staffState = { mainTab:"home", navKey:"home", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],unanswered:[],pendingCertificates:[]}, digest:null, chatTemplates:[], inviteCode:null, editSpecializationIds:[], editName:"", editPhone:"", editWorkplace:"" };
 // Открытый выпадающий список шаблонов над конкретным полем ввода (id textarea) —
 // null, если ни один не открыт. Редактор — отдельная мини-форма добавления/правки
 // шаблона (общая библиотека команды, см. src/schema.sql «Этап 10»).
 var templatePickerFor = null;
 var templateEditor = { open:false, id:null, title:"", body:"" };
-var profileEditor = { open:false };
+var profileEditor = { open:false, name:"", phone:"", workplace:"", specializationIds:[], interestIds:[] };
+// Черновик специализаций для формы регистрации — до входа в систему нет ни
+// me, ни staffState, поэтому отдельное состояние; сбрасывается заново при
+// каждом переходе на экран регистрации (см. action "go-register").
+// name/email/phone/password/staffInviteCode тоже здесь (не просто specializationIds/
+// interestIds) — потому что клик по выпадающему списку специализаций вызывает
+// render(), который иначе стирал бы уже введённый текст в соседних полях формы
+// (без этого draft'а он бы каждый раз выводился заново из пустоты — value="").
+var registerDraft = { name:"", email:"", phone:"", password:"", staffInviteCode:"", specializationIds:[], interestIds:[] };
+// Какой из выпадающих списков специализаций сейчас открыт — один на всё
+// приложение, т.к. одновременно виден только один такой список — и что
+// набрано в его строке поиска.
+var specPickerOpen = null;
+var specPickerQuery = "";
 var calendarState = { monthDate:new Date(), streams:[], events:[], showStreamForm:false, eventModalMode:null, eventModalDate:null, eventModalId:null, recurring:false };
 var materialsPicker = { open:false, targetId:null, targetTitle:"", search:"", selectedIds:[] };
 var scheduleModal = { open:false, lessonId:null, lessonTitle:"", search:"", selectedIds:[], applyToAll:true, unlockDate:"", schedule:[] };
@@ -853,10 +866,10 @@ function renderProfileModal(){
   var isStudent = me.role === "student";
   var body = '<div class="drawer-head"><b style="font-size:16px;">Профиль</b><button class="btn btn-ghost btn-sm" data-action="close-profile-editor">Закрыть ✕</button></div>' +
     '<div class="drawer-body"><form id="profileEditorForm">' +
-      '<div class="field"><label>Имя и фамилия</label><input class="input" name="name" required value="'+escapeHtml(me.name||"")+'"></div>' +
+      '<div class="field"><label>Имя и фамилия</label><input class="input" id="profileEditorName" required value="'+escapeHtml(profileEditor.name)+'"></div>' +
       (isStudent ? renderProfileSpecializationFields() : '') +
-      '<div class="field"><label>Телефон</label><input class="input" type="tel" name="phone" value="'+escapeHtml(me.phone||"")+'"></div>' +
-      (isStudent ? '<div class="field"><label>Место работы</label><input class="input" name="workplace" value="'+escapeHtml(me.workplace||"")+'"></div>' : '') +
+      '<div class="field"><label>Телефон</label><input class="input" type="tel" id="profileEditorPhone" value="'+escapeHtml(profileEditor.phone)+'"></div>' +
+      (isStudent ? '<div class="field"><label>Место работы</label><input class="input" id="profileEditorWorkplace" value="'+escapeHtml(profileEditor.workplace)+'"></div>' : '') +
       '<div class="field"><label>Email</label><div class="input" style="background:var(--line-2);color:var(--muted);">'+escapeHtml(me.email||"")+'</div><p class="hint">Email нельзя изменить самостоятельно — обратитесь к куратору.</p></div>' +
       '<div class="err-text" id="profileEditorError" style="display:none;"></div>' +
       '<button class="btn btn-primary btn-block" type="submit">Сохранить</button>' +
@@ -867,33 +880,62 @@ function renderProfileModal(){
 }
 
 /* ============================= РЕНДЕР: АВТОРИЗАЦИЯ ============================= */
-// Специализация — фиксированный справочник (не свободный текст), от него зависит
-// автоматический подбор протоколов под профиль врача (см. «Ваши протоколы»).
-// Общий блок «Текущая специализация» (можно несколько — многие врачи практикуют
-// сразу в нескольких направлениях) + «Желаемые специализации» для формы профиля —
-// используется и в модалке (renderProfileModal), и на странице «Мой профиль».
-// Оба поля — чекбоксы одного вида, но разных имён полей, чтобы не путать
-// "чем занимаетесь сейчас" и "куда хотите развиваться" — раньше это было
-// одно select-поле и одни чекбоксы без разделения смысла, отсюда и путаница.
+// Специализация — фиксированный справочник (не свободный текст, но с поиском по
+// названию в выпадающем списке — их 50, чекбоксами было бы слишком длинно), от
+// него зависит автоматический подбор протоколов под профиль врача (см. «Ваши
+// протоколы»). Общий блок «Текущая специализация» (можно несколько — многие
+// врачи практикуют сразу в нескольких направлениях) + «Желаемые специализации»
+// для формы профиля — используется и в модалке (renderProfileModal), и на
+// странице «Мой профиль». Оба поля — одинаковые выпадающие списки, но разных
+// имён, чтобы не путать "чем занимаетесь сейчас" и "куда хотите развиваться".
 function renderProfileSpecializationFields(){
-  return '<div class="field"><label>Текущая специализация</label>' +
-      renderSpecializationCheckboxes(me.specializationIds||[], "specializationIds") +
-    '</div>' +
-    '<div class="field"><label>Желаемые специализации <span style="font-weight:400;color:var(--muted-2);">— выберите специализации, в которых хотите развиваться, можно оставить поле пустым</span></label>' +
-      renderSpecializationCheckboxes(me.interestIds||[], "interestIds") +
-    '</div>';
+  return renderSpecPicker("profile-current", "Текущая специализация", null, profileEditor.specializationIds||[]) +
+    renderSpecPicker("profile-desired", "Желаемые специализации", "выберите специализации, в которых хотите развиваться, можно оставить поле пустым", profileEditor.interestIds||[]);
 }
-function renderSpecializationCheckboxes(selectedIds, fieldName){
-  var sel = selectedIds || [];
-  var html = '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
-  specializationsList.forEach(function(s){
-    var checked = sel.indexOf(s.id)!==-1;
-    html += '<label class="chip-check">' +
-      '<input type="checkbox" name="'+fieldName+'" value="'+s.id+'"'+(checked?' checked':'')+'>'+escapeHtml(s.name) +
-    '</label>';
+// Выпадающий список с поиском по названию (не просто <select> — вариантов 50,
+// и нужно выбирать сразу несколько). pickerId — с каким полем сверяться при
+// клике по пункту (см. specPickerFieldFor) и какой список считать открытым
+// (specPickerOpen — глобально только один такой список открыт за раз).
+function renderSpecPicker(pickerId, label, hint, selectedIds){
+  var isOpen = specPickerOpen === pickerId;
+  var labels = selectedIds.map(function(id){
+    var m = specializationsList.find(function(s){ return s.id===id; });
+    return m ? m.name : id;
   });
+  var summary = !labels.length ? "Не выбрано" : (labels.length<=2 ? labels.join(", ") : labels.length+" выбрано");
+  var query = isOpen ? specPickerQuery : "";
+  var filtered = query ? specializationsList.filter(function(s){ return s.name.toLowerCase().indexOf(query.toLowerCase())!==-1; }) : specializationsList;
+  var html = '<div class="field spec-picker-field" data-stop="1">' +
+    '<label>'+escapeHtml(label)+(hint?' <span style="font-weight:400;color:var(--muted-2);">— '+escapeHtml(hint)+'</span>':'')+'</label>' +
+    '<button type="button" class="dash-select'+(selectedIds.length?' has-value':'')+'" style="width:100%;" data-action="toggle-spec-picker" data-picker="'+pickerId+'">' +
+      '<span class="dash-select-value">'+escapeHtml(summary)+'</span>'+icon("chevron","ic-sm") +
+    '</button>';
+  if(isOpen){
+    html += '<div class="spec-picker-menu">' +
+      '<input class="input" id="specPickerSearchInput" placeholder="Поиск специальности…" value="'+escapeHtml(query)+'">';
+    if(!filtered.length){
+      html += '<div class="dash-menu-empty">Ничего не найдено</div>';
+    } else {
+      filtered.forEach(function(s){
+        var checked = selectedIds.indexOf(s.id)!==-1;
+        html += '<label class="dash-menu-item"><input type="checkbox" data-action="toggle-spec-picker-item" data-picker="'+pickerId+'" data-value="'+s.id+'"'+(checked?' checked':'')+'>'+escapeHtml(s.name)+'</label>';
+      });
+    }
+    html += '</div>';
+  }
   html += '</div>';
   return html;
+}
+// Единая точка привязки pickerId к реальному массиву-хранилищу выбранных id —
+// три разных места (регистрация, «Мой профиль», карточка врача у персонала)
+// держат свой черновик состояния, чтобы открытие/поиск в одном не задевал другие.
+function specPickerArrayFor(pickerId){
+  if(pickerId==="register-current") return registerDraft.specializationIds;
+  if(pickerId==="register-desired") return registerDraft.interestIds;
+  if(pickerId==="profile-current") return profileEditor.specializationIds;
+  if(pickerId==="profile-desired") return profileEditor.interestIds;
+  if(pickerId==="staff-current") return staffState.editSpecializationIds;
+  return [];
 }
 
 function renderAuthScreen(mode){
@@ -926,17 +968,13 @@ function renderAuthScreen(mode){
         '<div class="brand" style="margin-bottom:20px;">'+brandMark()+'Медицина Долголетия</div>' +
         '<h2 style="font-size:19px;margin:0 0 20px;">Расскажите о себе</h2>' +
         '<form id="registerForm">' +
-          '<div class="field"><label>Имя и фамилия</label><input class="input" name="name" required placeholder="Например, Анна Ковалёва"></div>' +
-          '<div class="field"><label>Текущая специализация</label>' +
-            renderSpecializationCheckboxes([], "specializationIds") +
-          '</div>' +
-          '<div class="field"><label>Желаемые специализации <span style="font-weight:400;color:var(--muted-2);">— выберите специализации, в которых хотите развиваться, можно оставить поле пустым</span></label>' +
-            renderSpecializationCheckboxes([], "interestIds") +
-          '</div>' +
-          '<div class="field"><label>Email</label><input class="input" type="email" name="email" required></div>' +
-          '<div class="field"><label>Телефон <span style="font-weight:400;color:var(--muted-2);">(необязательно)</span></label><input class="input" type="tel" name="phone"></div>' +
-          '<div class="field"><label>Пароль <span style="font-weight:400;color:var(--muted-2);">(от 6 символов)</span></label><input class="input" type="password" name="password" required minlength="6"></div>' +
-          '<div class="field"><label>Код сотрудника <span style="font-weight:400;color:var(--muted-2);">(только если вас пригласили куратором/администратором — уточните код у пригласившего)</span></label><input class="input" name="staffInviteCode" placeholder="Оставьте пустым, если регистрируетесь на курс"></div>' +
+          '<div class="field"><label>Имя и фамилия</label><input class="input" id="registerName" required placeholder="Например, Анна Ковалёва" value="'+escapeHtml(registerDraft.name)+'"></div>' +
+          renderSpecPicker("register-current", "Текущая специализация", null, registerDraft.specializationIds) +
+          renderSpecPicker("register-desired", "Желаемые специализации", "выберите специализации, в которых хотите развиваться, можно оставить поле пустым", registerDraft.interestIds) +
+          '<div class="field"><label>Email</label><input class="input" type="email" id="registerEmail" required value="'+escapeHtml(registerDraft.email)+'"></div>' +
+          '<div class="field"><label>Телефон <span style="font-weight:400;color:var(--muted-2);">(необязательно)</span></label><input class="input" type="tel" id="registerPhone" value="'+escapeHtml(registerDraft.phone)+'"></div>' +
+          '<div class="field"><label>Пароль <span style="font-weight:400;color:var(--muted-2);">(от 6 символов)</span></label><input class="input" type="password" id="registerPassword" required minlength="6" value="'+escapeHtml(registerDraft.password)+'"></div>' +
+          '<div class="field"><label>Код сотрудника <span style="font-weight:400;color:var(--muted-2);">(только если вас пригласили куратором/администратором — уточните код у пригласившего)</span></label><input class="input" id="registerStaffCode" placeholder="Оставьте пустым, если регистрируетесь на курс" value="'+escapeHtml(registerDraft.staffInviteCode)+'"></div>' +
           '<div class="err-text" id="authError" style="display:none;"></div>' +
           '<button class="btn btn-primary btn-block" type="submit">Начать курс</button>' +
         '</form>' +
@@ -2007,10 +2045,10 @@ function renderMyProfilePage(){
   html += '<div class="card" style="padding:18px 20px;margin-bottom:14px;">' +
     '<b style="font-size:14.5px;display:block;margin-bottom:14px;">Основная информация</b>' +
     '<form id="profileEditorForm">' +
-      '<div class="field"><label>Имя и фамилия</label><input class="input" name="name" required value="'+escapeHtml(me.name||"")+'"></div>' +
+      '<div class="field"><label>Имя и фамилия</label><input class="input" id="profileEditorName" required value="'+escapeHtml(profileEditor.name)+'"></div>' +
       (isStudent ? renderProfileSpecializationFields() : '') +
-      '<div class="field"><label>Телефон</label><input class="input" type="tel" name="phone" value="'+escapeHtml(me.phone||"")+'"></div>' +
-      (isStudent ? '<div class="field"><label>Место работы</label><input class="input" name="workplace" value="'+escapeHtml(me.workplace||"")+'"></div>' : '') +
+      '<div class="field"><label>Телефон</label><input class="input" type="tel" id="profileEditorPhone" value="'+escapeHtml(profileEditor.phone)+'"></div>' +
+      (isStudent ? '<div class="field"><label>Место работы</label><input class="input" id="profileEditorWorkplace" value="'+escapeHtml(profileEditor.workplace)+'"></div>' : '') +
       '<div class="field"><label>Email</label><div class="input" style="background:var(--line-2);color:var(--muted);">'+escapeHtml(me.email||"")+'</div><p class="hint">Email нельзя изменить самостоятельно — обратитесь к куратору.</p></div>' +
       '<div class="err-text" id="profileEditorError" style="display:none;"></div>' +
       '<button class="btn btn-primary" type="submit">Сохранить</button>' +
@@ -3580,11 +3618,11 @@ function renderStudentDrawer(){
       directory.map(function(c){ return '<option value="'+c.id+'"'+(s.assigned_curator_id===c.id?' selected':'')+'>'+escapeHtml(c.name)+'</option>'; }).join("");
     var productSelectOpts = Object.keys(PRODUCTS).map(function(k){ return '<option value="'+k+'"'+((s.product||"longevity")===k?' selected':'')+'>'+escapeHtml(PRODUCTS[k])+'</option>'; }).join("");
     var paymentSelectOpts = Object.keys(PAYMENT_LABELS).map(function(k){ return '<option value="'+k+'"'+((s.payment_status||"unpaid")===k?' selected':'')+'>'+escapeHtml(PAYMENT_LABELS[k])+'</option>'; }).join("");
-    body += '<div class="field"><label>Имя и фамилия</label><input class="input" id="studentProfileName" value="'+escapeHtml(s.name||"")+'"></div>' +
-      '<div class="field"><label>Текущая специализация</label><div id="studentProfileSpecializations">'+renderSpecializationCheckboxes(s.specialization_ids||[], "specializationIds")+'</div></div>' +
+    body += '<div class="field"><label>Имя и фамилия</label><input class="input" id="studentProfileName" value="'+escapeHtml(staffState.editName)+'"></div>' +
+      renderSpecPicker("staff-current", "Текущая специализация", null, staffState.editSpecializationIds) +
       '<div class="field"><label>Email</label><div class="input" style="background:var(--line-2);">'+escapeHtml(s.email||"—")+'</div></div>' +
-      '<div class="field"><label>Телефон</label><input class="input" id="studentProfilePhone" value="'+escapeHtml(s.phone||"")+'"></div>' +
-      '<div class="field"><label>Место работы</label><input class="input" id="studentProfileWorkplace" value="'+escapeHtml(s.workplace||"")+'"></div>' +
+      '<div class="field"><label>Телефон</label><input class="input" id="studentProfilePhone" value="'+escapeHtml(staffState.editPhone)+'"></div>' +
+      '<div class="field"><label>Место работы</label><input class="input" id="studentProfileWorkplace" value="'+escapeHtml(staffState.editWorkplace)+'"></div>' +
       '<button class="btn btn-sm btn-ghost" data-action="save-student-profile" data-id="'+s.id+'">Сохранить данные</button>' +
       '<div class="field" style="margin-top:18px;"><label>Дата регистрации</label><div class="input" style="background:var(--line-2);">'+fmtDate(s.created_at)+'</div></div>' +
       '<div class="field"><label>Продукт</label><select class="input" data-field-select="product" data-id="'+s.id+'">'+productSelectOpts+'</select></div>' +
@@ -3699,6 +3737,9 @@ function wireEvents(root){
     if(dashboardState.openFilterMenu && !e.target.closest(".dash-field")){
       dashboardState.openFilterMenu = null; render();
     }
+    if(specPickerOpen && !e.target.closest(".spec-picker-field")){
+      specPickerOpen = null; render();
+    }
     if(templatePickerFor && !e.target.closest(".template-picker-wrap")){
       templatePickerFor = null; render();
     }
@@ -3706,7 +3747,7 @@ function wireEvents(root){
     if(!t) return;
     var action = t.getAttribute("data-action");
 
-    if(action==="go-register"){ view="register"; render(); return; }
+    if(action==="go-register"){ view="register"; registerDraft={name:"",email:"",phone:"",password:"",staffInviteCode:"",specializationIds:[],interestIds:[]}; specPickerOpen=null; render(); return; }
     if(action==="go-login"){ view="login"; render(); return; }
     if(action==="logout"){ stopNotificationPolling(); stopHeartbeat(); sendOfflineBeacon(); await api("/auth/logout", { method:"POST" }); me=null; course=null; view="login"; mySessionsList=[]; mySessionsLoaded=false; studentProtocols={forYou:[],additional:[]}; protocolExpanded={}; protocolGuideTab={}; render(); return; }
     if(action==="toggle-theme"){ toggleTheme(); render(); return; }
@@ -3748,7 +3789,14 @@ function wireEvents(root){
     if(action==="open-change-password"){ changePasswordOpen=true; render(); return; }
     if(action==="close-change-password"){ changePasswordOpen=false; render(); return; }
     if(action==="overlay-close-password" && !e.target.closest("[data-stop]")){ changePasswordOpen=false; render(); return; }
-    if(action==="open-profile-editor"){ profileEditor.open=true; render(); return; }
+    if(action==="open-profile-editor"){
+      profileEditor.open=true;
+      profileEditor.name=me.name||""; profileEditor.phone=me.phone||""; profileEditor.workplace=me.workplace||"";
+      profileEditor.specializationIds=(me.specializationIds||[]).slice();
+      profileEditor.interestIds=(me.interestIds||[]).slice();
+      specPickerOpen=null;
+      render(); return;
+    }
     if(action==="close-profile-editor"){ profileEditor.open=false; render(); return; }
     if(action==="overlay-close-profile-editor" && !e.target.closest("[data-stop]")){ profileEditor.open=false; render(); return; }
 
@@ -3761,6 +3809,10 @@ function wireEvents(root){
       if(navKey==="profile"){
         if(view==="student"){ studentState.tab="profile"; studentState.navKey="profile"; }
         else { staffState.mainTab="profile"; staffState.navKey="profile"; }
+        profileEditor.name=me.name||""; profileEditor.phone=me.phone||""; profileEditor.workplace=me.workplace||"";
+        profileEditor.specializationIds=(me.specializationIds||[]).slice();
+        profileEditor.interestIds=(me.interestIds||[]).slice();
+        specPickerOpen=null;
         render();
         loadMySessions().then(render);
         return;
@@ -3955,13 +4007,25 @@ function wireEvents(root){
     }
     if(action==="open-student"){
       staffState.selectedStudentId=t.getAttribute("data-id"); staffState.drawerTab="progress"; staffState.selectedStudent=null; staffState.notes=[]; render();
-      try{ var d=await api("/staff/students/"+staffState.selectedStudentId); staffState.selectedStudent=d.student; render(); }catch(err){ showToast(err.message); }
+      try{
+        var d=await api("/staff/students/"+staffState.selectedStudentId);
+        staffState.selectedStudent=d.student;
+        staffState.editSpecializationIds=(d.student.specialization_ids||[]).slice();
+        staffState.editName=d.student.name||""; staffState.editPhone=d.student.phone||""; staffState.editWorkplace=d.student.workplace||"";
+        render();
+      }catch(err){ showToast(err.message); }
       return;
     }
     if(action==="open-student-chat"){
       staffState.selectedStudentId=t.getAttribute("data-id"); staffState.drawerTab="chat"; staffState.selectedStudent=null; staffState.notes=[]; render();
       startMessagePolling(staffState.selectedStudentId,"msgListCurator");
-      try{ var dc=await api("/staff/students/"+staffState.selectedStudentId); staffState.selectedStudent=dc.student; render(); }catch(err){ showToast(err.message); }
+      try{
+        var dc=await api("/staff/students/"+staffState.selectedStudentId);
+        staffState.selectedStudent=dc.student;
+        staffState.editSpecializationIds=(dc.student.specialization_ids||[]).slice();
+        staffState.editName=dc.student.name||""; staffState.editPhone=dc.student.phone||""; staffState.editWorkplace=dc.student.workplace||"";
+        render();
+      }catch(err){ showToast(err.message); }
       return;
     }
     if(action==="close-drawer" || (action==="overlay-close" && !e.target.closest("[data-stop]"))){ staffState.selectedStudentId=null; stopMessagePolling(); render(); return; }
@@ -3976,12 +4040,12 @@ function wireEvents(root){
     }
     if(action==="save-student-profile"){
       var spId=t.getAttribute("data-id");
-      var spSpecIds=Array.from(document.querySelectorAll('#studentProfileSpecializations input:checked')).map(function(i){ return i.value; });
+      var spSpecIds=staffState.editSpecializationIds;
       var spPayload={
-        name: document.getElementById("studentProfileName").value,
+        name: staffState.editName,
         specializationIds: spSpecIds,
-        phone: document.getElementById("studentProfilePhone").value,
-        workplace: document.getElementById("studentProfileWorkplace").value
+        phone: staffState.editPhone,
+        workplace: staffState.editWorkplace
       };
       t.disabled=true; t.textContent="Сохраняем…";
       try{
@@ -4699,6 +4763,18 @@ function wireEvents(root){
       if(vIdx===-1) arr.push(val); else arr.splice(vIdx,1);
       render(); return;
     }
+    if(action==="toggle-spec-picker"){
+      var spPicker=t.getAttribute("data-picker");
+      specPickerOpen = (specPickerOpen===spPicker) ? null : spPicker;
+      specPickerQuery = "";
+      render(); return;
+    }
+    if(action==="toggle-spec-picker-item"){
+      var spiPicker=t.getAttribute("data-picker"); var spiVal=t.getAttribute("data-value");
+      var spiArr=specPickerArrayFor(spiPicker); var spiIdx=spiArr.indexOf(spiVal);
+      if(spiIdx===-1) spiArr.push(spiVal); else spiArr.splice(spiIdx,1);
+      render(); return;
+    }
     if(action==="reset-dash-filters"){
       dashboardState = { periodFrom:"", periodTo:"", specializations:[], streams:[], stages:[], products:[], certStatuses:[], paymentStatuses:[], demoStatuses:[], accessStatuses:[], curatorIds:[], openFilterMenu:null };
       render(); return;
@@ -4724,15 +4800,14 @@ function wireEvents(root){
     }
     if(e.target.id==="registerForm"){
       e.preventDefault();
-      var fd2=new FormData(e.target);
       var errBox2=document.getElementById("authError"); errBox2.style.display="none";
       var btn2=e.target.querySelector("button[type=submit]"); btn2.disabled=true; btn2.textContent="Регистрируем…";
       try{
         var d2=await api("/auth/register", { method:"POST", body: JSON.stringify({
-          name:fd2.get("name"), specializationIds:fd2.getAll("specializationIds"), email:fd2.get("email"),
-          phone:fd2.get("phone"), password:fd2.get("password"),
-          staffInviteCode:fd2.get("staffInviteCode"),
-          interestIds: fd2.getAll("interestIds")
+          name:registerDraft.name, specializationIds:registerDraft.specializationIds, email:registerDraft.email,
+          phone:registerDraft.phone, password:registerDraft.password,
+          staffInviteCode:registerDraft.staffInviteCode,
+          interestIds: registerDraft.interestIds
         }) });
         me=d2.user; await routeAfterLogin();
       }catch(err){ errBox2.textContent=err.message; errBox2.style.display="block"; btn2.disabled=false; btn2.textContent="Начать курс"; }
@@ -4890,14 +4965,13 @@ function wireEvents(root){
     }
     if(e.target.id==="profileEditorForm"){
       e.preventDefault();
-      var fdpe=new FormData(e.target);
       var errPe=document.getElementById("profileEditorError"); errPe.style.display="none";
       var btnPe=e.target.querySelector("button[type=submit]"); btnPe.disabled=true; btnPe.textContent="Сохраняем…";
-      var payloadPe={ name:fdpe.get("name"), phone:fdpe.get("phone")||"" };
+      var payloadPe={ name:profileEditor.name, phone:profileEditor.phone||"" };
       if(me.role==="student"){
-        payloadPe.workplace=fdpe.get("workplace")||"";
-        payloadPe.specializationIds=fdpe.getAll("specializationIds");
-        payloadPe.interestIds=fdpe.getAll("interestIds");
+        payloadPe.workplace=profileEditor.workplace||"";
+        payloadPe.specializationIds=profileEditor.specializationIds;
+        payloadPe.interestIds=profileEditor.interestIds;
       }
       try{
         var rPe=await api("/auth/me", { method:"PATCH", body: JSON.stringify(payloadPe) });
@@ -5098,9 +5172,29 @@ function wireEvents(root){
       setTimeout(function(){ var s=document.getElementById("scheduleSearch"); if(s){ s.focus(); s.selectionStart=s.selectionEnd=s.value.length; } },0);
     }
     if(e.target.id==="scheduleUnlockDate"){ scheduleModal.unlockDate=e.target.value; }
+    // Поля форм регистрации/профиля не перерисовываются на каждый ввод (не нужно —
+    // DOM и так уже показывает набранное), но должны попадать в JS-состояние, иначе
+    // клик по выпадающему списку специализаций (он вызывает render()) стёр бы то,
+    // что человек уже успел напечатать в соседних полях той же формы.
+    if(e.target.id==="registerName"){ registerDraft.name=e.target.value; return; }
+    if(e.target.id==="registerEmail"){ registerDraft.email=e.target.value; return; }
+    if(e.target.id==="registerPhone"){ registerDraft.phone=e.target.value; return; }
+    if(e.target.id==="registerPassword"){ registerDraft.password=e.target.value; return; }
+    if(e.target.id==="registerStaffCode"){ registerDraft.staffInviteCode=e.target.value; return; }
+    if(e.target.id==="profileEditorName"){ profileEditor.name=e.target.value; return; }
+    if(e.target.id==="profileEditorPhone"){ profileEditor.phone=e.target.value; return; }
+    if(e.target.id==="profileEditorWorkplace"){ profileEditor.workplace=e.target.value; return; }
+    if(e.target.id==="studentProfileName"){ staffState.editName=e.target.value; return; }
+    if(e.target.id==="studentProfilePhone"){ staffState.editPhone=e.target.value; return; }
+    if(e.target.id==="studentProfileWorkplace"){ staffState.editWorkplace=e.target.value; return; }
     if(e.target.id==="materialsSearchInput"){
       studentState.materialsSearch=e.target.value; render();
       setTimeout(function(){ var s=document.getElementById("materialsSearchInput"); if(s){ s.focus(); s.selectionStart=s.selectionEnd=s.value.length; } },0);
+    }
+    if(e.target.id==="specPickerSearchInput"){
+      specPickerQuery=e.target.value; render();
+      setTimeout(function(){ var s=document.getElementById("specPickerSearchInput"); if(s){ s.focus(); s.selectionStart=s.selectionEnd=s.value.length; } },0);
+      return;
     }
     if(e.target.id==="dashPeriodFrom"){ dashboardState.periodFrom=e.target.value; render(); }
     if(e.target.id==="dashPeriodTo"){ dashboardState.periodTo=e.target.value; render(); }
