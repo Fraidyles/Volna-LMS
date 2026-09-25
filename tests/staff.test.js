@@ -97,17 +97,41 @@ describe("Права доступа персонала", () => {
     expect(res.status).toBe(200);
   });
 
-  test("приглашение по email назначает роль при регистрации", async () => {
+  test("приглашение по email назначает роль при регистрации только с верным кодом сотрудника", async () => {
     const superAdmin = await createUser({ role: "super_admin" });
     const cookie = await loginAs(superAdmin);
     const email = `invited-curator.${Date.now()}@example.com`;
     await request(app).post("/api/invites").set("Cookie", cookie).send({ email, role: "curator" });
+    const codeRes = await request(app).get("/api/staff/invite-code").set("Cookie", cookie);
+    expect(codeRes.status).toBe(200);
 
     const registerRes = await request(app).post("/api/auth/register").send({
-      email, password: "password123", name: "Приглашённый Куратор"
+      email, password: "password123", name: "Приглашённый Куратор", staffInviteCode: codeRes.body.code
     });
     expect(registerRes.status).toBe(200);
     expect(registerRes.body.user.role).toBe("curator");
+  });
+
+  test("без кода сотрудника (или с неверным) приглашение на роль куратора/админа не срабатывает — регистрация просто отклоняется", async () => {
+    const superAdmin = await createUser({ role: "super_admin" });
+    const cookie = await loginAs(superAdmin);
+    const email = `hijack-attempt.${Date.now()}@example.com`;
+    await request(app).post("/api/invites").set("Cookie", cookie).send({ email, role: "admin" });
+
+    const noCodeRes = await request(app).post("/api/auth/register").send({
+      email, password: "password123", name: "Атакующий"
+    });
+    expect(noCodeRes.status).toBe(403);
+    expect(noCodeRes.body.error).toBe("invalid_staff_code");
+
+    const wrongCodeRes = await request(app).post("/api/auth/register").send({
+      email, password: "password123", name: "Атакующий", staffInviteCode: "WRONG123"
+    });
+    expect(wrongCodeRes.status).toBe(403);
+
+    // И аккаунт при этом не создался вообще — не только не получил роль admin
+    const loginAttempt = await request(app).post("/api/auth/login").send({ email, password: "password123" });
+    expect(loginAttempt.status).toBe(401);
   });
 
   test("массовое приглашение: валидные email приглашены, некорректные и уже зарегистрированные пропущены", async () => {

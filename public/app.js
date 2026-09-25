@@ -25,7 +25,7 @@ var studentState = { tab:"course", navKey:"course", lessonIndex:0, quizMode:fals
   lessonStage:"intro", videoEnded:false, lessonQuizAnswers:{}, lessonQuizResult:null, protocolsLoaded:false,
   // Гейт после последнего урока модуля: null | "quiz" | "feedback".
   moduleGateStage:null, moduleGateId:null, moduleQuizResult:null, moduleFeedbackRating:0, moduleFeedbackComment:"" };
-var staffState = { mainTab:"home", navKey:"home", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],unanswered:[],pendingCertificates:[]}, digest:null, chatTemplates:[] };
+var staffState = { mainTab:"home", navKey:"home", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],unanswered:[],pendingCertificates:[]}, digest:null, chatTemplates:[], inviteCode:null };
 // Открытый выпадающий список шаблонов над конкретным полем ввода (id textarea) —
 // null, если ни один не открыт. Редактор — отдельная мини-форма добавления/правки
 // шаблона (общая библиотека команды, см. src/schema.sql «Этап 10»).
@@ -390,6 +390,9 @@ async function loadStaffData(){
     try{
       var t = await api("/staff/team");
       staffState.staff = t.staff;
+    }catch(e){}
+    try{
+      staffState.inviteCode = await api("/staff/invite-code");
     }catch(e){}
   }
   try{
@@ -937,10 +940,11 @@ function renderAuthScreen(mode){
           '<div class="field"><label>Телефон <span style="font-weight:400;color:var(--muted-2);">(необязательно)</span></label><input class="input" type="tel" name="phone"></div>' +
           '<div class="field"><label>Место работы <span style="font-weight:400;color:var(--muted-2);">(необязательно)</span></label><input class="input" name="workplace"></div>' +
           '<div class="field"><label>Пароль <span style="font-weight:400;color:var(--muted-2);">(от 6 символов)</span></label><input class="input" type="password" name="password" required minlength="6"></div>' +
+          '<div class="field"><label>Код сотрудника <span style="font-weight:400;color:var(--muted-2);">(только если вас пригласили куратором/администратором — уточните код у пригласившего)</span></label><input class="input" name="staffInviteCode" placeholder="Оставьте пустым, если регистрируетесь на курс"></div>' +
           '<div class="err-text" id="authError" style="display:none;"></div>' +
           '<button class="btn btn-primary btn-block" type="submit">Начать курс</button>' +
         '</form>' +
-        '<p class="hint">Если вам уже выдали доступ куратора или администратора на этот email — роль назначится автоматически вместо регистрации на курс.</p>' +
+        '<p class="hint">Если вам уже выдали доступ куратора или администратора на этот email — роль назначится автоматически вместо регистрации на курс, но только вместе с верным кодом сотрудника выше.</p>' +
       '</div></div>';
   }
   return el('<div class="onb-shell">'+left+right+'</div>');
@@ -3480,6 +3484,13 @@ function renderTeamTab(){
 
   html += '<div class="card" style="padding:18px 20px;">';
   if(myOptions.length){
+    if(staffState.inviteCode){
+      html += '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Код сотрудника</b>' +
+        '<p style="font-size:12.5px;color:var(--muted);margin:0 0 10px;">Продиктуйте его отдельно (не тем же письмом, где email) тому, кого приглашаете куратором или администратором, — без этого кода регистрация по приглашению останется обычным врачом.</p>' +
+        '<div style="font-size:22px;font-weight:700;letter-spacing:3px;font-family:monospace;padding:10px 14px;background:var(--surface-2);border-radius:var(--radius-s);display:inline-block;">'+escapeHtml(staffState.inviteCode.code)+'</div>' +
+        '<p class="hint" style="margin-top:8px;">Действует до '+fmtDate(staffState.inviteCode.expiresAt)+', '+fmtTime(staffState.inviteCode.expiresAt)+' — потом перевыпустится сам при следующем заходе сюда.</p>' +
+        '<hr style="border:none;border-top:1px solid var(--line-2);margin:16px 0;">';
+    }
     html += '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Пригласить по email</b>' +
       '<form id="inviteStaffForm">' +
         '<div class="field"><label>Email</label><input class="input" type="email" name="email" required></div>' +
@@ -4722,6 +4733,7 @@ function wireEvents(root){
         var d2=await api("/auth/register", { method:"POST", body: JSON.stringify({
           name:fd2.get("name"), specializationId:fd2.get("specializationId"), email:fd2.get("email"),
           phone:fd2.get("phone"), workplace:fd2.get("workplace"), password:fd2.get("password"),
+          staffInviteCode:fd2.get("staffInviteCode"),
           interestIds: fd2.getAll("interestIds")
         }) });
         me=d2.user; await routeAfterLogin();

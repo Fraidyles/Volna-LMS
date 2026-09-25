@@ -7,6 +7,7 @@ const pool = require("../db");
 const { authRequired } = require("../middleware/auth");
 const { logAction } = require("../audit");
 const { generateReferralCode, describeUserAgent } = require("../util");
+const { verifyStaffInviteCode } = require("../staffInviteCode");
 
 const router = express.Router();
 
@@ -40,7 +41,7 @@ function signToken(user) {
 }
 
 router.post("/register", authLimiter, async (req, res) => {
-  const { email: rawEmail, password, name, specializationId, workplace, phone, ref, interestIds } = req.body || {};
+  const { email: rawEmail, password, name, specializationId, workplace, phone, ref, interestIds, staffInviteCode } = req.body || {};
   const email = normEmail(rawEmail);
 
   if (!email || !email.includes("@") || !password || password.length < 6 || !name || !name.trim()) {
@@ -54,6 +55,21 @@ router.post("/register", authLimiter, async (req, res) => {
 
   const invite = await pool.query("SELECT role, invited_by FROM invites WHERE email=$1", [email]);
   const role = invite.rowCount ? invite.rows[0].role : "student";
+
+  // Приглашение само по себе — это лишь резервирование email за ролью, без
+  // подтверждения, что регистрируется именно приглашённый человек (почта нигде
+  // не проверяется). Поэтому для роли сотрудника обязателен ещё и код, который
+  // виден только в «Команда» у admin/super_admin и перевыпускается раз в сутки —
+  // без него любой, кто узнает/угадает приглашённый email, получил бы чужую роль.
+  if (role !== "student") {
+    const codeOk = await verifyStaffInviteCode(staffInviteCode);
+    if (!codeOk) {
+      return res.status(403).json({
+        error: "invalid_staff_code",
+        message: "Для регистрации с ролью куратора/администратора нужен верный код — уточните его у пригласившего"
+      });
+    }
+  }
 
   // Специализация — из справочника (фиксированный список), а не свободный текст:
   // от неё зависит, какие протоколы потом попадут врачу в «Ваши протоколы».

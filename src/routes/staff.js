@@ -9,6 +9,7 @@ const { generateTempPassword } = require("../util");
 const { notify } = require("../notifications");
 const { canManageStudent, requireStudentScope, filterToScope } = require("../access");
 const { buildDailyDigest } = require("../dailyDigest");
+const { getStaffInviteCode, TTL_MS } = require("../staffInviteCode");
 
 const router = express.Router();
 
@@ -47,6 +48,15 @@ router.get("/team", authRequired, requireRole("curator", "admin", "super_admin")
     `SELECT id, name, email, role, created_at FROM users WHERE role IN ('admin','curator') ORDER BY created_at`
   );
   res.json({ staff: result.rows });
+});
+
+// Код, без которого регистрация по email из приглашения (invites.role='curator'/'admin')
+// не присвоит эту роль — см. POST /auth/register и src/staffInviteCode.js. Тот, кто
+// зовёт нового сотрудника, называет ему этот код отдельно (голосом/в личном чате),
+// не тем же письмом/каналом, где называется сам email — иначе разделение секретов теряет смысл.
+router.get("/invite-code", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const { code, generatedAt } = await getStaffInviteCode();
+  res.json({ code, generatedAt, expiresAt: new Date(new Date(generatedAt).getTime() + TTL_MS) });
 });
 
 router.get("/directory", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {

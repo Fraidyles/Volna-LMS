@@ -440,3 +440,16 @@ CREATE TABLE IF NOT EXISTS module_feedback (
 -- через админку; NULL — если video_url это обычная внешняя ссылка, введённая руками.
 ALTER TABLE lessons ADD COLUMN IF NOT EXISTS video_filename TEXT;
 
+-- ---------- Этап 15: код для регистрации с ролью сотрудника (защита приглашений) ----------
+-- Раньше регистрация по email из приглашения (invites.role='curator'/'admin') сама
+-- по себе присваивала эту роль — без проверки, что регистрируется именно тот, кого
+-- позвали. Теперь для роли curator/admin регистрация дополнительно требует верный
+-- код — единственная строка-синглтон, которую видно только в «Команда» у
+-- admin/super_admin (GET /staff/invite-code) и которая автоматически перевыпускается,
+-- если ей больше 24 часов (см. src/staffInviteCode.js).
+CREATE TABLE IF NOT EXISTS staff_invite_code (
+  id            TEXT PRIMARY KEY DEFAULT 'current',
+  code          TEXT NOT NULL,
+  generated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
