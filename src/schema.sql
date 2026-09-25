@@ -291,3 +291,16 @@ ALTER TABLE progress ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
 -- при этом даёт safety-net на случай краша вкладки без события выгрузки (см. withOnlineStatus).
 ALTER TABLE progress ADD COLUMN IF NOT EXISTS is_online BOOLEAN NOT NULL DEFAULT false;
 
+-- ---------- Этап 10: шаблоны сообщений в чатах для куратора ----------
+-- Общая библиотека на всю команду персонала (куратор/админ/супер-админ), а не
+-- личная — на этой платформе ответы стандартные ("сертификат готов", "посмотрите
+-- урок ещё раз"), и нет смысла каждому куратору заводить одно и то же с нуля.
+-- created_by — просто для отображения "кто завёл", а не для ограничения доступа.
+CREATE TABLE IF NOT EXISTS chat_templates (
+  id            TEXT PRIMARY KEY,
+  title         TEXT NOT NULL,
+  body          TEXT NOT NULL,
+  created_by    TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+

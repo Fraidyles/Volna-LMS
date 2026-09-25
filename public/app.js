@@ -21,7 +21,12 @@ var me = null;                 // текущий пользователь {id,em
 var view = "loading";
 var course = null;             // {course, lessons, quiz, progress} — для врача
 var studentState = { tab:"course", navKey:"course", lessonIndex:0, quizMode:false, quizSubmitted:false, messagesSubTab:"curator", materialsSearch:"", materialsFilter:"all", materialsAutoFocus:false };
-var staffState = { mainTab:"home", navKey:"home", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],unanswered:[],pendingCertificates:[]}, digest:null };
+var staffState = { mainTab:"home", navKey:"home", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],unanswered:[],pendingCertificates:[]}, digest:null, chatTemplates:[] };
+// Открытый выпадающий список шаблонов над конкретным полем ввода (id textarea) —
+// null, если ни один не открыт. Редактор — отдельная мини-форма добавления/правки
+// шаблона (общая библиотека команды, см. src/schema.sql «Этап 10»).
+var templatePickerFor = null;
+var templateEditor = { open:false, id:null, title:"", body:"" };
 var profileEditor = { open:false };
 var calendarState = { monthDate:new Date(), streams:[], events:[], showStreamForm:false, eventModalMode:null, eventModalDate:null, eventModalId:null, recurring:false };
 var materialsPicker = { open:false, targetId:null, targetTitle:"", search:"", selectedIds:[] };
@@ -324,6 +329,10 @@ async function loadStaffData(){
   }catch(e){}
   try{
     staffState.digest = await api("/staff/daily-digest");
+  }catch(e){}
+  try{
+    var ct = await api("/chat-templates");
+    staffState.chatTemplates = ct.templates;
   }catch(e){}
   if(me.role==="admin" || me.role==="super_admin"){
     try{
@@ -1537,6 +1546,48 @@ function renderStaffChatsPage(){
     });
   }
   html += '</div></div>';
+  var wrap = el(html);
+  wrap.appendChild(renderChatTemplatesCard());
+  return wrap;
+}
+
+// Общая библиотека готовых ответов команды — заводится и правится прямо здесь,
+// а используется через кнопку-скрепку рядом с полем ввода в любом чате
+// (см. renderTemplatePickerButton). Инлайн-форма вместо модалки: полей всего два,
+// отдельное окно было бы лишним.
+function renderChatTemplatesCard(){
+  var html = '<div class="card" style="padding:18px 20px;margin-top:16px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
+      '<b style="font-size:14.5px;">Шаблоны сообщений</b>' +
+      (templateEditor.open ? '' : '<button class="btn btn-sm btn-ghost" data-action="open-template-editor">+ Добавить шаблон</button>') +
+    '</div>' +
+    '<p class="hint" style="margin:0 0 14px;">Общие для всей команды — доступны кнопкой '+icon("clipboard","ic-sm")+' рядом с полем ввода в любом чате.</p>';
+
+  if(templateEditor.open){
+    html += '<form id="templateEditorForm" style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--line-2);">' +
+      '<div class="field"><label>Название (только для вас, врач его не увидит)</label><input class="input" name="title" required value="'+escapeHtml(templateEditor.title)+'" placeholder="Например, «Поздравление с сертификатом»"></div>' +
+      '<div class="field"><label>Текст сообщения</label><textarea class="input" name="body" required style="height:80px;" placeholder="Текст, который подставится в поле ввода">'+escapeHtml(templateEditor.body)+'</textarea></div>' +
+      '<div class="err-text" id="templateEditorError" style="display:none;"></div>' +
+      '<div style="display:flex;gap:10px;">' +
+        '<button class="btn btn-primary" type="submit">'+(templateEditor.id?"Сохранить":"Добавить")+'</button>' +
+        '<button class="btn btn-ghost" type="button" data-action="close-template-editor">Отмена</button>' +
+      '</div>' +
+    '</form>';
+  }
+
+  if(!staffState.chatTemplates.length && !templateEditor.open){
+    html += '<div class="empty-state" style="padding:20px 10px;">Шаблонов пока нет.</div>';
+  } else {
+    staffState.chatTemplates.forEach(function(tpl){
+      html += '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);">' +
+        '<div style="flex:1;min-width:0;"><b style="font-size:13.5px;display:block;">'+escapeHtml(tpl.title)+'</b>' +
+        '<span style="font-size:12.5px;color:var(--muted);line-height:1.4;">'+escapeHtml(tpl.body)+'</span></div>' +
+        '<button class="btn btn-sm btn-ghost" data-action="open-template-editor" data-id="'+tpl.id+'" data-title="'+escapeHtml(tpl.title)+'" data-body="'+escapeHtml(tpl.body)+'">Изменить</button>' +
+        '<button class="btn btn-sm btn-ghost" data-action="delete-template" data-id="'+tpl.id+'">Удалить</button>' +
+      '</div>';
+    });
+  }
+  html += '</div>';
   return el(html);
 }
 
@@ -1677,6 +1728,32 @@ function renderStreamsPanel(){
   return html;
 }
 
+// Кнопка "Шаблоны" рядом с полем ввода — открывает список готовых сообщений
+// (общая библиотека команды, редактируется на странице «Чаты» куратора).
+// Список раскрывается ВВЕРХ (bottom, не top): поле ввода всегда внизу
+// чата/дровера, вниз открывать было бы некуда.
+function renderTemplatePickerButton(targetId){
+  var open = templatePickerFor === targetId;
+  var html = '<div class="template-picker-wrap" style="position:relative;flex-shrink:0;">' +
+    '<button type="button" class="btn btn-sm btn-ghost" data-action="toggle-template-picker" data-target="'+targetId+'" title="Вставить шаблон">'+icon("clipboard","ic-sm")+'</button>';
+  if(open){
+    html += '<div class="dash-menu" style="top:auto;bottom:calc(100% + 6px);right:0;left:auto;width:280px;max-width:280px;max-height:260px;">';
+    if(!staffState.chatTemplates.length){
+      html += '<div class="dash-menu-empty">Шаблонов пока нет — добавьте их на странице «Чаты».</div>';
+    } else {
+      staffState.chatTemplates.forEach(function(tpl){
+        html += '<div class="dash-menu-item" style="display:block;white-space:normal;" data-action="use-template" data-target="'+targetId+'" data-body="'+escapeHtml(tpl.body)+'">' +
+          '<b style="font-size:12.5px;display:block;">'+escapeHtml(tpl.title)+'</b>' +
+          '<span style="font-size:11px;color:var(--muted);display:block;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escapeHtml(tpl.body)+'</span>' +
+        '</div>';
+      });
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
 function renderStreamChatModal(){
   var thisStreamMuted = isChatMutedLocal("stream", streamChat.streamId);
   var body = '<div class="drawer-head"><b style="font-size:16px;">Чат: '+escapeHtml(streamChat.streamName)+'</b><button class="btn btn-ghost btn-sm" data-action="close-stream-chat">Закрыть ✕</button></div>' +
@@ -1686,6 +1763,7 @@ function renderStreamChatModal(){
       '</div>' +
       '<div class="msg-list" id="streamChatList" style="flex:1;"><div class="msg-empty">Загрузка…</div></div>' +
       '<div class="msg-input-row"><textarea class="input" id="streamChatInput" placeholder="Написать в чат потока…"></textarea>' +
+      renderTemplatePickerButton("streamChatInput") +
       '<button class="btn btn-primary" data-action="send-stream-chat-msg">Отправить</button></div>' +
     '</div>';
   return el('<div class="overlay" data-action="overlay-close-stream-chat"><div class="drawer" data-stop="1" style="width:min(480px,100%);">'+body+'</div></div>');
@@ -2598,6 +2676,7 @@ function renderStudentDrawer(){
       '<div class="msg-panel" style="height:420px;border:1px solid var(--line);border-radius:var(--radius-m);overflow:hidden;">' +
       '<div class="msg-list" id="msgListCurator"><div class="msg-empty">Загрузка…</div></div>' +
       '<div class="msg-input-row"><textarea class="input" id="curatorMsgInput" placeholder="Ответить врачу…"></textarea>' +
+      renderTemplatePickerButton("curatorMsgInput") +
       '<button class="btn btn-primary" data-action="send-curator-msg" data-id="'+s.id+'">Отправить</button></div></div>';
   } else if(staffState.drawerTab === "notes"){
     body += '<p class="hint" style="margin-top:0;">Видно только персоналу — врач эти записи не видит.</p>' +
@@ -2735,6 +2814,9 @@ function wireEvents(root){
     // чтобы клик по чему-то ещё (например, кнопке в таблице ниже) всё равно сработал.
     if(dashboardState.openFilterMenu && !e.target.closest(".dash-field")){
       dashboardState.openFilterMenu = null; render();
+    }
+    if(templatePickerFor && !e.target.closest(".template-picker-wrap")){
+      templatePickerFor = null; render();
     }
     var t = e.target.closest("[data-action]");
     if(!t) return;
@@ -3295,6 +3377,43 @@ function wireEvents(root){
       if(scval.trim()){ if(scinp) scinp.value=""; try{ await api("/stream-messages/"+streamChat.streamId, { method:"POST", body: JSON.stringify({text:scval}) }); loadStreamMessages(streamChat.streamId,"streamChatList"); }catch(err){ showToast(err.message); } }
       return;
     }
+    if(action==="toggle-template-picker"){
+      var tpTarget=t.getAttribute("data-target");
+      templatePickerFor = (templatePickerFor===tpTarget) ? null : tpTarget;
+      render(); return;
+    }
+    if(action==="use-template"){
+      var utTarget=t.getAttribute("data-target"); var utBody=t.getAttribute("data-body");
+      templatePickerFor=null;
+      render();
+      // Текстовое поле рендерится пустым (значение не хранится в стейте) — заполняем
+      // и фокусируем ПОСЛЕ render(), иначе innerHTML-перерисовка стирает то, что
+      // записали в .value до неё.
+      var utInp=document.getElementById(utTarget);
+      if(utInp){ utInp.value=utBody; utInp.focus(); utInp.selectionStart=utInp.selectionEnd=utInp.value.length; }
+      return;
+    }
+    if(action==="open-template-editor"){
+      var teId=t.getAttribute("data-id");
+      templateEditor = teId
+        ? { open:true, id:teId, title:t.getAttribute("data-title"), body:t.getAttribute("data-body") }
+        : { open:true, id:null, title:"", body:"" };
+      render(); return;
+    }
+    if(action==="close-template-editor"){
+      templateEditor = { open:false, id:null, title:"", body:"" };
+      render(); return;
+    }
+    if(action==="delete-template"){
+      if(!confirm("Удалить шаблон?")) return;
+      var dtId=t.getAttribute("data-id");
+      try{
+        await api("/chat-templates/"+dtId, { method:"DELETE" });
+        staffState.chatTemplates = staffState.chatTemplates.filter(function(tpl){ return tpl.id!==dtId; });
+        showToast("Шаблон удалён");
+      }catch(err){ showToast(err.message); }
+      render(); return;
+    }
     if(action==="toggle-picker-student"){
       var pid=t.getAttribute("data-id"); var pidx=materialsPicker.selectedIds.indexOf(pid);
       if(t.checked && pidx===-1) materialsPicker.selectedIds.push(pid);
@@ -3480,6 +3599,28 @@ function wireEvents(root){
         me = rPe.user;
         profileEditor.open=false; showToast("Профиль обновлён");
       }catch(err){ errPe.textContent=err.message; errPe.style.display="block"; btnPe.disabled=false; btnPe.textContent="Сохранить"; }
+      render(); return;
+    }
+    if(e.target.id==="templateEditorForm"){
+      e.preventDefault();
+      var fdte=new FormData(e.target);
+      var errTe=document.getElementById("templateEditorError"); errTe.style.display="none";
+      var btnTe=e.target.querySelector("button[type=submit]"); btnTe.disabled=true; btnTe.textContent="Сохраняем…";
+      var titleTe=fdte.get("title"), bodyTe=fdte.get("body");
+      try{
+        if(templateEditor.id){
+          await api("/chat-templates/"+templateEditor.id, { method:"PUT", body: JSON.stringify({ title:titleTe, body:bodyTe }) });
+          staffState.chatTemplates = staffState.chatTemplates.map(function(tpl){
+            return tpl.id===templateEditor.id ? Object.assign({}, tpl, { title:titleTe, body:bodyTe }) : tpl;
+          });
+          showToast("Шаблон обновлён");
+        } else {
+          var rTe=await api("/chat-templates", { method:"POST", body: JSON.stringify({ title:titleTe, body:bodyTe }) });
+          staffState.chatTemplates.push(rTe);
+          showToast("Шаблон добавлен");
+        }
+        templateEditor = { open:false, id:null, title:"", body:"" };
+      }catch(err){ errTe.textContent=err.message; errTe.style.display="block"; btnTe.disabled=false; btnTe.textContent=templateEditor.id?"Сохранить":"Добавить"; }
       render(); return;
     }
     if(e.target.id==="quizForm"){

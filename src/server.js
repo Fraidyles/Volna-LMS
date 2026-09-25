@@ -18,6 +18,7 @@ const messageRoutes = require("./routes/messages");
 const streamMessageRoutes = require("./routes/stream-messages");
 const notificationRoutes = require("./routes/notifications");
 const chatMuteRoutes = require("./routes/chat-mutes");
+const chatTemplateRoutes = require("./routes/chat-templates");
 const calendarRoutes = require("./routes/calendar");
 
 const app = express();
@@ -44,6 +45,7 @@ app.use("/api/messages", messageRoutes);
 app.use("/api/stream-messages", streamMessageRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/chat-mutes", chatMuteRoutes);
+app.use("/api/chat-templates", chatTemplateRoutes);
 app.use("/api", calendarRoutes);
 
 // Интерактивная документация API — удобно, когда фронтенд и бэкенд начнут жить отдельно
