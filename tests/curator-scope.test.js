@@ -118,21 +118,6 @@ describe("Ролевой скоуп куратора", () => {
     expect(strangerCert.rows[0].certificate_status).not.toBe("issued");
   });
 
-  test("чат с врачом — куратор не видит и не может писать чужому врачу (403)", async () => {
-    const curatorA = await createUser({ role: "curator" });
-    const curatorB = await createUser({ role: "curator" });
-    const stranger = await createUser({ role: "student", courseId: course.courseId });
-    await assignCurator(stranger.id, curatorB.id);
-
-    const cookie = await loginAs(curatorA);
-    const getRes = await request(app).get(`/api/messages/${stranger.id}`).set("Cookie", cookie);
-    expect(getRes.status).toBe(403);
-
-    const postRes = await request(app).post("/api/messages").set("Cookie", cookie)
-      .send({ studentId: stranger.id, text: "Привет" });
-    expect(postRes.status).toBe(403);
-  });
-
   test("массовое изменение продукта/оплаты куратором молча пропускает чужих врачей", async () => {
     const curatorA = await createUser({ role: "curator" });
     const curatorB = await createUser({ role: "curator" });

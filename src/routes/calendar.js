@@ -9,28 +9,42 @@ const router = express.Router();
 /* ---------- Потоки ---------- */
 
 router.get("/streams", authRequired, async (req, res) => {
-  const result = await pool.query("SELECT id, name, start_date, created_by, created_at FROM streams ORDER BY start_date NULLS LAST, created_at");
+  const result = await pool.query("SELECT id, name, start_date, telegram_url, created_by, created_at FROM streams ORDER BY start_date NULLS LAST, created_at");
   res.json({ streams: result.rows });
 });
 
 router.post("/streams", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
-  const { name, startDate } = req.body || {};
+  const { name, startDate, telegramUrl } = req.body || {};
   if (!name || !name.trim()) return res.status(400).json({ error: "invalid_input", message: "Укажите название потока" });
   const id = crypto.randomUUID();
   await pool.query(
-    "INSERT INTO streams (id, name, start_date, created_by) VALUES ($1,$2,$3,$4)",
-    [id, name.trim(), startDate || null, req.user.name]
+    "INSERT INTO streams (id, name, start_date, telegram_url, created_by) VALUES ($1,$2,$3,$4,$5)",
+    [id, name.trim(), startDate || null, (telegramUrl && telegramUrl.trim()) || null, req.user.name]
   );
   await logAction(req.user, "stream.create", "stream", id, name.trim(), { startDate }, true);
   res.json({ ok: true, id });
 });
 
+// Ссылка на Telegram-группу потока часто заводится позже создания самого потока
+// (группу ещё нужно создать в Telegram) — отдельная ручка, а не только при создании.
+router.patch("/streams/:id", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+  const { telegramUrl } = req.body || {};
+  const before = await pool.query("SELECT name, telegram_url FROM streams WHERE id=$1", [req.params.id]);
+  if (!before.rowCount) return res.status(404).json({ error: "not_found" });
+  const clean = (telegramUrl && telegramUrl.trim()) || null;
+  await pool.query("UPDATE streams SET telegram_url=$1 WHERE id=$2", [clean, req.params.id]);
+  await logAction(req.user, "stream.update_telegram", "stream", req.params.id, before.rows[0].name, {
+    before: { telegramUrl: before.rows[0].telegram_url }
+  });
+  res.json({ ok: true, telegramUrl: clean });
+});
+
 router.delete("/streams/:id", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
-  const s = await pool.query("SELECT name, start_date, created_by FROM streams WHERE id=$1", [req.params.id]);
+  const s = await pool.query("SELECT name, start_date, telegram_url, created_by FROM streams WHERE id=$1", [req.params.id]);
   if (!s.rowCount) return res.status(404).json({ error: "not_found" });
   await pool.query("DELETE FROM streams WHERE id=$1", [req.params.id]);
   await logAction(req.user, "stream.delete", "stream", req.params.id, s.rows[0].name, {
-    before: { name: s.rows[0].name, startDate: s.rows[0].start_date, createdBy: s.rows[0].created_by }
+    before: { name: s.rows[0].name, startDate: s.rows[0].start_date, telegramUrl: s.rows[0].telegram_url, createdBy: s.rows[0].created_by }
   }, true);
   res.json({ ok: true });
 });

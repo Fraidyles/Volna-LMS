@@ -15,7 +15,7 @@ module.exports = async () => {
 
   // Чистый лист перед каждым запуском тестов — тестовая база предназначена только для этого.
   await pool.query(`
-    TRUNCATE TABLE audit_log, lesson_history, messages, course_visibility, quiz_questions,
+    TRUNCATE TABLE audit_log, lesson_history, course_visibility, quiz_questions,
     lessons, progress, events, streams, invites, courses, users
     RESTART IDENTITY CASCADE
   `);

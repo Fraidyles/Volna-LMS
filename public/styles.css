@@ -312,19 +312,6 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
 .cert h2{font-size:24px;margin:0 0 6px;font-weight:600;}
 .cert .score{font-weight:700;font-size:44px;color:var(--ink);margin:16px 0 4px;letter-spacing:-.02em;}
 
-/* ---------------- Сообщения ---------------- */
-.msg-panel{display:flex;flex-direction:column;height:480px;}
-.msg-list{flex:1;overflow-y:auto;padding:18px 20px;display:flex;flex-direction:column;gap:10px;}
-.msg-row{display:flex;}
-.msg-row.me{justify-content:flex-end;}
-.bubble{max-width:78%;padding:10px 13px;border-radius:14px;font-size:13.8px;line-height:1.45;}
-.msg-row:not(.me) .bubble{background:var(--surface-2);border-bottom-left-radius:4px;}
-.msg-row.me .bubble{background:var(--primary);color:#fff;border-bottom-right-radius:4px;}
-.bubble .t{font-size:10.5px;opacity:.7;margin-top:4px;display:block;}
-.msg-empty{margin:auto;text-align:center;color:var(--muted-2);font-size:13.5px;}
-.msg-input-row{display:flex;gap:8px;padding:14px;border-top:var(--border-hairline);}
-.msg-input-row textarea{resize:none;height:42px;padding:10px 13px;}
-
 /* ---------------- Сводная строка ---------------- */
 .stat-row{display:grid;grid-template-columns:repeat(4,1fr);background:var(--surface);border:var(--border-hairline);border-radius:var(--radius-m);box-shadow:var(--shadow);margin-bottom:22px;overflow:hidden;}
 @media (max-width:800px){.stat-row{grid-template-columns:repeat(2,1fr);}}

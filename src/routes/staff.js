@@ -482,10 +482,10 @@ router.get("/course-preview", authRequired, requireRole("curator", "admin", "sup
 });
 
 /* ---------- Инбокс куратора: врачи, которым сейчас нужно внимание ---------- */
-// Три сигнала в одном списке вместо трёх разных мест, куда куратору приходилось
-// заглядывать по отдельности: кто пропал, кому не ответили в чате, кому пора
-// выдать сертификат. Скоуп куратора (свои + неназначенные) применяется тем же
-// способом, что и к остальному списку врачей.
+// Два сигнала в одном списке вместо двух разных мест, куда куратору приходилось
+// заглядывать по отдельности: кто пропал, кому пора выдать сертификат. Скоуп
+// куратора (свои + неназначенные) применяется тем же способом, что и к остальному
+// списку врачей.
 router.get("/inbox", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
   const scopeClause = req.user.role === "curator" ? "AND (u.assigned_curator_id = $1 OR u.assigned_curator_id IS NULL)" : "";
   const scopeParams = req.user.role === "curator" ? [req.user.id] : [];
@@ -497,23 +497,6 @@ router.get("/inbox", authRequired, requireRole("curator", "admin", "super_admin"
        AND COALESCE(p.last_active_at, u.created_at) < now() - interval '7 days'
      ORDER BY last_seen ASC`,
     scopeParams
-  );
-
-  // Берём САМОЕ последнее сообщение в каждом треде (независимо от автора) и уже
-  // потом смотрим, от кого оно — если бы фильтровали from_role='student' в WHERE
-  // до DISTINCT ON, более свежий ответ куратора не перекрывал бы старое сообщение
-  // врача, и тред ложно считался бы неотвеченным даже после ответа.
-  const unansweredParams = scopeParams.slice();
-  const unanswered = await pool.query(
-    `SELECT DISTINCT ON (m.student_id) m.student_id AS id, u.name, u.email, m.from_role, m.created_at
-     FROM messages m
-     JOIN users u ON u.id = m.student_id AND u.role='student'
-     WHERE 1=1 ${scopeClause}
-     ORDER BY m.student_id, m.created_at DESC`,
-    unansweredParams
-  );
-  const unansweredOverdue = unanswered.rows.filter((r) =>
-    r.from_role === "student" && new Date(r.created_at) < new Date(Date.now() - 24 * 3600 * 1000)
   );
 
   // Пока сертификаты на курсе выключены (см. courses.certificates_enabled), этот сигнал
@@ -533,7 +516,6 @@ router.get("/inbox", authRequired, requireRole("curator", "admin", "super_admin"
 
   res.json({
     inactive: inactive.rows,
-    unanswered: unansweredOverdue,
     pendingCertificates: pendingCert.rows
   });
 });

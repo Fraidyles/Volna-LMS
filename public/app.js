@@ -21,16 +21,11 @@ var me = null;                 // текущий пользователь {id,em
 var view = "loading";
 var specializationsList = [];  // справочник специализаций — грузится один раз при старте (нужен и до входа, на форме регистрации)
 var course = null;             // {course, lessons, quiz, progress} — для врача
-var studentState = { tab:"course", navKey:"course", lessonIndex:0, quizMode:false, quizSubmitted:false, messagesSubTab:"curator", materialsSearch:"", materialsFilter:"all", materialsAutoFocus:false,
+var studentState = { tab:"course", navKey:"course", lessonIndex:0, quizMode:false, quizSubmitted:false, materialsSearch:"", materialsFilter:"all", materialsAutoFocus:false,
   lessonStage:"intro", videoEnded:false, lessonQuizAnswers:{}, lessonQuizResult:null, protocolsLoaded:false,
   // Гейт после последнего урока модуля: null | "quiz" | "feedback".
   moduleGateStage:null, moduleGateId:null, moduleQuizResult:null, moduleFeedbackRating:0, moduleFeedbackComment:"" };
-var staffState = { mainTab:"home", navKey:"home", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], certificatesEnabled:false, quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],unanswered:[],pendingCertificates:[]}, digest:null, chatTemplates:[], inviteCode:null, editSpecializationIds:[], editName:"", editPhone:"", editWorkplace:"" };
-// Открытый выпадающий список шаблонов над конкретным полем ввода (id textarea) —
-// null, если ни один не открыт. Редактор — отдельная мини-форма добавления/правки
-// шаблона (общая библиотека команды, см. src/schema.sql «Этап 10»).
-var templatePickerFor = null;
-var templateEditor = { open:false, id:null, title:"", body:"" };
+var staffState = { mainTab:"home", navKey:"home", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], certificatesEnabled:false, quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],pendingCertificates:[]}, digest:null, inviteCode:null, editSpecializationIds:[], editName:"", editPhone:"", editWorkplace:"" };
 var profileEditor = { open:false, name:"", phone:"", workplace:"", specializationIds:[], interestIds:[] };
 // Черновик специализаций для формы регистрации — до входа в систему нет ни
 // me, ни staffState, поэтому отдельное состояние; сбрасывается заново при
@@ -48,7 +43,9 @@ var specPickerQuery = "";
 var calendarState = { monthDate:new Date(), streams:[], events:[], showStreamForm:false, eventModalMode:null, eventModalDate:null, eventModalId:null, recurring:false };
 var materialsPicker = { open:false, targetId:null, targetTitle:"", search:"", selectedIds:[] };
 var scheduleModal = { open:false, lessonId:null, lessonTitle:"", search:"", selectedIds:[], applyToAll:true, unlockDate:"", schedule:[] };
-var streamChat = { open:false, streamId:null, streamName:"" };
+// Окно «Общение» — вместо внутреннего чата просто ведёт в Telegram-группу потока
+// (см. streams.telegram_url); открывается по клику на иконку "Чат" в сайдбаре.
+var telegramModal = { open:false };
 var notifState = { items:[], unreadCount:0 };
 var mySessionsList = [];
 var mySessionsLoaded = false;
@@ -84,7 +81,6 @@ function accessStatusOf(s){
   }
   return "active";
 }
-var msgPollTimer = null;
 var toastTimer = null;
 var changePasswordOpen = false;
 var previewMode = false;
@@ -310,7 +306,6 @@ function sendOfflineBeacon(){
 window.addEventListener("pagehide", sendOfflineBeacon);
 
 async function routeAfterLogin(){
-  await loadChatMutes();
   if(me.role === "student"){
     view = "student";
     await loadCourse();
@@ -324,19 +319,6 @@ async function routeAfterLogin(){
     await loadCalendarData();
   }
   render();
-}
-
-// Мьют — чисто клиентское состояние "type:key" -> true, подгружается один раз при
-// входе и обновляется оптимistично сразу при клике, без re-fetch всего списка.
-var mutedChats = {};
-function chatMuteKey(type,key){ return type+":"+key; }
-function isChatMutedLocal(type,key){ return !!mutedChats[chatMuteKey(type,key)]; }
-async function loadChatMutes(){
-  try{
-    var data = await api("/chat-mutes");
-    mutedChats = {};
-    data.mutes.forEach(function(m){ mutedChats[chatMuteKey(m.chat_type,m.chat_key)]=true; });
-  }catch(e){}
 }
 
 async function loadNotifications(){
@@ -430,10 +412,6 @@ async function loadStaffData(){
     staffState.digest = await api("/staff/daily-digest");
   }catch(e){}
   try{
-    var ct = await api("/chat-templates");
-    staffState.chatTemplates = ct.templates;
-  }catch(e){}
-  try{
     var pr = await api("/protocols");
     adminProtocolsState.list = pr.protocols;
   }catch(e){}
@@ -487,7 +465,7 @@ function applyGlow(){
   if(view === "login" || view === "register") g = "c";
   else if(view === "student"){
     if(studentState.tab === "schedule") g = "b";
-    else if(studentState.tab === "messages" || studentState.tab === "lesson") g = "a";
+    else if(studentState.tab === "lesson") g = "a";
     else g = "c"; // главная — курс, сертификат
   } else if(view === "staff"){
     if(staffState.mainTab === "calendar") g = "b";
@@ -522,6 +500,9 @@ function render(){
   }
   if(profileEditor.open && (view==="student"||view==="staff")){
     app.appendChild(renderProfileModal());
+  }
+  if(telegramModal.open && (view==="student"||view==="staff")){
+    app.appendChild(renderTelegramModal());
   }
   if(tempPasswordResult && view==="staff"){
     app.appendChild(renderTempPasswordModal());
@@ -823,7 +804,7 @@ function renderModuleFeedbackViewerDrawer(){
 function renderTempPasswordModal(){
   var body = '<div class="drawer-head"><b style="font-size:16px;">Новый пароль создан</b><button class="btn btn-ghost btn-sm" data-action="close-temp-password">Закрыть ✕</button></div>' +
     '<div class="drawer-body">' +
-      '<p style="font-size:13.5px;color:var(--muted);margin:0 0 14px;">Сообщите этот пароль <b style="color:var(--ink);">'+escapeHtml(tempPasswordResult.name)+'</b> лично или через чат — он больше нигде не отобразится.</p>' +
+      '<p style="font-size:13.5px;color:var(--muted);margin:0 0 14px;">Сообщите этот пароль <b style="color:var(--ink);">'+escapeHtml(tempPasswordResult.name)+'</b> лично или через Telegram — он больше нигде не отобразится.</p>' +
       '<div class="card" style="padding:16px;text-align:center;background:var(--primary-tint);border-color:transparent;margin-bottom:16px;">' +
         '<code style="font-size:20px;font-weight:700;letter-spacing:1px;color:var(--primary-dark);">'+escapeHtml(tempPasswordResult.tempPassword)+'</code>' +
       '</div>' +
@@ -860,7 +841,7 @@ function renderMyProductBlock(){
       '<span style="font-size:13px;color:var(--muted);">Оплата</span>' +
       magnet(payKind, PAYMENT_LABELS[payStatus]||payStatus) +
     '</div>' +
-    '<p class="hint" style="margin-top:10px;">Вопрос по оплате — обратитесь к куратору в чате.</p>' +
+    '<p class="hint" style="margin-top:10px;">Вопрос по оплате — обратитесь к куратору в Telegram-группе потока.</p>' +
   '</div>';
 }
 
@@ -879,6 +860,44 @@ function renderProfileModal(){
     (isStudent ? renderMyProductBlock() : '') +
     '</div>';
   return el('<div class="overlay" data-action="overlay-close-profile-editor"><div class="drawer" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
+}
+
+// Всё общение врачей, кураторов и преподавателей — в Telegram-группе потока, не
+// в приложении (см. streams.telegram_url). Окно только показывает ссылку(и) и
+// ведёт наружу — своей переписки внутри платформы больше нет.
+function renderTelegramModal(){
+  var body = '<div class="drawer-head"><b style="font-size:16px;">Общение</b><button class="btn btn-ghost btn-sm" data-action="close-telegram-modal">Закрыть ✕</button></div>' +
+    '<div class="drawer-body">';
+  if(view==="student"){
+    var mySid = me.stream_id || "";
+    var myStream = mySid ? (calendarState.streams||[]).find(function(s){ return s.id===mySid; }) : null;
+    if(!mySid){
+      body += '<div class="empty-state" style="padding:30px 10px;">Вы пока не привязаны ни к одному потоку — куратор добавит вас, когда сформируется поток, и здесь появится ссылка на Telegram-группу.</div>';
+    } else if(!myStream || !myStream.telegram_url){
+      body += '<div class="empty-state" style="padding:30px 10px;">Куратор ещё не добавил ссылку на Telegram-группу вашего потока — уточните у него лично.</div>';
+    } else {
+      body += '<p style="font-size:13.5px;color:var(--muted);margin:0 0 14px;">Куратор, преподаватели и другие врачи вашего потока «'+escapeHtml(myStream.name)+'» — в этой группе.</p>' +
+        '<a class="btn btn-primary btn-block" href="'+escapeHtml(myStream.telegram_url)+'" target="_blank" rel="noopener">Открыть Telegram-группу →</a>';
+    }
+  } else {
+    var streams = calendarState.streams || [];
+    if(!streams.length){
+      body += '<div class="empty-state" style="padding:30px 10px;">Потоков пока нет — создайте их на странице «Расписание».</div>';
+    } else {
+      body += '<p style="font-size:13.5px;color:var(--muted);margin:0 0 14px;">Общение с врачами — в Telegram-группах их потоков.</p>';
+      streams.forEach(function(s){
+        body += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line-2);gap:10px;">' +
+          '<b style="font-size:13.5px;">'+escapeHtml(s.name)+'</b>' +
+          (s.telegram_url
+            ? '<a class="btn btn-sm btn-primary" href="'+escapeHtml(s.telegram_url)+'" target="_blank" rel="noopener">Открыть →</a>'
+            : '<span style="font-size:12px;color:var(--muted);">ссылка не добавлена</span>') +
+        '</div>';
+      });
+      body += '<p class="hint" style="margin-top:12px;">Добавить или изменить ссылку — на странице «Расписание».</p>';
+    }
+  }
+  body += '</div>';
+  return el('<div class="overlay" data-action="overlay-close-telegram-modal"><div class="drawer" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
 }
 
 /* ============================= РЕНДЕР: АВТОРИЗАЦИЯ ============================= */
@@ -1021,7 +1040,6 @@ function renderSidebar(){
       items += sidebarItem("course","home","Обучение", navKey==="course");
       items += sidebarItem("schedule","calendar","Расписание", navKey==="schedule");
     } else {
-      var msgBadge = course ? (course.unreadMessages||0) : 0;
       var notifBadge = notifState.unreadCount + upcomingEventReminders().length;
       items += sidebarItem("search","search","Поиск", navKey==="search");
       items += sidebarItem("profile","user","Мой профиль", navKey==="profile");
@@ -1033,15 +1051,13 @@ function renderSidebar(){
       if(course && protocolsSectionAvailable()){
         items += sidebarItem("protocols","doctor","Ваши протоколы", navKey==="protocols");
       }
-      items += sidebarItem("messages","message","Чаты", navKey==="messages", msgBadge);
+      items += sidebarItem("messages","message","Telegram", false);
       items += sidebarItem("notifications","bell","Уведомления", navKey==="notifications", notifBadge);
       items += sidebarItem("settings","gear","Настройки", navKey==="settings");
     }
   } else {
     var snavKey = staffState.navKey || "students";
     var isAdmin = me.role==="admin" || me.role==="super_admin";
-    var unanswered = (staffState.inbox && staffState.inbox.unanswered) || [];
-    var chatsBadge = unanswered.filter(function(r){ return !isChatMutedLocal("curator", r.id); }).length;
     var staffNotifBadge = upcomingEventReminders().length;
     items += sidebarItem("profile","user","Мой профиль", snavKey==="profile");
     items += sidebarItem("home","home","Главная", snavKey==="home");
@@ -1055,7 +1071,7 @@ function renderSidebar(){
       items += sidebarItem("modules","clipboard","Модули", snavKey==="modules");
       items += sidebarItem("audit","list","Журнал", snavKey==="audit");
     }
-    items += sidebarItem("chats","message","Чаты", snavKey==="chats", chatsBadge);
+    items += sidebarItem("chats","message","Telegram", false);
     items += sidebarItem("notifications","bell","Уведомления", snavKey==="notifications", staffNotifBadge);
     items += sidebarItem("settings","gear","Настройки", snavKey==="settings");
   }
@@ -1110,8 +1126,6 @@ function renderStudentShell(){
 
   if(studentState.tab === "lesson"){
     content.appendChild(renderCoursePlayer());
-  } else if(studentState.tab === "messages" && !previewMode){
-    content.appendChild(renderStudentMessages());
   } else if(studentState.tab === "schedule"){
     content.appendChild(renderStudentSchedule());
   } else if(studentState.tab === "materials" && !previewMode){
@@ -1219,8 +1233,8 @@ function renderStudentHome(){
     html += '<div class="card course-hero" style="background:var(--status-blocked-tint);">' +
       magnet("blocked", "Доступ ограничен") +
       '<h2 style="margin-top:14px;">'+escapeHtml(course.course.title)+'</h2>' +
-      '<p>'+(lock.reason==="blocked" ? 'Куратор временно ограничил ваш доступ к демо-курсу.' : 'Срок доступа к демо-курсу истёк.')+' Чтобы продолжить обучение, напишите куратору — он может продлить или снять ограничение.</p>' +
-      '<button class="btn btn-primary" data-action="student-tab" data-tab="messages">Написать куратору</button></div>';
+      '<p>'+(lock.reason==="blocked" ? 'Куратор временно ограничил ваш доступ к демо-курсу.' : 'Срок доступа к демо-курсу истёк.')+' Чтобы продолжить обучение, напишите куратору в Telegram-группе потока — он может продлить или снять ограничение.</p>' +
+      '<button class="btn btn-primary" data-action="open-telegram-modal">Написать куратору</button></div>';
   } else {
     // Статус-трек: один слот на урок + слот теста. Это «Моя строка» — сигнатурный элемент направления.
     var slots = '<div class="status-track">';
@@ -1307,8 +1321,8 @@ function renderStudentHome(){
 
   html += '<div class="card" style="padding:18px;">' +
     magnet("neutral","Куратор") +
-    '<p style="font-size:13px;color:var(--muted);margin:10px 0 12px;line-height:1.4;">Вопрос по курсу или доступу — куратор ответит в чате.</p>' +
-    '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="messages">Открыть чат →</button>' +
+    '<p style="font-size:13px;color:var(--muted);margin:10px 0 12px;line-height:1.4;">Вопрос по курсу или доступу — напишите в Telegram-группе потока.</p>' +
+    '<button class="btn btn-sm btn-ghost" data-action="open-telegram-modal">Открыть Telegram →</button>' +
   '</div>';
 
   var gam = course.gamification || { points:0, currentStreak:0, longestStreak:0 };
@@ -1329,7 +1343,7 @@ function renderStudentHome(){
 
   html += '</div>';
 
-  // Короткий предпросмотр на главной — не дублирует полные страницы «Уведомления»/«Чаты»
+  // Короткий предпросмотр на главной — не дублирует полную страницу «Уведомления»
   // из сайдбара, а просто отвечает на вопрос «есть что-то новое?», не уходя со страницы.
   var homeReminders = upcomingEventReminders();
   var homeNotifItems = homeReminders.concat(notifState.items.filter(function(n){ return !n.read_at; }));
@@ -1349,15 +1363,11 @@ function renderStudentHome(){
   html += '</div>';
   html += '<div class="card" style="padding:18px 20px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
-      '<b style="font-size:14px;">Сообщения</b>' +
-      (course.unreadMessages ? '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="messages">Открыть →</button>' : '') +
-    '</div>';
-  if(!course.unreadMessages){
-    html += '<p style="font-size:13px;color:var(--muted);margin:0;">У вас нет новых сообщений.</p>';
-  } else {
-    html += '<p style="font-size:13px;margin:0;">Непрочитанных сообщений от куратора: '+course.unreadMessages+'.</p>';
-  }
-  html += '</div></div>';
+      '<b style="font-size:14px;">Общение</b>' +
+      '<button class="btn btn-sm btn-ghost" data-action="open-telegram-modal">Открыть →</button>' +
+    '</div>' +
+    '<p style="font-size:13px;color:var(--muted);margin:0;">Куратор, преподаватели и другие врачи вашего потока — в Telegram-группе.</p>' +
+  '</div></div>';
 
   if(me.referral_code){
     var refLink = window.location.origin + "/?ref=" + me.referral_code;
@@ -1761,48 +1771,6 @@ function renderCertificate(){
   return el(html);
 }
 
-// Два отдельных канала общения врача: личный чат с куратором (как раньше) и
-// общая беседа его потока (когорты) — сознательно разведены на под-вкладки,
-// а не смешаны в одну ленту, чтобы не терять приватность 1:1-переписки.
-function renderStudentMessages(){
-  var sub = studentState.messagesSubTab;
-  var mySid = me.stream_id || "";
-  var html = '<div class="card msg-panel" style="margin-top:6px;max-width:640px;">' +
-    '<div style="padding:14px 20px 0;display:flex;gap:6px;">' +
-      '<button class="tab'+(sub==="curator"?' active':'')+'" data-action="student-messages-subtab" data-sub="curator">Куратор</button>' +
-      '<button class="tab'+(sub==="stream"?' active':'')+'" data-action="student-messages-subtab" data-sub="stream">Поток</button>' +
-    '</div>';
-  if(sub==="stream"){
-    if(!mySid){
-      html += '<div class="empty-state" style="padding:30px 20px;">Вы пока не привязаны ни к одному потоку — куратор добавит вас, когда сформируется поток, и здесь появится общая беседа.</div>';
-    } else {
-      var streamMuted = isChatMutedLocal("stream", mySid);
-      html += '<div style="padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;">' +
-          '<div><b style="font-size:14.5px;">Беседа потока</b>' +
-          '<p style="font-size:12px;color:var(--muted);margin:2px 0 0;">Видят и пишут все врачи вашего потока и куратор.</p></div>' +
-          '<button class="btn btn-sm btn-ghost" data-action="toggle-chat-mute" data-type="stream" data-key="'+mySid+'" data-muted="'+(streamMuted?"1":"0")+'">'+(streamMuted?"Включить уведомления":"Отключить уведомления")+'</button>' +
-        '</div>' +
-        '<div class="msg-list" id="msgListStream"><div class="msg-empty">Загрузка…</div></div>' +
-        '<div class="msg-input-row"><textarea class="input" id="msgInputStream" placeholder="Написать в общий чат потока…"></textarea>' +
-        '<button class="btn btn-primary" data-action="send-student-stream-msg">Отправить</button></div>';
-    }
-  } else {
-    var curatorMuted = isChatMutedLocal("curator", me.id);
-    html += '<div style="padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">' +
-        '<b style="font-size:14.5px;">Чат с куратором</b>' +
-        '<div style="display:flex;gap:8px;">' +
-          '<button class="btn btn-sm btn-ghost" data-action="toggle-chat-mute" data-type="curator" data-key="'+me.id+'" data-muted="'+(curatorMuted?"1":"0")+'">'+(curatorMuted?"Включить уведомления":"Отключить уведомления")+'</button>' +
-          '<button class="btn btn-sm btn-ghost" data-action="mark-messages-unread" title="Показать бейдж снова, чтобы вернуться к чату позже">Пометить непрочитанным</button>' +
-        '</div>' +
-      '</div>' +
-      '<div class="msg-list" id="msgList"><div class="msg-empty">Загрузка…</div></div>' +
-      '<div class="msg-input-row"><textarea class="input" id="msgInput" placeholder="Напишите сообщение…"></textarea>' +
-      '<button class="btn btn-primary" data-action="send-student-msg">Отправить</button></div>';
-  }
-  html += '</div>';
-  return el(html);
-}
-
 // Три ступени вместо одной планки "всё или ничего" — врач видит скидку,
 // которую уже заслужил, и сколько очков осталось до следующей ступени.
 function renderPointTiers(points){
@@ -1826,7 +1794,7 @@ function renderPointTiersCta(points){
   if(current){
     html += '<div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
       magnet("done","Доступна скидка "+current.discount+"%") +
-      '<button class="btn btn-sm btn-primary" data-action="student-tab" data-tab="messages">Написать куратору, чтобы оформить скидку '+current.discount+'%</button>' +
+      '<button class="btn btn-sm btn-primary" data-action="open-telegram-modal">Написать куратору, чтобы оформить скидку '+current.discount+'%</button>' +
     '</div>';
     if(next) html += '<p style="font-size:12.5px;color:var(--muted-2);margin:10px 0 0;">Ещё '+(next.points-points)+' очков — и скидка вырастет до '+next.discount+'%.</p>';
   } else {
@@ -1997,42 +1965,6 @@ function renderNotificationsPage(){
   return el(html);
 }
 
-// Мьют принадлежит тому, кто его поставил (см. mutedChats) — поэтому один и тот же
-// список пригоден и для врача (максимум 2 записи: куратор + поток), и для куратора
-// (по одной записи на каждого замьюченного врача).
-function resolveChatLabel(type, key){
-  if(type==="curator"){
-    if(me.role==="student") return "Чат с куратором";
-    var st = (staffState.students||[]).find(function(s){ return s.id===key; });
-    return st ? ("Чат с "+st.name) : "Чат с врачом";
-  }
-  if(type==="stream"){
-    var stream = (calendarState.streams||[]).find(function(s){ return s.id===key; });
-    return stream ? ("Беседа потока «"+stream.name+"»") : "Беседа потока";
-  }
-  return type+": "+key;
-}
-function renderMuteOverviewCard(){
-  var keys = Object.keys(mutedChats);
-  var html = '<div class="card" style="padding:18px 20px;margin-top:14px;">' +
-    '<b style="font-size:14px;display:block;margin-bottom:4px;">Отключённые уведомления чатов</b>';
-  if(!keys.length){
-    html += '<p style="font-size:12.5px;color:var(--muted);margin:10px 0 0;">Вы не отключали уведомления ни для одного чата.</p>';
-  } else {
-    html += '<p class="hint" style="margin:6px 0 12px;">Для этих чатов новые сообщения нигде не подсвечиваются бейджами.</p>';
-    keys.forEach(function(k){
-      var sep = k.indexOf(":");
-      var type = k.slice(0,sep), key = k.slice(sep+1);
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line-2);">' +
-        '<span style="font-size:13px;">'+escapeHtml(resolveChatLabel(type,key))+'</span>' +
-        '<button class="btn btn-sm btn-ghost" data-action="toggle-chat-mute" data-type="'+type+'" data-key="'+key+'" data-muted="1">Включить уведомления</button>' +
-      '</div>';
-    });
-  }
-  html += '</div>';
-  return html;
-}
-
 // Список отражает реальные правила доступа на бэкенде (requireRole в src/routes/*),
 // а не придуман отдельно — честная витрина того, что уже проверяется на сервере.
 function roleCapabilities(role){
@@ -2040,7 +1972,7 @@ function roleCapabilities(role){
     return [
       { label:"Просматривать уроки, материалы и расписание эфиров", allowed:true },
       { label:"Проходить итоговый тест и получать сертификат", allowed:true },
-      { label:"Писать в чат куратору и в общий чат своего потока", allowed:true },
+      { label:"Общаться с куратором и потоком в Telegram-группе", allowed:true },
       { label:"Сохранять уроки в «Мои материалы» и оставлять личные заметки", allowed:true },
       { label:"Просматривать прогресс и данные других врачей", allowed:false },
       { label:"Редактировать уроки, тест или график их открытия", allowed:false },
@@ -2050,7 +1982,7 @@ function roleCapabilities(role){
   if(role==="curator"){
     return [
       { label:"Просматривать назначенных врачей и врачей без куратора", allowed:true },
-      { label:"Отвечать в чатах, продлевать/блокировать доступ, выдавать сертификаты", allowed:true },
+      { label:"Продлевать/блокировать доступ, выдавать сертификаты", allowed:true },
       { label:"Назначать график открытия уроков (индивидуально и массово)", allowed:true },
       { label:"Приглашать новых врачей, управлять потоками и эфирами", allowed:true },
       { label:"Редактировать содержимое уроков, тест и их порядок", allowed:false },
@@ -2117,8 +2049,6 @@ function renderMyProfilePage(){
     '</div>' +
   '</div>';
 
-  html += renderMuteOverviewCard();
-
   html += '<div class="card" style="padding:18px 20px;margin-top:14px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
       '<b style="font-size:14.5px;">Текущие сеансы</b>' +
@@ -2160,9 +2090,8 @@ function renderSettingsPage(){
         '<span style="font-size:13.5px;">Активные сеансы</span>' +
         '<button class="btn btn-sm btn-ghost" data-action="logout-everywhere">Выйти со всех устройств</button>' +
       '</div>' +
-    '</div>' +
-    renderMuteOverviewCard() +
-  '</div>';
+    '</div>';
+  html += '</div>';
   return el(html);
 }
 
@@ -2191,8 +2120,6 @@ function renderStaffShell(){
     content.appendChild(renderModulesAdminTab());
   } else if(staffState.mainTab === "audit" && (me.role==="admin"||me.role==="super_admin")){
     content.appendChild(renderAuditLogTab());
-  } else if(staffState.mainTab === "chats"){
-    content.appendChild(renderStaffChatsPage());
   } else if(staffState.mainTab === "notifications"){
     content.appendChild(renderStaffNotificationsPage());
   } else if(staffState.mainTab === "settings"){
@@ -2220,77 +2147,7 @@ function renderStaffShell(){
   if(scheduleModal.open){
     wrap.appendChild(renderScheduleModal());
   }
-  if(streamChat.open){
-    wrap.appendChild(renderStreamChatModal());
-  }
   return wrap;
-}
-
-// Чаты, ожидающие ответа 24ч+ — та же выборка, что в инбокс-карточке вкладки
-// «Ученики» (staffState.inbox.unanswered), но как отдельная страница с возможностью
-// замьютить конкретный чат прямо отсюда.
-function renderStaffChatsPage(){
-  var inbox = staffState.inbox || { unanswered:[] };
-  var html = '<div style="margin-top:6px;max-width:640px;"><div class="card" style="padding:18px 20px;">' +
-    '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Чаты</b>' +
-    '<p class="hint" style="margin:0 0 14px;">Врачи, которые ждут ответа 24 часа и больше.</p>';
-  if(!inbox.unanswered.length){
-    html += '<div class="empty-state" style="padding:30px 10px;">Нет чатов, ожидающих ответа.</div>';
-  } else {
-    inbox.unanswered.forEach(function(r){
-      var muted = isChatMutedLocal("curator", r.id);
-      html += '<div class="inbox-row">' +
-        '<div class="avatar">'+initials(r.name)+'</div>' +
-        '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(r.name)+'</b><span style="font-size:12px;color:var(--muted);">последнее сообщение '+daysSince(r.created_at)+' дн. назад</span></div>' +
-        '<button class="btn btn-sm btn-ghost" data-action="toggle-chat-mute" data-type="curator" data-key="'+r.id+'" data-muted="'+(muted?"1":"0")+'">'+(muted?"Включить":"Отключить")+'</button>' +
-        '<button class="btn btn-sm btn-primary" data-action="open-student-chat" data-id="'+r.id+'">Ответить</button>' +
-      '</div>';
-    });
-  }
-  html += '</div></div>';
-  var wrap = el(html);
-  wrap.appendChild(renderChatTemplatesCard());
-  return wrap;
-}
-
-// Общая библиотека готовых ответов команды — заводится и правится прямо здесь,
-// а используется через кнопку-скрепку рядом с полем ввода в любом чате
-// (см. renderTemplatePickerButton). Инлайн-форма вместо модалки: полей всего два,
-// отдельное окно было бы лишним.
-function renderChatTemplatesCard(){
-  var html = '<div class="card" style="padding:18px 20px;margin-top:16px;">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
-      '<b style="font-size:14.5px;">Шаблоны сообщений</b>' +
-      (templateEditor.open ? '' : '<button class="btn btn-sm btn-ghost" data-action="open-template-editor">+ Добавить шаблон</button>') +
-    '</div>' +
-    '<p class="hint" style="margin:0 0 14px;">Общие для всей команды — доступны кнопкой '+icon("clipboard","ic-sm")+' рядом с полем ввода в любом чате.</p>';
-
-  if(templateEditor.open){
-    html += '<form id="templateEditorForm" style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--line-2);">' +
-      '<div class="field"><label>Название (только для вас, врач его не увидит)</label><input class="input" name="title" required value="'+escapeHtml(templateEditor.title)+'" placeholder="Например, «Поздравление с сертификатом»"></div>' +
-      '<div class="field"><label>Текст сообщения</label><textarea class="input" name="body" required style="height:80px;" placeholder="Текст, который подставится в поле ввода">'+escapeHtml(templateEditor.body)+'</textarea></div>' +
-      '<div class="err-text" id="templateEditorError" style="display:none;"></div>' +
-      '<div style="display:flex;gap:10px;">' +
-        '<button class="btn btn-primary" type="submit">'+(templateEditor.id?"Сохранить":"Добавить")+'</button>' +
-        '<button class="btn btn-ghost" type="button" data-action="close-template-editor">Отмена</button>' +
-      '</div>' +
-    '</form>';
-  }
-
-  if(!staffState.chatTemplates.length && !templateEditor.open){
-    html += '<div class="empty-state" style="padding:20px 10px;">Шаблонов пока нет.</div>';
-  } else {
-    staffState.chatTemplates.forEach(function(tpl){
-      html += '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);">' +
-        '<div style="flex:1;min-width:0;"><b style="font-size:13.5px;display:block;">'+escapeHtml(tpl.title)+'</b>' +
-        '<span style="font-size:12.5px;color:var(--muted);line-height:1.4;">'+escapeHtml(tpl.body)+'</span></div>' +
-        '<button class="btn btn-sm btn-ghost" data-action="open-template-editor" data-id="'+tpl.id+'" data-title="'+escapeHtml(tpl.title)+'" data-body="'+escapeHtml(tpl.body)+'">Изменить</button>' +
-        '<button class="btn btn-sm btn-ghost" data-action="delete-template" data-id="'+tpl.id+'">Удалить</button>' +
-      '</div>';
-    });
-  }
-  html += '</div>';
-  return el(html);
 }
 
 // У персонала пока нет отдельной системы уведомлений (в отличие от врача) — честно
@@ -2359,8 +2216,8 @@ function renderStaffHome(container){
   }
   container.appendChild(el('<div style="margin-top:6px;">'+streamsHtml+'</div>'));
 
-  var inbox = staffState.inbox || {inactive:[],unanswered:[],pendingCertificates:[]};
-  var totalTasks = inbox.inactive.length + inbox.unanswered.length + inbox.pendingCertificates.length;
+  var inbox = staffState.inbox || {inactive:[],pendingCertificates:[]};
+  var totalTasks = inbox.inactive.length + inbox.pendingCertificates.length;
   container.appendChild(el(
     '<div style="display:flex;align-items:center;gap:10px;margin:20px 0 10px;">' +
       '<div class="tile-icon" style="background:var(--status-attention-tint);color:var(--status-attention);">'+icon("clipboard")+'</div>' +
@@ -2377,7 +2234,6 @@ function renderStaffHome(container){
   ));
 
   var reminders = upcomingEventReminders();
-  var unmutedUnanswered = inbox.unanswered.filter(function(r){ return !isChatMutedLocal("curator", r.id); });
   var gridHtml = '<div class="grid-2" style="margin-top:20px;">';
   gridHtml += '<div class="card" style="padding:18px 20px;">' +
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">' +
@@ -2392,21 +2248,16 @@ function renderStaffHome(container){
     });
   }
   gridHtml += '</div>';
-  var msgColor = unmutedUnanswered.length ? '--status-live' : '--status-active';
   gridHtml += '<div class="card" style="padding:18px 20px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
       '<div style="display:flex;align-items:center;gap:10px;">' +
-        '<div class="tile-icon" style="background:var('+msgColor+'-tint);color:var('+msgColor+');">'+icon("message")+'</div>' +
-        '<b style="font-size:14px;">Сообщения</b>' +
+        '<div class="tile-icon" style="background:var(--primary-tint);color:var(--primary);">'+icon("message")+'</div>' +
+        '<b style="font-size:14px;">Общение</b>' +
       '</div>' +
-      (unmutedUnanswered.length ? '<button class="btn btn-sm btn-ghost" data-action="sidebar-nav" data-key="chats">Все →</button>' : '') +
-    '</div>';
-  if(!unmutedUnanswered.length){
-    gridHtml += '<div style="display:flex;align-items:center;gap:8px;color:var(--status-active);">'+icon("check","ic-sm")+'<p style="font-size:13px;color:var(--muted);margin:0;">Все обращения закрыты — никто не ждёт ответа.</p></div>';
-  } else {
-    gridHtml += '<p style="font-size:13px;margin:0;">Ждут ответа: '+unmutedUnanswered.length+'.</p>';
-  }
-  gridHtml += '</div></div>';
+      '<button class="btn btn-sm btn-ghost" data-action="open-telegram-modal">Открыть →</button>' +
+    '</div>' +
+    '<p style="font-size:13px;color:var(--muted);margin:0;">Врачи, кураторы и преподаватели — в Telegram-группах потоков.</p>' +
+  '</div></div>';
   container.appendChild(el(gridHtml));
 
   var d = staffState.digest;
@@ -2442,6 +2293,7 @@ function renderStreamsPanel(){
     html += '<form id="streamForm" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;">' +
       '<div class="field" style="margin-bottom:0;min-width:220px;flex:1;"><label>Название потока</label><input class="input" name="name" required placeholder="Например, Поток «Октябрь 2026»"></div>' +
       '<div class="field" style="margin-bottom:0;"><label>Дата старта</label><input class="input" type="date" name="startDate"></div>' +
+      '<div class="field" style="margin-bottom:0;min-width:220px;flex:1;"><label>Ссылка на Telegram-группу (можно позже)</label><input class="input" name="telegramUrl" type="url" placeholder="https://t.me/..."></div>' +
       '<button class="btn btn-primary" type="submit">Создать</button></form>';
   }
   if(!streams.length){
@@ -2451,8 +2303,14 @@ function renderStreamsPanel(){
     streams.forEach(function(s){
       html += '<div class="stream-card"><b style="font-size:13.5px;display:block;">'+escapeHtml(s.name)+'</b>' +
         '<span style="font-size:12px;color:var(--muted);">старт: '+(s.start_date?fmtDate(s.start_date):"—")+' · '+(countsByStream[s.id]||0)+' врачей</span><br>' +
+        (s.telegram_url
+          ? '<a class="btn btn-sm btn-primary" style="margin-top:8px;display:inline-block;" href="'+escapeHtml(s.telegram_url)+'" target="_blank" rel="noopener">Открыть Telegram-группу →</a>'
+          : '') +
         '<div style="display:flex;gap:6px;margin-top:8px;">' +
-          '<button class="btn btn-sm btn-ghost" data-action="open-stream-chat" data-id="'+s.id+'" data-name="'+escapeHtml(s.name)+'">Чат потока</button>' +
+          '<input class="input" style="flex:1;" data-stream-telegram-input data-id="'+s.id+'" value="'+escapeHtml(s.telegram_url||"")+'" placeholder="Ссылка на Telegram-группу">' +
+          '<button class="btn btn-sm btn-ghost" data-action="save-stream-telegram" data-id="'+s.id+'">Сохранить</button>' +
+        '</div>' +
+        '<div style="margin-top:8px;">' +
           '<button class="btn btn-sm btn-ghost" data-action="delete-stream" data-id="'+s.id+'">Удалить поток</button>' +
         '</div></div>';
     });
@@ -2460,47 +2318,6 @@ function renderStreamsPanel(){
   }
   html += '</div>';
   return html;
-}
-
-// Кнопка "Шаблоны" рядом с полем ввода — открывает список готовых сообщений
-// (общая библиотека команды, редактируется на странице «Чаты» куратора).
-// Список раскрывается ВВЕРХ (bottom, не top): поле ввода всегда внизу
-// чата/дровера, вниз открывать было бы некуда.
-function renderTemplatePickerButton(targetId){
-  var open = templatePickerFor === targetId;
-  var html = '<div class="template-picker-wrap" style="position:relative;flex-shrink:0;">' +
-    '<button type="button" class="btn btn-sm btn-ghost" data-action="toggle-template-picker" data-target="'+targetId+'" title="Вставить шаблон">'+icon("clipboard","ic-sm")+'</button>';
-  if(open){
-    html += '<div class="dash-menu" style="top:auto;bottom:calc(100% + 6px);right:0;left:auto;width:280px;max-width:280px;max-height:260px;">';
-    if(!staffState.chatTemplates.length){
-      html += '<div class="dash-menu-empty">Шаблонов пока нет — добавьте их на странице «Чаты».</div>';
-    } else {
-      staffState.chatTemplates.forEach(function(tpl){
-        html += '<div class="dash-menu-item" style="display:block;white-space:normal;" data-action="use-template" data-target="'+targetId+'" data-body="'+escapeHtml(tpl.body)+'">' +
-          '<b style="font-size:12.5px;display:block;">'+escapeHtml(tpl.title)+'</b>' +
-          '<span style="font-size:11px;color:var(--muted);display:block;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escapeHtml(tpl.body)+'</span>' +
-        '</div>';
-      });
-    }
-    html += '</div>';
-  }
-  html += '</div>';
-  return html;
-}
-
-function renderStreamChatModal(){
-  var thisStreamMuted = isChatMutedLocal("stream", streamChat.streamId);
-  var body = '<div class="drawer-head"><b style="font-size:16px;">Чат: '+escapeHtml(streamChat.streamName)+'</b><button class="btn btn-ghost btn-sm" data-action="close-stream-chat">Закрыть ✕</button></div>' +
-    '<div class="drawer-body" style="display:flex;flex-direction:column;height:100%;">' +
-      '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">' +
-        '<button class="btn btn-sm btn-ghost" data-action="toggle-chat-mute" data-type="stream" data-key="'+streamChat.streamId+'" data-muted="'+(thisStreamMuted?"1":"0")+'">'+(thisStreamMuted?"Включить уведомления":"Отключить уведомления")+'</button>' +
-      '</div>' +
-      '<div class="msg-list" id="streamChatList" style="flex:1;"><div class="msg-empty">Загрузка…</div></div>' +
-      '<div class="msg-input-row"><textarea class="input" id="streamChatInput" placeholder="Написать в чат потока…"></textarea>' +
-      renderTemplatePickerButton("streamChatInput") +
-      '<button class="btn btn-primary" data-action="send-stream-chat-msg">Отправить</button></div>' +
-    '</div>';
-  return el('<div class="overlay" data-action="overlay-close-stream-chat"><div class="drawer" data-stop="1" style="width:min(480px,100%);">'+body+'</div></div>');
 }
 
 function renderMonthCalendar(){
@@ -3143,28 +2960,16 @@ function renderDashboardTab(){
 
 function daysSince(iso){ if(!iso) return 0; return Math.floor((Date.now()-new Date(iso).getTime())/86400000); }
 
-// Три разных сигнала «пора обратить внимание», сведённые в одну карточку сверху
-// вкладки «Ученики» — раньше куратору приходилось заглядывать в чат каждого врача
-// по отдельности, чтобы понять, кто давно не отвечал или пропал с курса.
+// Два разных сигнала «пора обратить внимание», сведённые в одну карточку сверху
+// вкладки «Ученики» — кто давно не заходил и кому пора выдать сертификат.
 function renderInboxCard(){
-  var inbox = staffState.inbox || {inactive:[],unanswered:[],pendingCertificates:[]};
-  var total = inbox.inactive.length + inbox.unanswered.length + inbox.pendingCertificates.length;
+  var inbox = staffState.inbox || {inactive:[],pendingCertificates:[]};
+  var total = inbox.inactive.length + inbox.pendingCertificates.length;
   if(!total) return el('<div></div>');
 
   var html = '<div class="card" style="padding:18px 20px;margin-bottom:20px;">' +
     '<b style="font-size:14.5px;display:block;margin-bottom:14px;">Требует внимания ('+total+')</b>';
 
-  if(inbox.unanswered.length){
-    html += '<div class="inbox-group">'+magnet("blocked","Ждут ответа 24ч+");
-    inbox.unanswered.forEach(function(r){
-      html += '<div class="inbox-row">' +
-        '<div class="avatar">'+initials(r.name)+'</div>' +
-        '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(r.name)+'</b><span style="font-size:12px;color:var(--muted);">последнее сообщение '+daysSince(r.created_at)+' дн. назад</span></div>' +
-        '<button class="btn btn-sm btn-primary" data-action="open-student-chat" data-id="'+r.id+'">Ответить</button>' +
-      '</div>';
-    });
-    html += '</div>';
-  }
   if(inbox.inactive.length){
     html += '<div class="inbox-group">'+magnet("attention","Неактивны 7+ дней");
     inbox.inactive.forEach(function(r){
@@ -3596,7 +3401,6 @@ function renderStudentDrawer(){
   var body = '<div class="drawer-body">' +
     '<div class="tabs"><button class="tab'+(staffState.drawerTab==="progress"?' active':'')+'" data-action="drawer-tab" data-tab="progress">Прогресс</button>' +
     '<button class="tab'+(staffState.drawerTab==="access"?' active':'')+'" data-action="drawer-tab" data-tab="access">Доступ</button>' +
-    '<button class="tab'+(staffState.drawerTab==="chat"?' active':'')+'" data-action="drawer-tab" data-tab="chat">Чат</button>' +
     '<button class="tab'+(staffState.drawerTab==="profile"?' active':'')+'" data-action="drawer-tab" data-tab="profile">Профиль</button>' +
     '<button class="tab'+(staffState.drawerTab==="notes"?' active':'')+'" data-action="drawer-tab" data-tab="notes">Заметки</button></div>';
 
@@ -3640,16 +3444,6 @@ function renderStudentDrawer(){
           '<button class="btn btn-primary" data-action="toggle-access-block" data-id="'+s.id+'" data-blocked="false">Снять блокировку</button>' :
           '<button class="btn btn-ghost" data-action="toggle-access-block" data-id="'+s.id+'" data-blocked="true">Заблокировать доступ к курсу</button>') +
       '</div>';
-  } else if(staffState.drawerTab === "chat"){
-    var thisChatMuted = isChatMutedLocal("curator", s.id);
-    body += '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">' +
-        '<button class="btn btn-sm btn-ghost" data-action="toggle-chat-mute" data-type="curator" data-key="'+s.id+'" data-muted="'+(thisChatMuted?"1":"0")+'">'+(thisChatMuted?"Включить уведомления":"Отключить уведомления")+'</button>' +
-      '</div>' +
-      '<div class="msg-panel" style="height:420px;border:1px solid var(--line);border-radius:var(--radius-m);overflow:hidden;">' +
-      '<div class="msg-list" id="msgListCurator"><div class="msg-empty">Загрузка…</div></div>' +
-      '<div class="msg-input-row"><textarea class="input" id="curatorMsgInput" placeholder="Ответить врачу…"></textarea>' +
-      renderTemplatePickerButton("curatorMsgInput") +
-      '<button class="btn btn-primary" data-action="send-curator-msg" data-id="'+s.id+'">Отправить</button></div></div>';
   } else if(staffState.drawerTab === "notes"){
     body += '<p class="hint" style="margin-top:0;">Видно только персоналу — врач эти записи не видит.</p>' +
       '<div class="field"><textarea class="input" id="studentNoteInput" style="height:64px;" placeholder="Например: пропускает эфиры, стоит позвонить"></textarea></div>' +
@@ -3685,62 +3479,6 @@ function renderStudentDrawer(){
   return el('<div class="overlay" data-action="overlay-close"><div class="drawer" data-stop="1">'+head+body+'</div></div>');
 }
 
-/* ============================= СООБЩЕНИЯ (поллинг раз в 4 сек, пока чат открыт) ============================= */
-async function loadMessages(studentId, containerId){
-  try{
-    var data = await api("/messages/"+studentId);
-    renderMessages(containerId, data.messages, studentId);
-  }catch(e){}
-}
-function renderMessages(containerId, msgs, studentId){
-  var container = document.getElementById(containerId);
-  if(!container) return;
-  if(!msgs.length){ container.innerHTML = '<div class="msg-empty">Сообщений пока нет.</div>'; return; }
-  var mine = view==="student" ? "student" : "curator";
-  var html = "";
-  msgs.forEach(function(m){
-    var isMe = m.from_role===mine;
-    html += '<div class="msg-row'+(isMe?' me':'')+'"><div class="bubble">'+escapeHtml(m.body)+'<span class="t">'+(isMe?"":escapeHtml(m.author_name||(m.from_role==="curator"?"Куратор":"Врач"))+" · ")+fmtTime(m.created_at)+'</span></div></div>';
-  });
-  container.innerHTML = html;
-  container.scrollTop = container.scrollHeight;
-}
-function startMessagePolling(studentId, containerId){
-  stopMessagePolling();
-  loadMessages(studentId, containerId);
-  msgPollTimer = setInterval(function(){ loadMessages(studentId, containerId); }, 4000);
-}
-function stopMessagePolling(){ if(msgPollTimer){ clearInterval(msgPollTimer); msgPollTimer=null; } }
-
-// Беседа потока — отдельный канал от 1:1-чата с куратором выше: разные эндпоинты,
-// разный контейнер, свой таймер поллинга, но тот же ритм в 4 сек.
-var streamMsgPollTimer = null;
-async function loadStreamMessages(streamId, containerId){
-  try{
-    var data = await api("/stream-messages/"+streamId);
-    renderStreamMessages(containerId, data.messages);
-  }catch(e){}
-}
-function renderStreamMessages(containerId, msgs){
-  var container = document.getElementById(containerId);
-  if(!container) return;
-  if(!msgs.length){ container.innerHTML = '<div class="msg-empty">Сообщений пока нет — начните разговор первым.</div>'; return; }
-  var html = "";
-  msgs.forEach(function(m){
-    var isMe = m.author_id===me.id;
-    var roleLabel = m.author_role==="curator" ? "Куратор" : (m.author_role==="admin"||m.author_role==="super_admin" ? "Администратор" : "");
-    html += '<div class="msg-row'+(isMe?' me':'')+'"><div class="bubble">'+escapeHtml(m.body)+'<span class="t">'+(isMe?"":escapeHtml(m.author_name)+(roleLabel?" · "+roleLabel:"")+" · ")+fmtTime(m.created_at)+'</span></div></div>';
-  });
-  container.innerHTML = html;
-  container.scrollTop = container.scrollHeight;
-}
-function startStreamMessagePolling(streamId, containerId){
-  stopStreamMessagePolling();
-  loadStreamMessages(streamId, containerId);
-  streamMsgPollTimer = setInterval(function(){ loadStreamMessages(streamId, containerId); }, 4000);
-}
-function stopStreamMessagePolling(){ if(streamMsgPollTimer){ clearInterval(streamMsgPollTimer); streamMsgPollTimer=null; } }
-
 // Общая точка входа для переключения раздела врача — используется и прямыми
 // ссылками внутри страниц (data-action="student-tab"), и боковой навигацией
 // (sidebar-nav), поэтому navKey передаётся отдельно от tab: два пункта меню
@@ -3750,18 +3488,10 @@ async function applyStudentTab(tab, navKey){
   studentState.tab = tab;
   studentState.navKey = navKey || tab;
   if(tab==="schedule") localStorage.setItem("lms-viewed-schedule-"+me.id, "1");
-  if(tab!=="messages"){ stopMessagePolling(); stopStreamMessagePolling(); }
-  else if(studentState.messagesSubTab==="curator"){
-    if(course) course.unreadMessages=0;
-    api("/messages/"+me.id+"/mark-read", { method:"POST" }).catch(function(){});
-  }
   if(tab==="notifications") await loadNotifications();
   if(tab==="protocols" && !studentState.protocolsLoaded) await loadProtocols();
   render();
-  if(tab==="messages"){
-    if(studentState.messagesSubTab==="stream" && me.stream_id) startStreamMessagePolling(me.stream_id,"msgListStream");
-    else startMessagePolling(me.id,"msgList");
-  } else if(tab==="materials" && studentState.materialsAutoFocus){
+  if(tab==="materials" && studentState.materialsAutoFocus){
     var searchInp = document.getElementById("materialsSearchInput");
     if(searchInp) searchInp.focus();
     studentState.materialsAutoFocus = false;
@@ -3790,9 +3520,6 @@ function wireEvents(root){
     }
     if(specPickerOpen && !e.target.closest(".spec-picker-field")){
       specPickerOpen = null; render();
-    }
-    if(templatePickerFor && !e.target.closest(".template-picker-wrap")){
-      templatePickerFor = null; render();
     }
     var t = e.target.closest("[data-action]");
     if(!t) return;
@@ -3857,6 +3584,11 @@ function wireEvents(root){
     }
     if(action==="sidebar-nav"){
       var navKey = t.getAttribute("data-key");
+      if(navKey==="messages" || navKey==="chats"){
+        telegramModal.open = true;
+        render();
+        return;
+      }
       if(navKey==="profile"){
         if(view==="student"){ studentState.tab="profile"; studentState.navKey="profile"; }
         else { staffState.mainTab="profile"; staffState.navKey="profile"; }
@@ -3879,22 +3611,8 @@ function wireEvents(root){
       render();
       return;
     }
-    if(action==="student-messages-subtab"){
-      var newSub=t.getAttribute("data-sub");
-      if(newSub===studentState.messagesSubTab) return;
-      stopMessagePolling(); stopStreamMessagePolling();
-      studentState.messagesSubTab=newSub;
-      render();
-      if(newSub==="stream"){ if(me.stream_id) startStreamMessagePolling(me.stream_id,"msgListStream"); }
-      else{
-        if(course) course.unreadMessages=0;
-        api("/messages/"+me.id+"/mark-read", { method:"POST" }).catch(function(){});
-        startMessagePolling(me.id,"msgList");
-      }
-      return;
-    }
     if(action==="open-course"){
-      if(course.locked && course.locked.locked){ showToast("Доступ к курсу ограничен — напишите куратору в чате"); return; }
+      if(course.locked && course.locked.locked){ showToast("Доступ к курсу ограничен — напишите куратору в Telegram-группе потока"); return; }
       studentState.tab="lesson"; studentState.lessonIndex=Math.min((course.progress&&course.progress.completed_lessons||[]).length, course.lessons.length-1); studentState.quizMode=false; studentState.quizSubmitted=false; resetLessonStageState(); render(); return;
     }
     if(action==="close-course"){ studentState.tab="course"; studentState.quizMode=false; render(); return; }
@@ -3991,42 +3709,11 @@ function wireEvents(root){
       try{ await api("/course/request-full-access", { method:"POST" }); course.progress.requested_full_access=true; showToast("Заявка отправлена куратору"); }catch(err){ showToast(err.message); }
       render(); return;
     }
-    if(action==="send-student-msg"){
-      var inp=document.getElementById("msgInput"); var val=inp?inp.value:"";
-      if(val.trim()){ if(inp) inp.value=""; try{ await api("/messages", { method:"POST", body: JSON.stringify({studentId:me.id, text:val}) }); loadMessages(me.id,"msgList"); }catch(err){ showToast(err.message); } }
-      return;
-    }
-    if(action==="send-student-stream-msg"){
-      var sinp=document.getElementById("msgInputStream"); var sval=sinp?sinp.value:"";
-      if(sval.trim() && me.stream_id){ if(sinp) sinp.value=""; try{ await api("/stream-messages/"+me.stream_id, { method:"POST", body: JSON.stringify({text:sval}) }); loadStreamMessages(me.stream_id,"msgListStream"); }catch(err){ showToast(err.message); } }
-      return;
-    }
     if(action==="toggle-protocol"){
       var tpId=t.getAttribute("data-id"); protocolExpanded[tpId]=!protocolExpanded[tpId]; render(); return;
     }
     if(action==="select-protocol-guide"){
       var sgId=t.getAttribute("data-id"); protocolGuideTab[sgId]=t.getAttribute("data-spec"); render(); return;
-    }
-    if(action==="mark-messages-unread"){
-      try{
-        await api("/messages/"+me.id+"/mark-unread", { method:"POST" });
-        var mu=await api("/course"); course.unreadMessages=mu.unreadMessages;
-        showToast("Чат помечен непрочитанным");
-      }catch(err){ showToast(err.message); }
-      render(); return;
-    }
-    if(action==="toggle-chat-mute"){
-      var muteType=t.getAttribute("data-type"); var muteKey=t.getAttribute("data-key");
-      var wasMuted=t.getAttribute("data-muted")==="1";
-      mutedChats[chatMuteKey(muteType,muteKey)] = !wasMuted || undefined;
-      if(wasMuted) delete mutedChats[chatMuteKey(muteType,muteKey)];
-      var endpoint = muteType==="stream" ? "/stream-messages/"+muteKey+"/mute" : "/messages/"+muteKey+"/mute";
-      try{
-        await api(endpoint, { method:"PUT", body: JSON.stringify({ muted: !wasMuted }) });
-        if(muteType==="curator" && me.role==="student" && !wasMuted && course) course.unreadMessages=0;
-        showToast(wasMuted ? "Уведомления включены" : "Уведомления отключены для этого чата");
-      }catch(err){ showToast(err.message); }
-      render(); return;
     }
     if(action==="dismiss-onboarding"){
       course.progress.onboarding_dismissed=true; render();
@@ -4067,23 +3754,9 @@ function wireEvents(root){
       }catch(err){ showToast(err.message); }
       return;
     }
-    if(action==="open-student-chat"){
-      staffState.selectedStudentId=t.getAttribute("data-id"); staffState.drawerTab="chat"; staffState.selectedStudent=null; staffState.notes=[]; render();
-      startMessagePolling(staffState.selectedStudentId,"msgListCurator");
-      try{
-        var dc=await api("/staff/students/"+staffState.selectedStudentId);
-        staffState.selectedStudent=dc.student;
-        staffState.editSpecializationIds=(dc.student.specialization_ids||[]).slice();
-        staffState.editName=dc.student.name||""; staffState.editPhone=dc.student.phone||""; staffState.editWorkplace=dc.student.workplace||"";
-        render();
-      }catch(err){ showToast(err.message); }
-      return;
-    }
-    if(action==="close-drawer" || (action==="overlay-close" && !e.target.closest("[data-stop]"))){ staffState.selectedStudentId=null; stopMessagePolling(); render(); return; }
+    if(action==="close-drawer" || (action==="overlay-close" && !e.target.closest("[data-stop]"))){ staffState.selectedStudentId=null; render(); return; }
     if(action==="drawer-tab"){
       staffState.drawerTab=t.getAttribute("data-tab"); render();
-      if(staffState.drawerTab==="chat") startMessagePolling(staffState.selectedStudentId,"msgListCurator");
-      else stopMessagePolling();
       if(staffState.drawerTab==="notes"){
         try{ var dn=await api("/staff/students/"+staffState.selectedStudentId+"/notes"); staffState.notes=dn.notes; render(); }catch(err){ showToast(err.message); }
       }
@@ -4127,11 +3800,6 @@ function wireEvents(root){
         var dn2=await api("/staff/students/"+anId+"/notes"); staffState.notes=dn2.notes;
       }catch(err){ showToast(err.message); }
       t.disabled=false; render(); return;
-    }
-    if(action==="send-curator-msg"){
-      var sid=t.getAttribute("data-id"); var cinp=document.getElementById("curatorMsgInput"); var cval=cinp?cinp.value:"";
-      if(cval.trim()){ if(cinp) cinp.value=""; try{ await api("/messages", { method:"POST", body: JSON.stringify({studentId:sid, text:cval}) }); loadMessages(sid,"msgListCurator"); }catch(err){ showToast(err.message); } }
-      return;
     }
     if(action==="issue-certificate"){
       t.disabled=true; t.textContent="Выдаём…";
@@ -4610,6 +4278,18 @@ function wireEvents(root){
       try{ await api("/streams/"+t.getAttribute("data-id"), { method:"DELETE" }); await loadCalendarData(); showToast("Поток удалён"); }catch(err){ showToast(err.message); }
       render(); return;
     }
+    if(action==="save-stream-telegram"){
+      var stId=t.getAttribute("data-id");
+      var stInp=root.querySelector('[data-stream-telegram-input][data-id="'+stId+'"]');
+      var stUrl=stInp?stInp.value.trim():"";
+      try{
+        await api("/streams/"+stId, { method:"PATCH", body: JSON.stringify({ telegramUrl: stUrl }) });
+        var stObj=calendarState.streams.find(function(s){ return s.id===stId; });
+        if(stObj) stObj.telegram_url = stUrl || null;
+        showToast("Ссылка сохранена");
+      }catch(err){ showToast(err.message); }
+      render(); return;
+    }
     if(action==="cal-prev"){ var d1=calendarState.monthDate; calendarState.monthDate=new Date(d1.getFullYear(),d1.getMonth()-1,1); render(); return; }
     if(action==="cal-next"){ var d2=calendarState.monthDate; calendarState.monthDate=new Date(d2.getFullYear(),d2.getMonth()+1,1); render(); return; }
     if(action==="open-event-form"){ calendarState.eventModalMode="create"; calendarState.eventModalDate=t.getAttribute("data-date"); calendarState.recurring=false; render(); return; }
@@ -4699,54 +4379,9 @@ function wireEvents(root){
     if(action==="close-materials-picker"){ materialsPicker.open=false; render(); return; }
     if(action==="overlay-close-materials" && !e.target.closest("[data-stop]")){ materialsPicker.open=false; render(); return; }
 
-    if(action==="open-stream-chat"){
-      streamChat.open=true; streamChat.streamId=t.getAttribute("data-id"); streamChat.streamName=t.getAttribute("data-name");
-      render(); startStreamMessagePolling(streamChat.streamId,"streamChatList"); return;
-    }
-    if(action==="close-stream-chat"){ streamChat.open=false; stopStreamMessagePolling(); render(); return; }
-    if(action==="overlay-close-stream-chat" && !e.target.closest("[data-stop]")){ streamChat.open=false; stopStreamMessagePolling(); render(); return; }
-    if(action==="send-stream-chat-msg"){
-      var scinp=document.getElementById("streamChatInput"); var scval=scinp?scinp.value:"";
-      if(scval.trim()){ if(scinp) scinp.value=""; try{ await api("/stream-messages/"+streamChat.streamId, { method:"POST", body: JSON.stringify({text:scval}) }); loadStreamMessages(streamChat.streamId,"streamChatList"); }catch(err){ showToast(err.message); } }
-      return;
-    }
-    if(action==="toggle-template-picker"){
-      var tpTarget=t.getAttribute("data-target");
-      templatePickerFor = (templatePickerFor===tpTarget) ? null : tpTarget;
-      render(); return;
-    }
-    if(action==="use-template"){
-      var utTarget=t.getAttribute("data-target"); var utBody=t.getAttribute("data-body");
-      templatePickerFor=null;
-      render();
-      // Текстовое поле рендерится пустым (значение не хранится в стейте) — заполняем
-      // и фокусируем ПОСЛЕ render(), иначе innerHTML-перерисовка стирает то, что
-      // записали в .value до неё.
-      var utInp=document.getElementById(utTarget);
-      if(utInp){ utInp.value=utBody; utInp.focus(); utInp.selectionStart=utInp.selectionEnd=utInp.value.length; }
-      return;
-    }
-    if(action==="open-template-editor"){
-      var teId=t.getAttribute("data-id");
-      templateEditor = teId
-        ? { open:true, id:teId, title:t.getAttribute("data-title"), body:t.getAttribute("data-body") }
-        : { open:true, id:null, title:"", body:"" };
-      render(); return;
-    }
-    if(action==="close-template-editor"){
-      templateEditor = { open:false, id:null, title:"", body:"" };
-      render(); return;
-    }
-    if(action==="delete-template"){
-      if(!confirm("Удалить шаблон?")) return;
-      var dtId=t.getAttribute("data-id");
-      try{
-        await api("/chat-templates/"+dtId, { method:"DELETE" });
-        staffState.chatTemplates = staffState.chatTemplates.filter(function(tpl){ return tpl.id!==dtId; });
-        showToast("Шаблон удалён");
-      }catch(err){ showToast(err.message); }
-      render(); return;
-    }
+    if(action==="open-telegram-modal"){ telegramModal.open=true; render(); return; }
+    if(action==="close-telegram-modal"){ telegramModal.open=false; render(); return; }
+    if(action==="overlay-close-telegram-modal" && !e.target.closest("[data-stop]")){ telegramModal.open=false; render(); return; }
     if(action==="toggle-picker-student"){
       var pid=t.getAttribute("data-id"); var pidx=materialsPicker.selectedIds.indexOf(pid);
       if(t.checked && pidx===-1) materialsPicker.selectedIds.push(pid);
@@ -5031,28 +4666,6 @@ function wireEvents(root){
       }catch(err){ errPe.textContent=err.message; errPe.style.display="block"; btnPe.disabled=false; btnPe.textContent="Сохранить"; }
       render(); return;
     }
-    if(e.target.id==="templateEditorForm"){
-      e.preventDefault();
-      var fdte=new FormData(e.target);
-      var errTe=document.getElementById("templateEditorError"); errTe.style.display="none";
-      var btnTe=e.target.querySelector("button[type=submit]"); btnTe.disabled=true; btnTe.textContent="Сохраняем…";
-      var titleTe=fdte.get("title"), bodyTe=fdte.get("body");
-      try{
-        if(templateEditor.id){
-          await api("/chat-templates/"+templateEditor.id, { method:"PUT", body: JSON.stringify({ title:titleTe, body:bodyTe }) });
-          staffState.chatTemplates = staffState.chatTemplates.map(function(tpl){
-            return tpl.id===templateEditor.id ? Object.assign({}, tpl, { title:titleTe, body:bodyTe }) : tpl;
-          });
-          showToast("Шаблон обновлён");
-        } else {
-          var rTe=await api("/chat-templates", { method:"POST", body: JSON.stringify({ title:titleTe, body:bodyTe }) });
-          staffState.chatTemplates.push(rTe);
-          showToast("Шаблон добавлен");
-        }
-        templateEditor = { open:false, id:null, title:"", body:"" };
-      }catch(err){ errTe.textContent=err.message; errTe.style.display="block"; btnTe.disabled=false; btnTe.textContent=templateEditor.id?"Сохранить":"Добавить"; }
-      render(); return;
-    }
     if(e.target.id==="quizForm"){
       e.preventDefault();
       var fd3=new FormData(e.target); var answers={};
@@ -5147,7 +4760,7 @@ function wireEvents(root){
     if(e.target.id==="streamForm"){
       e.preventDefault();
       var fd6=new FormData(e.target); var btn6=e.target.querySelector("button[type=submit]"); btn6.disabled=true; btn6.textContent="Создаём…";
-      try{ await api("/streams", { method:"POST", body: JSON.stringify({ name:fd6.get("name"), startDate:fd6.get("startDate") }) }); await loadCalendarData(); calendarState.showStreamForm=false; showToast("Поток создан"); }
+      try{ await api("/streams", { method:"POST", body: JSON.stringify({ name:fd6.get("name"), startDate:fd6.get("startDate"), telegramUrl:fd6.get("telegramUrl") }) }); await loadCalendarData(); calendarState.showStreamForm=false; showToast("Поток создан"); }
       catch(err){ showToast(err.message); }
       render(); return;
     }
@@ -5268,16 +4881,6 @@ function wireEvents(root){
       // канал, через который реальный HTML доходит до отправки формы.
       var hidden=document.getElementById("lessonHtmlHidden");
       if(hidden) hidden.value = e.target.innerHTML;
-    }
-  });
-
-  root.addEventListener("keydown", function(e){
-    var sendActionById = { msgInput:"send-student-msg", curatorMsgInput:"send-curator-msg", msgInputStream:"send-student-stream-msg", streamChatInput:"send-stream-chat-msg" };
-    var sendAction = sendActionById[e.target.id];
-    if(sendAction && e.key==="Enter" && !e.shiftKey){
-      e.preventDefault();
-      var btn = root.querySelector('[data-action="'+sendAction+'"]');
-      if(btn) btn.click();
     }
   });
 }

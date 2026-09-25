@@ -59,16 +59,6 @@ CREATE TABLE IF NOT EXISTS progress (
   last_active_at          TIMESTAMPTZ
 );
 
-CREATE TABLE IF NOT EXISTS messages (
-  id                TEXT PRIMARY KEY,
-  student_id        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  from_role         TEXT NOT NULL,
-  author_name       TEXT,
-  body              TEXT NOT NULL,
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_messages_student ON messages(student_id);
 CREATE INDEX IF NOT EXISTS idx_lessons_course ON lessons(course_id);
 CREATE INDEX IF NOT EXISTS idx_quiz_course ON quiz_questions(course_id);
 
@@ -174,10 +164,6 @@ CREATE INDEX IF NOT EXISTS idx_events_recurrence_group ON events(recurrence_grou
 
 -- ---------- Этап 6: непрочитанные сообщения, заметки к уроку, приватные заметки куратора ----------
 
--- Момент, когда врач последний раз открывал свой чат — всё от куратора после этой
--- отметки считается непрочитанным (бейдж на вкладке «Сообщения»).
-ALTER TABLE progress ADD COLUMN IF NOT EXISTS messages_read_at TIMESTAMPTZ;
-
 -- Личные заметки врача к урокам: {"l1": "текст заметки", ...} — видны только ему самому.
 ALTER TABLE progress ADD COLUMN IF NOT EXISTS lesson_notes JSONB NOT NULL DEFAULT '{}';
 
@@ -207,18 +193,6 @@ ALTER TABLE progress ADD COLUMN IF NOT EXISTS last_streak_date DATE;
 
 -- Онбординг-чеклист: врач может закрыть карточку вручную, не дожидаясь выполнения всех пунктов.
 ALTER TABLE progress ADD COLUMN IF NOT EXISTS onboarding_dismissed BOOLEAN NOT NULL DEFAULT false;
-
--- Общение внутри потока (когорты): видно всем врачам этого потока + персоналу.
-CREATE TABLE IF NOT EXISTS stream_messages (
-  id            TEXT PRIMARY KEY,
-  stream_id     TEXT NOT NULL REFERENCES streams(id) ON DELETE CASCADE,
-  author_id     TEXT,
-  author_name   TEXT NOT NULL,
-  author_role   TEXT NOT NULL,
-  body          TEXT NOT NULL,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS idx_stream_messages_stream ON stream_messages(stream_id, created_at);
 
 -- Центр уведомлений врача.
 CREATE TABLE IF NOT EXISTS notifications (
@@ -257,17 +231,6 @@ CREATE TABLE IF NOT EXISTS student_bookmarks (
   PRIMARY KEY (user_id, lesson_id)
 );
 
--- Мьют чата: замьюченный чат не подсвечивается бейджем +N нигде в интерфейсе.
--- chat_type/chat_key: ('curator', studentId) — 1:1 чат конкретного врача с куратором
--- (с обеих сторон — и у врача, и у персонала свой собственный мьют); ('stream', streamId) — беседа потока.
-CREATE TABLE IF NOT EXISTS chat_mutes (
-  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  chat_type     TEXT NOT NULL,
-  chat_key      TEXT NOT NULL,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY (user_id, chat_type, chat_key)
-);
-
 -- История входов — для экрана «Мой профиль» → «Текущие сеансы» (устройство/откуда/когда).
 CREATE TABLE IF NOT EXISTS login_sessions (
   id            TEXT PRIMARY KEY,
@@ -290,19 +253,6 @@ ALTER TABLE progress ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
 -- статус пропадает мгновенно, а не только после истечения тайм-аута. last_seen_at
 -- при этом даёт safety-net на случай краша вкладки без события выгрузки (см. withOnlineStatus).
 ALTER TABLE progress ADD COLUMN IF NOT EXISTS is_online BOOLEAN NOT NULL DEFAULT false;
-
--- ---------- Этап 10: шаблоны сообщений в чатах для куратора ----------
--- Общая библиотека на всю команду персонала (куратор/админ/супер-админ), а не
--- личная — на этой платформе ответы стандартные ("сертификат готов", "посмотрите
--- урок ещё раз"), и нет смысла каждому куратору заводить одно и то же с нуля.
--- created_by — просто для отображения "кто завёл", а не для ограничения доступа.
-CREATE TABLE IF NOT EXISTS chat_templates (
-  id            TEXT PRIMARY KEY,
-  title         TEXT NOT NULL,
-  body          TEXT NOT NULL,
-  created_by    TEXT,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
-);
 
 -- ---------- Этап 11: протоколы, разблокируемые по мере прохождения уроков ----------
 -- Справочник специализаций — фиксированный список (не свободный текст), чтобы протоколы
@@ -527,4 +477,19 @@ ALTER TABLE progress ADD COLUMN IF NOT EXISTS certificate_number TEXT;
 -- курс — включаем флаг у него, и уже собранная инфраструктура (PDF, скачивание)
 -- заработает без единой правки кода.
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS certificates_enabled BOOLEAN NOT NULL DEFAULT false;
+
+-- ---------- Этап 20: убрали внутренние чаты — общение переехало в Telegram-группу потока ----------
+-- Личный чат врач-куратор, общий чат потока, мьюты обоих чатов и библиотека шаблонов
+-- ответов куратора удалены целиком вместе с данными (решение принято осознанно —
+-- история переписки не нужна, всё общение теперь идёт в Telegram). CASCADE не нужен:
+-- ни одна другая таблица не ссылается на эти внешним ключом (проверено).
+DROP TABLE IF EXISTS chat_templates;
+DROP TABLE IF EXISTS chat_mutes;
+DROP TABLE IF EXISTS stream_messages;
+DROP TABLE IF EXISTS messages;
+ALTER TABLE progress DROP COLUMN IF EXISTS messages_read_at;
+
+-- Вместо чата потока — прямая ссылка на его Telegram-группу, куда завели общение
+-- студентов, кураторов и преподавателей.
+ALTER TABLE streams ADD COLUMN IF NOT EXISTS telegram_url TEXT;
 

@@ -46,24 +46,10 @@ async function buildDailyDigest(actor) {
      WHERE u.role='student' AND p.certificate_issued_at >= $1 AND p.certificate_issued_at < $2 ${scopeClause}`,
     scopeParams
   );
-  const studentMsgScope = actor.role === "curator"
-    ? "AND m.student_id IN (SELECT id FROM users WHERE role='student' AND (assigned_curator_id = $3 OR assigned_curator_id IS NULL))"
-    : "";
-  const studentMessages = await pool.query(
-    `SELECT COUNT(*)::int AS cnt FROM messages m WHERE m.from_role='student' AND m.created_at >= $1 AND m.created_at < $2 ${studentMsgScope}`,
-    scopeParams
-  );
-  const curatorReplies = await pool.query(
-    `SELECT COUNT(*)::int AS cnt FROM messages m WHERE m.from_role='curator' AND m.created_at >= $1 AND m.created_at < $2 ${studentMsgScope}`,
-    scopeParams
-  );
-
   const stats = {
     registered: registered.rows[0].cnt,
     active: active.rows[0].cnt,
-    certified: certified.rows[0].cnt,
-    studentMessages: studentMessages.rows[0].cnt,
-    curatorReplies: curatorReplies.rows[0].cnt
+    certified: certified.rows[0].cnt
   };
 
   const dateLabel = start.toLocaleDateString("ru-RU", { day: "numeric", month: "long", timeZone: "UTC" });
@@ -73,12 +59,6 @@ async function buildDailyDigest(actor) {
   }
   if (stats.active) {
     lines.push(stats.active + " " + ruPlural(stats.active, "врач занимался", "врача занимались", "врачей занимались") + " курсом");
-  }
-  if (stats.studentMessages) {
-    lines.push("врачи прислали " + stats.studentMessages + " " + ruPlural(stats.studentMessages, "сообщение", "сообщения", "сообщений"));
-  }
-  if (stats.curatorReplies) {
-    lines.push("куратор ответил " + stats.curatorReplies + " " + ruPlural(stats.curatorReplies, "раз", "раза", "раз"));
   }
   if (stats.certified) {
     lines.push(ruPlural(stats.certified, "выдан", "выдано", "выдано") + " " + stats.certified + " " + ruPlural(stats.certified, "сертификат", "сертификата", "сертификатов"));

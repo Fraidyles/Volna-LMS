@@ -1,5 +1,4 @@
 const request = require("supertest");
-const crypto = require("crypto");
 const { app, pool, seedCourse, createUser, loginAs } = require("./helpers");
 
 let course;
@@ -8,13 +7,6 @@ afterAll(async () => { await pool.end(); });
 
 async function ageRegistration(userId, daysAgo) {
   await pool.query("UPDATE users SET created_at = now() - ($2 || ' days')::interval WHERE id=$1", [userId, daysAgo]);
-}
-
-async function sendMessage(studentId, fromRole, text, daysAgo) {
-  await pool.query(
-    "INSERT INTO messages (id, student_id, from_role, author_name, body, created_at) VALUES ($1,$2,$3,$4,$5, now() - ($6 || ' days')::interval)",
-    [crypto.randomUUID(), studentId, fromRole, fromRole === "student" ? "Врач" : "Куратор", text, daysAgo]
-  );
 }
 
 describe("Инбокс куратора «требует внимания»", () => {
@@ -49,40 +41,6 @@ describe("Инбокс куратора «требует внимания»", ()
     const res = await request(app).get("/api/staff/inbox").set("Cookie", cookie);
     const ids = res.body.inactive.map((r) => r.id);
     expect(ids).not.toContain(finished.id);
-  });
-
-  test("сообщение врача старше 24 часов без ответа куратора попадает в unanswered", async () => {
-    const student = await createUser({ role: "student", courseId: course.courseId });
-    await sendMessage(student.id, "student", "Здравствуйте, вопрос по уроку 3", 2);
-
-    const staff = await createUser({ role: "super_admin" });
-    const cookie = await loginAs(staff);
-    const res = await request(app).get("/api/staff/inbox").set("Cookie", cookie);
-    const ids = res.body.unanswered.map((r) => r.id);
-    expect(ids).toContain(student.id);
-  });
-
-  test("если куратор ответил ПОСЛЕ сообщения врача, тред не считается неотвеченным", async () => {
-    const student = await createUser({ role: "student", courseId: course.courseId });
-    await sendMessage(student.id, "student", "Вопрос", 2);
-    await sendMessage(student.id, "curator", "Ответ куратора", 1);
-
-    const staff = await createUser({ role: "super_admin" });
-    const cookie = await loginAs(staff);
-    const res = await request(app).get("/api/staff/inbox").set("Cookie", cookie);
-    const ids = res.body.unanswered.map((r) => r.id);
-    expect(ids).not.toContain(student.id);
-  });
-
-  test("сообщение врача младше 24 часов пока не считается просроченным", async () => {
-    const student = await createUser({ role: "student", courseId: course.courseId });
-    await sendMessage(student.id, "student", "Только что написал", 0);
-
-    const staff = await createUser({ role: "super_admin" });
-    const cookie = await loginAs(staff);
-    const res = await request(app).get("/api/staff/inbox").set("Cookie", cookie);
-    const ids = res.body.unanswered.map((r) => r.id);
-    expect(ids).not.toContain(student.id);
   });
 
   test("завершивший тест, но без выданного сертификата — в pendingCertificates", async () => {
