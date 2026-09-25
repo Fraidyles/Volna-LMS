@@ -175,6 +175,30 @@ describe("Импорт врачей из CSV", () => {
     expect(res.status).toBe(400);
   });
 
+  test("гонка: два параллельных импорта с одним и тем же email — второй аккуратно пропускается, а не 500", async () => {
+    const course = await seedCourse();
+    const staff = await createUser({ role: "super_admin" });
+    const cookie = await loginAs(staff);
+    const csv = "Имя,Email\nВрач Гонки,race.doctor@example.com\n";
+
+    const [res1, res2] = await Promise.all([
+      request(app).post("/api/staff/students/import").set("Cookie", cookie).field("courseId", course.courseId)
+        .attach("file", Buffer.from(csv, "utf8"), { filename: "a.csv", contentType: "text/csv" }),
+      request(app).post("/api/staff/students/import").set("Cookie", cookie).field("courseId", course.courseId)
+        .attach("file", Buffer.from(csv, "utf8"), { filename: "b.csv", contentType: "text/csv" })
+    ]);
+
+    expect(res1.status).toBe(200);
+    expect(res2.status).toBe(200);
+    const totalCreated = res1.body.created.length + res2.body.created.length;
+    const totalSkipped = res1.body.skipped.length + res2.body.skipped.length;
+    expect(totalCreated).toBe(1);
+    expect(totalSkipped).toBe(1);
+
+    const dbCheck = await pool.query("SELECT COUNT(*)::int AS c FROM users WHERE email=$1", ["race.doctor@example.com"]);
+    expect(dbCheck.rows[0].c).toBe(1);
+  });
+
   test("врач не может импортировать (403)", async () => {
     const student = await createUser({ role: "student" });
     const cookie = await loginAs(student);

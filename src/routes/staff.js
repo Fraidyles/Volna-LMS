@@ -212,11 +212,19 @@ router.post(
     const hash = await bcrypt.hash(tempPassword, 10);
     const referralCode = generateReferralCode();
     const streamId = streamName ? (streamByName[streamName] || null) : null;
-    await pool.query(
-      `INSERT INTO users (id, email, password_hash, name, role, phone, workplace, stream_id, referral_code)
-       VALUES ($1,$2,$3,$4,'student',$5,$6,$7,$8)`,
-      [id, email, hash, name, phone || null, workplace || null, streamId, referralCode]
-    );
+    try {
+      await pool.query(
+        `INSERT INTO users (id, email, password_hash, name, role, phone, workplace, stream_id, referral_code)
+         VALUES ($1,$2,$3,$4,'student',$5,$6,$7,$8)`,
+        [id, email, hash, name, phone || null, workplace || null, streamId, referralCode]
+      );
+    } catch (e) {
+      // Гонка: между SELECT-проверкой выше и этим INSERT кто-то другой (параллельный
+      // импорт, самостоятельная регистрация) успел занять тот же email — та же
+      // ситуация, что и "уже зарегистрирован" выше, просто обнаруженная позже.
+      if (e.code === "23505") { skipped.push({ row: rowNum, email, reason: "уже зарегистрирован" }); continue; }
+      throw e;
+    }
     const specId = specName ? (specByName[specName] || null) : null;
     if (specId) {
       await pool.query("INSERT INTO user_specializations (user_id, specialization_id) VALUES ($1,$2)", [id, specId]);
