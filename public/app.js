@@ -5233,4 +5233,12 @@ function wireEvents(root){
 
 applyTheme();
 init();
+
+// Вынесено сюда из index.html (было инлайновым <script>) — так CSP может запрещать
+// инлайновые скрипты (script-src 'self') и не ломать регистрацию service worker.
+if("serviceWorker" in navigator){
+  window.addEventListener("load", function(){
+    navigator.serviceWorker.register("/sw.js").catch(function(){});
+  });
+}
 })();

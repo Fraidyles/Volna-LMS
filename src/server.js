@@ -4,6 +4,7 @@ require("dotenv").config();
 // (Node с версии 15 завершает процесс на необработанном отклонении промиса).
 require("express-async-errors");
 const express = require("express");
+const helmet = require("helmet");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const path = require("path");
@@ -29,6 +30,45 @@ const ALLOWED = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+
+// Базовые защитные заголовки (X-Content-Type-Options, X-Frame-Options, HSTS и т.п.).
+// crossOriginEmbedderPolicy выключен намеренно: с ним require-corp браузер блокирует
+// загрузку кросс-доменных ресурсов без явного CORP-заголовка от чужого сервера —
+// а урок может содержать честный сторонний iframe (см. CSP frame-src ниже и
+// src/sanitize.js, где домен iframe.src никак не ограничен).
+app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+
+// CSP настраиваем отдельным middleware (не через helmet({contentSecurityPolicy})
+// сразу выше), чтобы явно исключить /api-docs — Swagger UI использует инлайновые
+// скрипты/стили и per-route CSP через helmet не сможет тонко это разрешить, не
+// ослабляя политику для всего остального приложения.
+const cspMiddleware = helmet.contentSecurityPolicy({
+  directives: {
+    defaultSrc: ["'self'"],
+    // Инлайновый <script> в index.html убран (перенесён в app.js) специально ради
+    // возможности не разрешать 'unsafe-inline' здесь.
+    scriptSrc: ["'self'"],
+    // Разметка урока (см. src/sanitize.js) хранит цвет/отступы в style="..." прямо
+    // на div/span — без 'unsafe-inline' весь оформленный контент курса перестал бы
+    // применять эти стили.
+    styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+    fontSrc: ["'self'", "https://fonts.gstatic.com"],
+    // img/src урока тоже не ограничен по домену на бэкенде — картинки в уроке могут
+    // лежать на любом внешнем хосте.
+    imgSrc: ["'self'", "https:", "data:"],
+    // iframe урока (see sanitize.js) не ограничен по домену — там встраивают видео
+    // с разных площадок (GetCourse и т.п.), поэтому https: обязателен здесь.
+    frameSrc: ["https:"],
+    connectSrc: ["'self'"],
+    objectSrc: ["'none'"],
+    baseUri: ["'self'"],
+    formAction: ["'self'"]
+  }
+});
+app.use((req, res, next) => {
+  if (req.path === "/api-docs" || req.path.startsWith("/api-docs/")) return next();
+  cspMiddleware(req, res, next);
+});
 
 app.use(express.json());
 app.use(cookieParser());

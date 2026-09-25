@@ -199,6 +199,22 @@ describe("Аутентификация", () => {
     expect(stillWorks.status).toBe(200);
   });
 
+  // ВАЖНО: этот тест должен идти РАНЬШЕ теста на /login ниже — оба используют один и
+  // тот же лимитер (общий бюджет попыток с одного IP на /register, /login и
+  // /change-password), а здесь нужен ещё и живой логин ДО того, как бюджет будет исчерпан.
+  test("rate limit: подбор текущего пароля через /change-password тоже блокируется 429", async () => {
+    const user = await createUser({ role: "student" });
+    const cookie = await loginAs(user); // успешный логин не расходует лимит (skipSuccessfulRequests)
+    let last;
+    for (let i = 0; i < 9; i++) {
+      last = await request(app)
+        .post("/api/auth/change-password")
+        .set("Cookie", cookie)
+        .send({ currentPassword: "wrong", newPassword: "irrelevant123" });
+    }
+    expect(last.status).toBe(429);
+  });
+
   test("rate limit: много неудачных попыток входа подряд блокируются 429", async () => {
     const email = `ratelimit.${Date.now()}@example.com`;
     let last;

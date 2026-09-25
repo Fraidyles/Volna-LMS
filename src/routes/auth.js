@@ -315,7 +315,10 @@ router.patch("/me", authRequired, async (req, res) => {
   } });
 });
 
-router.post("/change-password", authRequired, async (req, res) => {
+// Тот же лимитер, что и на /login: без него угнанная (например, через XSS) сессия без
+// знания реального пароля позволяла бы подбирать currentPassword сколько угодно раз,
+// чтобы задать новый пароль и вытеснить настоящего владельца из аккаунта.
+router.post("/change-password", authRequired, authLimiter, async (req, res) => {
   const { currentPassword, newPassword } = req.body || {};
   if (!currentPassword || !newPassword || newPassword.length < 6) {
     return res.status(400).json({ error: "invalid_input", message: "Укажите текущий пароль и новый (от 6 символов)" });
