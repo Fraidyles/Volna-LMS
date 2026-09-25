@@ -297,16 +297,31 @@ router.get("/protocols", authRequired, requireRole("student"), async (req, res) 
 
   const ids = protocolRows.rows.map((p) => p.id);
   const guides = await pool.query(
-    `SELECT pg.protocol_id, pg.specialization_id, s.name AS specialization_name, pg.guide_html
+    `SELECT pg.id, pg.protocol_id, pg.specialization_id, s.name AS specialization_name, pg.guide_html
      FROM protocol_guides pg JOIN specializations s ON s.id = pg.specialization_id
      WHERE pg.protocol_id = ANY($1::text[]) ORDER BY s.name`,
     [ids]
   );
+  const guideIds = guides.rows.map((g) => g.id);
+  const files = guideIds.length
+    ? await pool.query(
+        "SELECT * FROM protocol_guide_files WHERE guide_id = ANY($1::text[]) ORDER BY created_at",
+        [guideIds]
+      )
+    : { rows: [] };
+  const filesByGuide = {};
+  files.rows.forEach((f) => {
+    (filesByGuide[f.guide_id] = filesByGuide[f.guide_id] || []).push(f);
+  });
   const guidesByProtocol = {};
   guides.rows.forEach((g) => {
     if (!guidesByProtocol[g.protocol_id]) guidesByProtocol[g.protocol_id] = [];
     guidesByProtocol[g.protocol_id].push({
-      specializationId: g.specialization_id, specializationName: g.specialization_name, guideHtml: g.guide_html
+      specializationId: g.specialization_id, specializationName: g.specialization_name, guideHtml: g.guide_html,
+      files: (filesByGuide[g.id] || []).map((f) => ({
+        id: f.id, originalName: f.original_name, mimeType: f.mime_type, sizeBytes: f.size_bytes,
+        url: `/api/protocols/${g.protocol_id}/guides/${g.specialization_id}/files/${f.id}/download`
+      }))
     });
   });
 

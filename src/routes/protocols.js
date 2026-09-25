@@ -1,16 +1,50 @@
 const express = require("express");
 const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
+const multer = require("multer");
 const pool = require("../db");
 const { authRequired, requireRole } = require("../middleware/auth");
 const { logAction } = require("../audit");
 
 const router = express.Router();
 
+const UPLOAD_DIR = path.join(__dirname, "..", "..", "uploads", "protocol-guides");
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+// Разрешаем только «документные» форматы — вложение к гайду это памятка/чек-лист,
+// а не произвольный файл; заодно исключает случайную загрузку исполняемых файлов.
+const ALLOWED_EXTENSIONS = new Set([".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".png", ".jpg", ".jpeg", ".webp"]);
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+    filename: (req, file, cb) => cb(null, crypto.randomUUID() + path.extname(file.originalname).toLowerCase())
+  }),
+  limits: { fileSize: 15 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_EXTENSIONS.has(path.extname(file.originalname).toLowerCase())) {
+      return cb(new Error("unsupported_file_type"));
+    }
+    cb(null, true);
+  }
+});
+
+function fileToJson(f, protocolId, specializationId) {
+  return {
+    id: f.id,
+    originalName: f.original_name,
+    mimeType: f.mime_type,
+    sizeBytes: f.size_bytes,
+    url: `/api/protocols/${protocolId}/guides/${specializationId}/files/${f.id}/download`
+  };
+}
+
 async function attachGuidesAndLessons(protocolRows) {
   if (!protocolRows.length) return [];
   const ids = protocolRows.map((p) => p.id);
   const guides = await pool.query(
-    `SELECT pg.protocol_id, pg.specialization_id, s.name AS specialization_name, pg.guide_html
+    `SELECT pg.id, pg.protocol_id, pg.specialization_id, s.name AS specialization_name, pg.guide_html
      FROM protocol_guides pg JOIN specializations s ON s.id = pg.specialization_id
      WHERE pg.protocol_id = ANY($1::text[]) ORDER BY s.name`,
     [ids]
@@ -19,11 +53,24 @@ async function attachGuidesAndLessons(protocolRows) {
     "SELECT protocol_id, lesson_id FROM lesson_protocols WHERE protocol_id = ANY($1::text[])",
     [ids]
   );
+  const guideIds = guides.rows.map((g) => g.id);
+  const files = guideIds.length
+    ? await pool.query(
+        "SELECT * FROM protocol_guide_files WHERE guide_id = ANY($1::text[]) ORDER BY created_at",
+        [guideIds]
+      )
+    : { rows: [] };
+  const filesByGuide = {};
+  files.rows.forEach((f) => {
+    (filesByGuide[f.guide_id] = filesByGuide[f.guide_id] || []).push(f);
+  });
+
   const guidesByProtocol = {};
   guides.rows.forEach((g) => {
     if (!guidesByProtocol[g.protocol_id]) guidesByProtocol[g.protocol_id] = [];
     guidesByProtocol[g.protocol_id].push({
-      specializationId: g.specialization_id, specializationName: g.specialization_name, guideHtml: g.guide_html
+      specializationId: g.specialization_id, specializationName: g.specialization_name, guideHtml: g.guide_html,
+      files: (filesByGuide[g.id] || []).map((f) => fileToJson(f, g.protocol_id, g.specialization_id))
     });
   });
   const lessonsByProtocol = {};
@@ -38,7 +85,9 @@ async function attachGuidesAndLessons(protocolRows) {
   }));
 }
 
-router.get("/", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+// Список и правка текста гайда — доступны и куратору, и админу: куратор наполняет
+// специализации приложениями к урокам, не имея прав создавать/удалять сами протоколы.
+router.get("/", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
   const rows = await pool.query("SELECT * FROM protocols ORDER BY created_at DESC");
   res.json({ protocols: await attachGuidesAndLessons(rows.rows) });
 });
@@ -80,9 +129,25 @@ router.delete("/:id", authRequired, requireRole("admin", "super_admin"), async (
   res.json({ ok: true });
 });
 
+// Находит (или создаёт пустой) гайд под специализацию — общий шаг перед правкой
+// текста и перед прикреплением файла, оба пути должны попадать в одну и ту же строку.
+async function findOrCreateGuide(protocolId, specializationId) {
+  const existing = await pool.query(
+    "SELECT id FROM protocol_guides WHERE protocol_id=$1 AND specialization_id=$2",
+    [protocolId, specializationId]
+  );
+  if (existing.rowCount) return existing.rows[0].id;
+  const id = crypto.randomUUID();
+  await pool.query(
+    "INSERT INTO protocol_guides (id, protocol_id, specialization_id, guide_html) VALUES ($1,$2,$3,'')",
+    [id, protocolId, specializationId]
+  );
+  return id;
+}
+
 // Гайд применения протокола для конкретной специализации — своя версия текста
 // на каждую специализацию (для кардиолога иначе, чем для дерматолога).
-router.put("/:id/guides/:specializationId", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+router.put("/:id/guides/:specializationId", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
   const { guideHtml } = req.body || {};
   if (!guideHtml || !guideHtml.trim()) {
     return res.status(400).json({ error: "invalid_input", message: "Текст гайда не может быть пустым" });
@@ -105,13 +170,96 @@ router.put("/:id/guides/:specializationId", authRequired, requireRole("admin", "
   res.json({ ok: true, guideHtml: clean });
 });
 
-router.delete("/:id/guides/:specializationId", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
-  const result = await pool.query(
-    "DELETE FROM protocol_guides WHERE protocol_id=$1 AND specialization_id=$2 RETURNING id",
+router.delete("/:id/guides/:specializationId", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+  const guide = await pool.query(
+    "SELECT id FROM protocol_guides WHERE protocol_id=$1 AND specialization_id=$2",
     [req.params.id, req.params.specializationId]
   );
-  if (!result.rowCount) return res.status(404).json({ error: "not_found" });
+  if (!guide.rowCount) return res.status(404).json({ error: "not_found" });
+  const files = await pool.query("SELECT filename FROM protocol_guide_files WHERE guide_id=$1", [guide.rows[0].id]);
+  await pool.query("DELETE FROM protocol_guides WHERE id=$1", [guide.rows[0].id]);
+  files.rows.forEach((f) => fs.unlink(path.join(UPLOAD_DIR, f.filename), () => {}));
   await logAction(req.user, "protocol.guide_delete", "protocol", req.params.id, null, { specializationId: req.params.specializationId });
+  res.json({ ok: true });
+});
+
+// Файлы-вложения к гайду специализации — памятки/чек-листы, которые куратор или
+// админ прикладывают отдельно от самого текста (текст можно оставить пустым).
+router.post(
+  "/:id/guides/:specializationId/files",
+  authRequired,
+  requireRole("curator", "admin", "super_admin"),
+  (req, res, next) => {
+    upload.single("file")(req, res, (err) => {
+      if (err instanceof multer.MulterError) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({ error: "file_too_large", message: "Файл больше 15 МБ" });
+        }
+        return res.status(400).json({ error: "upload_failed", message: err.message });
+      }
+      if (err) return res.status(400).json({ error: "unsupported_file_type", message: "Недопустимый формат файла" });
+      next();
+    });
+  },
+  async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "invalid_input", message: "Файл не передан" });
+    const protocol = await pool.query("SELECT id FROM protocols WHERE id=$1", [req.params.id]);
+    const spec = await pool.query("SELECT id FROM specializations WHERE id=$1", [req.params.specializationId]);
+    if (!protocol.rowCount || !spec.rowCount) {
+      fs.unlink(req.file.path, () => {});
+      return res.status(404).json({ error: "not_found" });
+    }
+
+    const guideId = await findOrCreateGuide(req.params.id, req.params.specializationId);
+    const fileId = crypto.randomUUID();
+    await pool.query(
+      `INSERT INTO protocol_guide_files (id, guide_id, filename, original_name, mime_type, size_bytes, uploaded_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [fileId, guideId, req.file.filename, req.file.originalname, req.file.mimetype, req.file.size, req.user.name]
+    );
+    await logAction(req.user, "protocol.guide_file_add", "protocol", req.params.id, req.file.originalname, {
+      specializationId: req.params.specializationId
+    });
+    res.json({
+      ok: true,
+      file: fileToJson(
+        { id: fileId, original_name: req.file.originalname, mime_type: req.file.mimetype, size_bytes: req.file.size },
+        req.params.id,
+        req.params.specializationId
+      )
+    });
+  }
+);
+
+// Скачивание — доступно любому вошедшему пользователю (как и сам текст гайда,
+// вложение не фильтруется по специализации врача, см. GET /course/protocols).
+router.get("/:id/guides/:specializationId/files/:fileId/download", authRequired, async (req, res) => {
+  const result = await pool.query(
+    `SELECT f.filename, f.original_name, f.mime_type FROM protocol_guide_files f
+     JOIN protocol_guides g ON g.id = f.guide_id
+     WHERE f.id=$1 AND g.protocol_id=$2 AND g.specialization_id=$3`,
+    [req.params.fileId, req.params.id, req.params.specializationId]
+  );
+  if (!result.rowCount) return res.status(404).json({ error: "not_found" });
+  const f = result.rows[0];
+  const filePath = path.join(UPLOAD_DIR, f.filename);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: "not_found" });
+  res.download(filePath, f.original_name);
+});
+
+router.delete("/:id/guides/:specializationId/files/:fileId", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+  const result = await pool.query(
+    `SELECT f.id, f.filename, f.original_name FROM protocol_guide_files f
+     JOIN protocol_guides g ON g.id = f.guide_id
+     WHERE f.id=$1 AND g.protocol_id=$2 AND g.specialization_id=$3`,
+    [req.params.fileId, req.params.id, req.params.specializationId]
+  );
+  if (!result.rowCount) return res.status(404).json({ error: "not_found" });
+  await pool.query("DELETE FROM protocol_guide_files WHERE id=$1", [result.rows[0].id]);
+  fs.unlink(path.join(UPLOAD_DIR, result.rows[0].filename), () => {});
+  await logAction(req.user, "protocol.guide_file_delete", "protocol", req.params.id, result.rows[0].original_name, {
+    specializationId: req.params.specializationId
+  });
   res.json({ ok: true });
 });
 

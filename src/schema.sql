@@ -382,3 +382,25 @@ INSERT INTO specializations (id, name) VALUES
   ('anti_age', 'Anti-age и регенеративная медицина')
 ON CONFLICT (id) DO NOTHING;
 
+-- ---------- Этап 12: файлы-вложения к гайдам протоколов ----------
+-- Куратор или админ может приложить к гайду специализации несколько файлов
+-- (памятка PDF, чек-лист и т.п.) — их видит врач, которому открылся протокол
+-- (там же, где и сам текст гайда). Файл физически лежит в uploads/protocol-guides/,
+-- filename — сгенерированное имя на диске, original_name — как назывался у автора.
+CREATE TABLE IF NOT EXISTS protocol_guide_files (
+  id                 TEXT PRIMARY KEY,
+  guide_id           TEXT NOT NULL REFERENCES protocol_guides(id) ON DELETE CASCADE,
+  filename           TEXT NOT NULL,
+  original_name      TEXT NOT NULL,
+  mime_type          TEXT,
+  size_bytes         INT NOT NULL DEFAULT 0,
+  uploaded_by        TEXT,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_protocol_guide_files_guide ON protocol_guide_files(guide_id);
+
+-- Текст гайда — больше не обязателен: куратор может сперва просто приложить файл,
+-- а текст добавить позже (или не добавлять вовсе, если вся суть — во вложении).
+ALTER TABLE protocol_guides ALTER COLUMN guide_html DROP NOT NULL;
+ALTER TABLE protocol_guides ALTER COLUMN guide_html SET DEFAULT '';
+

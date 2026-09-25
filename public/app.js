@@ -224,6 +224,20 @@ async function api(path, opts){
   return data;
 }
 
+// Отдельно от api(): загрузка файла — тело FormData, Content-Type со своей
+// границей (boundary) браузер проставляет сам, вручную задавать нельзя.
+async function apiUpload(path, formData){
+  var res = await fetch(API + path, { method:"POST", credentials:"include", body: formData });
+  var data = null;
+  try{ data = await res.json(); }catch(e){ data = null; }
+  if(!res.ok){
+    var err = new Error((data && data.message) || "Не удалось загрузить файл");
+    err.code = data && data.error;
+    throw err;
+  }
+  return data;
+}
+
 /* ============================= ИНИЦИАЛИЗАЦИЯ ============================= */
 async function init(){
   var refParam = new URLSearchParams(window.location.search).get("ref");
@@ -369,14 +383,14 @@ async function loadStaffData(){
     var ct = await api("/chat-templates");
     staffState.chatTemplates = ct.templates;
   }catch(e){}
+  try{
+    var pr = await api("/protocols");
+    adminProtocolsState.list = pr.protocols;
+  }catch(e){}
   if(me.role==="admin" || me.role==="super_admin"){
     try{
       var qa = await api("/course/quiz-admin");
       staffState.quizAdmin = qa.quiz;
-    }catch(e){}
-    try{
-      var pr = await api("/protocols");
-      adminProtocolsState.list = pr.protocols;
     }catch(e){}
     await loadAuditLog();
     try{
@@ -891,9 +905,9 @@ function renderSidebar(){
     items += sidebarItem("calendar","calendar","Расписание", snavKey==="calendar");
     items += sidebarItem("materials","folder","Учебные материалы", snavKey==="materials");
     items += sidebarItem("dashboard","chartbar","Аналитика", snavKey==="dashboard");
+    items += sidebarItem("protocols","doctor","Протоколы", snavKey==="protocols");
     if(isAdmin){
       items += sidebarItem("team","users","Команда", snavKey==="team");
-      items += sidebarItem("protocols","doctor","Протоколы", snavKey==="protocols");
       items += sidebarItem("audit","list","Журнал", snavKey==="audit");
     }
     items += sidebarItem("chats","message","Чаты", snavKey==="chats", chatsBadge);
@@ -1571,7 +1585,14 @@ function renderProtocolCard(p, isForYou){
       } else {
         html += '<p class="hint" style="margin-top:14px;">Гайд для специализации «'+escapeHtml(p.guides[0].specializationName)+'»</p>';
       }
-      html += '<div class="prose">'+(activeGuide?renderPlainToProse(activeGuide.guideHtml):'')+'</div>';
+      html += '<div class="prose">'+(activeGuide&&activeGuide.guideHtml?renderPlainToProse(activeGuide.guideHtml):'')+'</div>';
+      if(activeGuide && activeGuide.files && activeGuide.files.length){
+        html += '<div style="margin-top:10px;">';
+        activeGuide.files.forEach(function(f){
+          html += '<a href="'+f.url+'" target="_blank" rel="noopener" class="card" style="display:flex;align-items:center;gap:8px;padding:9px 12px;margin-bottom:6px;font-size:12.5px;">'+icon("folder","ic-sm")+'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escapeHtml(f.originalName)+'</span><span style="color:var(--muted);flex-shrink:0;">'+formatFileSize(f.sizeBytes)+'</span></a>';
+        });
+        html += '</div>';
+      }
     }
   }
   html += '</div>';
@@ -1879,7 +1900,7 @@ function renderStaffShell(){
     content.appendChild(renderMaterialsTab());
   } else if(staffState.mainTab === "dashboard"){
     content.appendChild(renderDashboardTab());
-  } else if(staffState.mainTab === "protocols" && (me.role==="admin"||me.role==="super_admin")){
+  } else if(staffState.mainTab === "protocols"){
     content.appendChild(renderProtocolsAdminTab());
   } else if(staffState.mainTab === "audit" && (me.role==="admin"||me.role==="super_admin")){
     content.appendChild(renderAuditLogTab());
@@ -3015,13 +3036,14 @@ function renderSpecializationsCard(){
 }
 
 function renderProtocolsAdminTab(){
-  var html = renderSpecializationsCard();
+  var isProtocolAdmin = me.role==="admin" || me.role==="super_admin";
+  var html = isProtocolAdmin ? renderSpecializationsCard() : '';
   html += '<div class="card" style="padding:18px 20px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:10px;">' +
       '<b style="font-size:14.5px;">Протоколы</b>' +
-      '<button class="btn btn-sm btn-primary" data-action="open-protocol-creator">+ Добавить протокол</button>' +
+      (isProtocolAdmin ? '<button class="btn btn-sm btn-primary" data-action="open-protocol-creator">+ Добавить протокол</button>' : '') +
     '</div>' +
-    '<p style="font-size:12.5px;color:var(--muted);margin:0 0 14px;">Разблокируются врачу после прохождения привязанных уроков — с гайдом применения под его специализацию (см. «Ваши протоколы» у врача).</p>';
+    '<p style="font-size:12.5px;color:var(--muted);margin:0 0 14px;">Разблокируются врачу после прохождения привязанных уроков — с гайдом применения под его специализацию (см. «Ваши протоколы» у врача).'+(isProtocolAdmin?'':' Вы можете редактировать текст гайдов и прикладывать к ним файлы.')+'</p>';
   if(!adminProtocolsState.list.length){
     html += '<div class="empty-state" style="padding:30px 10px;">Протоколов пока нет.</div>';
   } else {
@@ -3030,7 +3052,7 @@ function renderProtocolsAdminTab(){
         '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(p.title)+'</b>' +
           '<span style="font-size:12px;color:var(--muted);">'+p.guides.length+' гайд(ов) · '+p.lessonIds.length+' урок(ов) открывают</span></div>' +
         '<button class="btn btn-sm btn-ghost" data-action="open-protocol-editor" data-id="'+p.id+'">Редактировать</button>' +
-        '<button class="btn btn-sm btn-ghost" data-action="delete-protocol" data-id="'+p.id+'" data-title="'+escapeHtml(p.title)+'" title="Удалить">'+icon("trash","ic-sm")+'</button>' +
+        (isProtocolAdmin ? '<button class="btn btn-sm btn-ghost" data-action="delete-protocol" data-id="'+p.id+'" data-title="'+escapeHtml(p.title)+'" title="Удалить">'+icon("trash","ic-sm")+'</button>' : '') +
       '</div>';
     });
   }
@@ -3048,15 +3070,45 @@ function renderSpecializationEditorModal(){
   return el('<div class="overlay" data-action="overlay-close-specialization-editor"><div class="drawer" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
 }
 
+function formatFileSize(bytes){
+  if(!bytes) return "0 КБ";
+  if(bytes < 1024*1024) return Math.max(1, Math.round(bytes/1024)) + " КБ";
+  return (bytes/(1024*1024)).toFixed(1) + " МБ";
+}
+
+function renderProtocolGuideFiles(g){
+  var html = '<div style="margin-top:10px;">';
+  (g.files||[]).forEach(function(f){
+    html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line-2);">' +
+      '<a href="'+f.url+'" target="_blank" rel="noopener" style="flex:1;font-size:12.5px;display:flex;align-items:center;gap:6px;min-width:0;">'+icon("folder","ic-sm")+'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escapeHtml(f.originalName)+'</span></a>' +
+      '<span style="font-size:11.5px;color:var(--muted);flex-shrink:0;">'+formatFileSize(f.sizeBytes)+'</span>' +
+      '<button type="button" class="btn btn-sm btn-ghost" data-action="delete-protocol-guide-file" data-spec="'+g.specializationId+'" data-file-id="'+f.id+'" data-name="'+escapeHtml(f.originalName)+'" title="Удалить файл">'+icon("trash","ic-sm")+'</button>' +
+    '</div>';
+  });
+  html += '<div style="display:flex;gap:8px;align-items:center;margin-top:8px;">' +
+    '<input type="file" id="guideFileInput-'+g.specializationId+'" style="font-size:12px;flex:1;min-width:0;">' +
+    '<button type="button" class="btn btn-sm btn-ghost" data-action="upload-protocol-guide-file" data-spec="'+g.specializationId+'">Прикрепить файл</button>' +
+  '</div></div>';
+  return html;
+}
+
 function renderProtocolEditorModal(){
   var isNew = !protocolEditor.id;
+  var isProtocolAdmin = me.role==="admin" || me.role==="super_admin";
   var body = '<div class="drawer-head"><b style="font-size:16px;">'+(isNew?"Новый протокол":"Редактирование протокола")+'</b><button class="btn btn-ghost btn-sm" data-action="close-protocol-editor">Закрыть ✕</button></div>' +
-    '<div class="drawer-body"><form id="protocolEditorForm">' +
+    '<div class="drawer-body">';
+
+  if(isProtocolAdmin){
+    body += '<form id="protocolEditorForm">' +
       '<div class="field"><label>Название протокола</label><input class="input" name="title" required value="'+escapeHtml(protocolEditor.title)+'"></div>' +
       '<div class="field"><label>Краткое описание <span style="font-weight:400;color:var(--muted-2);">(видно всем, даже без гайда под их специализацию)</span></label><textarea class="input" name="summary" style="height:64px;">'+escapeHtml(protocolEditor.summary)+'</textarea></div>' +
       '<div class="err-text" id="protocolEditorError" style="display:none;"></div>' +
       '<button class="btn btn-primary" type="submit">'+(isNew?"Создать и продолжить":"Сохранить")+'</button>' +
     '</form>';
+  } else {
+    body += '<b style="font-size:14.5px;display:block;">'+escapeHtml(protocolEditor.title)+'</b>' +
+      (protocolEditor.summary ? '<p style="font-size:12.5px;color:var(--muted);margin:6px 0 0;">'+escapeHtml(protocolEditor.summary)+'</p>' : '');
+  }
 
   if(!isNew){
     body += '<div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line-2);">' +
@@ -3065,7 +3117,8 @@ function renderProtocolEditorModal(){
       body += '<div class="card" style="padding:12px 14px;margin-bottom:8px;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><b style="font-size:13px;">'+escapeHtml(g.specializationName)+'</b>' +
           '<button class="btn btn-sm btn-ghost" data-action="delete-protocol-guide" data-spec="'+g.specializationId+'" title="Удалить гайд">'+icon("trash","ic-sm")+'</button></div>' +
-        '<div class="prose" style="font-size:12.5px;">'+renderPlainToProse(g.guideHtml)+'</div>' +
+        (g.guideHtml ? '<div class="prose" style="font-size:12.5px;">'+renderPlainToProse(g.guideHtml)+'</div>' : '<p class="hint" style="margin:0;">Текста пока нет — только файлы.</p>') +
+        renderProtocolGuideFiles(g) +
       '</div>';
     });
     var usedSpecs = protocolEditor.guides.map(function(g){ return g.specializationId; });
@@ -3081,17 +3134,20 @@ function renderProtocolEditorModal(){
     } else {
       body += '<p class="hint">Гайды добавлены под все специализации из справочника.</p>';
     }
+    body += '</div>';
 
-    body += '</div><div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line-2);">' +
-      '<b style="font-size:13.5px;display:block;margin-bottom:10px;">Какие уроки открывают этот протокол</b>';
-    (staffState.materials||[]).forEach(function(l){
-      var checked = protocolEditor.lessonIds.indexOf(l.id)!==-1;
-      body += '<label style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line-2);cursor:pointer;">' +
-        '<input type="checkbox" data-action="toggle-protocol-lesson" data-id="'+l.id+'"'+(checked?' checked':'')+'>' +
-        '<span style="font-size:13px;">'+escapeHtml(l.title)+'</span></label>';
-    });
-    body += '<button class="btn btn-sm btn-ghost" style="margin-top:12px;" data-action="save-protocol-lessons">Сохранить привязку</button>' +
-    '</div>';
+    if(isProtocolAdmin){
+      body += '<div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line-2);">' +
+        '<b style="font-size:13.5px;display:block;margin-bottom:10px;">Какие уроки открывают этот протокол</b>';
+      (staffState.materials||[]).forEach(function(l){
+        var checked = protocolEditor.lessonIds.indexOf(l.id)!==-1;
+        body += '<label style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line-2);cursor:pointer;">' +
+          '<input type="checkbox" data-action="toggle-protocol-lesson" data-id="'+l.id+'"'+(checked?' checked':'')+'>' +
+          '<span style="font-size:13px;">'+escapeHtml(l.title)+'</span></label>';
+      });
+      body += '<button class="btn btn-sm btn-ghost" style="margin-top:12px;" data-action="save-protocol-lessons">Сохранить привязку</button>' +
+      '</div>';
+    }
   }
 
   body += '</div>';
@@ -3910,6 +3966,38 @@ function wireEvents(root){
         var adminIdx2=adminProtocolsState.list.findIndex(function(p){ return p.id===protocolEditor.id; });
         if(adminIdx2!==-1) adminProtocolsState.list[adminIdx2].guides = protocolEditor.guides.slice();
         showToast("Гайд удалён");
+      }catch(err){ showToast(err.message); }
+      render(); return;
+    }
+    if(action==="upload-protocol-guide-file"){
+      var ufSpec = t.getAttribute("data-spec");
+      var ufInput = document.getElementById("guideFileInput-"+ufSpec);
+      if(!ufInput || !ufInput.files || !ufInput.files[0]){ showToast("Выберите файл"); return; }
+      var fd = new FormData();
+      fd.append("file", ufInput.files[0]);
+      try{
+        var ufRes = await apiUpload("/protocols/"+protocolEditor.id+"/guides/"+ufSpec+"/files", fd);
+        var ufGuide = protocolEditor.guides.find(function(g){ return g.specializationId===ufSpec; });
+        if(ufGuide){
+          ufGuide.files = (ufGuide.files||[]).concat([ufRes.file]);
+        }
+        var ufIdx = adminProtocolsState.list.findIndex(function(p){ return p.id===protocolEditor.id; });
+        if(ufIdx!==-1) adminProtocolsState.list[ufIdx].guides = protocolEditor.guides.slice();
+        showToast("Файл прикреплён");
+      }catch(err){ showToast(err.message); }
+      render(); return;
+    }
+    if(action==="delete-protocol-guide-file"){
+      if(!confirm('Удалить файл «'+t.getAttribute("data-name")+'»?')) return;
+      var dfSpec = t.getAttribute("data-spec");
+      var dfFileId = t.getAttribute("data-file-id");
+      try{
+        await api("/protocols/"+protocolEditor.id+"/guides/"+dfSpec+"/files/"+dfFileId, { method:"DELETE" });
+        var dfGuide = protocolEditor.guides.find(function(g){ return g.specializationId===dfSpec; });
+        if(dfGuide) dfGuide.files = (dfGuide.files||[]).filter(function(f){ return f.id!==dfFileId; });
+        var dfIdx = adminProtocolsState.list.findIndex(function(p){ return p.id===protocolEditor.id; });
+        if(dfIdx!==-1) adminProtocolsState.list[dfIdx].guides = protocolEditor.guides.slice();
+        showToast("Файл удалён");
       }catch(err){ showToast(err.message); }
       render(); return;
     }
