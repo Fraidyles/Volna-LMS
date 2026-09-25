@@ -15,7 +15,27 @@ fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 // Разрешаем только «документные» форматы — вложение к гайду это памятка/чек-лист,
 // а не произвольный файл; заодно исключает случайную загрузку исполняемых файлов.
-const ALLOWED_EXTENSIONS = new Set([".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".png", ".jpg", ".jpeg", ".webp"]);
+// EXT_TO_MIME — единственный источник истины для Content-Type при отдаче файла:
+// req.file.mimetype — это просто заголовок, который прислал сам загрузивший, ему
+// нельзя доверять (curator мог бы прислать безобидное на вид "file.png", но с
+// Content-Type: text/html и HTML/JS внутри — при отдаче с таким же заголовком
+// браузер выполнил бы это как HTML в origin приложения). Раз расширение и так
+// уже проверяется белым списком ниже, безопасный MIME для него можно просто
+// взять из этой статичной таблицы, а не с чужих слов.
+const EXT_TO_MIME = {
+  ".pdf": "application/pdf",
+  ".doc": "application/msword",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xls": "application/vnd.ms-excel",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".ppt": "application/vnd.ms-powerpoint",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp"
+};
+const ALLOWED_EXTENSIONS = new Set(Object.keys(EXT_TO_MIME));
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -213,10 +233,11 @@ router.post(
 
     const guideId = await findOrCreateGuide(req.params.id, req.params.specializationId);
     const fileId = crypto.randomUUID();
+    const safeMimeType = EXT_TO_MIME[path.extname(req.file.originalname).toLowerCase()] || "application/octet-stream";
     await pool.query(
       `INSERT INTO protocol_guide_files (id, guide_id, filename, original_name, mime_type, size_bytes, uploaded_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [fileId, guideId, req.file.filename, req.file.originalname, req.file.mimetype, req.file.size, req.user.name]
+      [fileId, guideId, req.file.filename, req.file.originalname, safeMimeType, req.file.size, req.user.name]
     );
     await logAction(req.user, "protocol.guide_file_add", "protocol", req.params.id, req.file.originalname, {
       specializationId: req.params.specializationId
@@ -224,7 +245,7 @@ router.post(
     res.json({
       ok: true,
       file: fileToJson(
-        { id: fileId, original_name: req.file.originalname, mime_type: req.file.mimetype, size_bytes: req.file.size },
+        { id: fileId, original_name: req.file.originalname, mime_type: safeMimeType, size_bytes: req.file.size },
         req.params.id,
         req.params.specializationId
       )
@@ -239,7 +260,7 @@ router.post(
 // не фильтруется по специализации врача, см. GET /course/protocols).
 router.get("/:id/guides/:specializationId/files/:fileId/download", authRequired, async (req, res) => {
   const result = await pool.query(
-    `SELECT f.filename, f.original_name, f.mime_type FROM protocol_guide_files f
+    `SELECT f.filename, f.original_name FROM protocol_guide_files f
      JOIN protocol_guides g ON g.id = f.guide_id
      WHERE f.id=$1 AND g.protocol_id=$2 AND g.specialization_id=$3`,
     [req.params.fileId, req.params.id, req.params.specializationId]
@@ -248,8 +269,11 @@ router.get("/:id/guides/:specializationId/files/:fileId/download", authRequired,
   const f = result.rows[0];
   const filePath = path.join(UPLOAD_DIR, f.filename);
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: "not_found" });
+  // Content-Type всегда пересчитываем сами по расширению (см. EXT_TO_MIME) — не
+  // берём f.mime_type из базы, чтобы обезвредить и старые записи, если в них
+  // успел сохраниться "сырой" заголовок ещё до этого фикса.
   res.setHeader("Content-Disposition", contentDisposition(f.original_name, { type: "inline" }));
-  if (f.mime_type) res.setHeader("Content-Type", f.mime_type);
+  res.setHeader("Content-Type", EXT_TO_MIME[path.extname(f.filename).toLowerCase()] || "application/octet-stream");
   res.sendFile(filePath);
 });
 

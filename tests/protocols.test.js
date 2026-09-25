@@ -241,6 +241,31 @@ describe("Файлы-вложения к гайдам протоколов", () 
     expect(guideAfter.files.length).toBe(0);
   });
 
+  test("Content-Type при скачивании считается по расширению, а не по заголовку загрузки (защита от MIME-спуфинга)", async () => {
+    const admin = await createUser({ role: "admin" });
+    const adminCookie = await loginAs(admin);
+    const protoRes = await request(app).post("/api/protocols").set("Cookie", adminCookie)
+      .send({ title: "Протокол для проверки MIME", summary: "" });
+    const protoId = protoRes.body.id;
+
+    // Расширение допустимое (.png), но заголовок загрузки — сфальсифицированный
+    // text/html с HTML/JS внутри: раньше именно он же уходил в Content-Type
+    // при скачивании, и браузер выполнил бы это как HTML в origin приложения.
+    const uploadRes = await request(app)
+      .post(`/api/protocols/${protoId}/guides/therapist/files`)
+      .set("Cookie", adminCookie)
+      .attach("file", Buffer.from("<script>alert(1)</script>"), { filename: "safe.png", contentType: "text/html" });
+    expect(uploadRes.status).toBe(200);
+    expect(uploadRes.body.file.mimeType).toBe("image/png");
+    const fileId = uploadRes.body.file.id;
+
+    const downloadRes = await request(app)
+      .get(`/api/protocols/${protoId}/guides/therapist/files/${fileId}/download`)
+      .set("Cookie", adminCookie);
+    expect(downloadRes.status).toBe(200);
+    expect(downloadRes.headers["content-type"]).toBe("image/png");
+  });
+
   test("недопустимый формат файла отклоняется (400)", async () => {
     const admin = await createUser({ role: "admin" });
     const adminCookie = await loginAs(admin);
