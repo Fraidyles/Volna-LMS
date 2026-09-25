@@ -36,13 +36,16 @@ async function buildDailyDigest(actor) {
     `SELECT COUNT(*)::int AS cnt FROM users u WHERE u.role='student' AND u.created_at >= $1 AND u.created_at < $2 ${scopeClause}`,
     scopeParams
   );
+  // COUNT(DISTINCT u.id) — у врача теперь может быть несколько записей progress
+  // (по одной на каждый курс), и без DISTINCT врач, активный/сертифицированный
+  // вчера сразу на двух своих курсах, посчитался бы в статистике два раза.
   const active = await pool.query(
-    `SELECT COUNT(*)::int AS cnt FROM users u JOIN progress p ON p.user_id=u.id
+    `SELECT COUNT(DISTINCT u.id)::int AS cnt FROM users u JOIN progress p ON p.user_id=u.id
      WHERE u.role='student' AND p.last_active_at >= $1 AND p.last_active_at < $2 ${scopeClause}`,
     scopeParams
   );
   const certified = await pool.query(
-    `SELECT COUNT(*)::int AS cnt FROM users u JOIN progress p ON p.user_id=u.id
+    `SELECT COUNT(DISTINCT u.id)::int AS cnt FROM users u JOIN progress p ON p.user_id=u.id
      WHERE u.role='student' AND p.certificate_issued_at >= $1 AND p.certificate_issued_at < $2 ${scopeClause}`,
     scopeParams
   );

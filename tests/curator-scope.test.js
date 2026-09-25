@@ -93,10 +93,12 @@ describe("Ролевой скоуп куратора", () => {
     await assignCurator(own.id, curatorA.id);
 
     const cookie = await loginAs(curatorA);
-    const forbidden = await request(app).post(`/api/course/certificate/${stranger.id}/issue`).set("Cookie", cookie);
+    const forbidden = await request(app).post(`/api/course/certificate/${stranger.id}/issue`).set("Cookie", cookie)
+      .send({ courseId: course.courseId });
     expect(forbidden.status).toBe(403);
 
-    const allowed = await request(app).post(`/api/course/certificate/${own.id}/issue`).set("Cookie", cookie);
+    const allowed = await request(app).post(`/api/course/certificate/${own.id}/issue`).set("Cookie", cookie)
+      .send({ courseId: course.courseId });
     expect(allowed.status).toBe(200);
   });
 
@@ -110,7 +112,7 @@ describe("Ролевой скоуп куратора", () => {
 
     const cookie = await loginAs(curatorA);
     const res = await request(app).post("/api/course/certificate/bulk-issue").set("Cookie", cookie)
-      .send({ studentIds: [own.id, stranger.id] });
+      .send({ studentIds: [own.id, stranger.id], courseId: course.courseId });
     expect(res.status).toBe(200);
     expect(res.body.issued).toBe(1);
 

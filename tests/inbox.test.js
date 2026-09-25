@@ -13,7 +13,7 @@ describe("Инбокс куратора «требует внимания»", ()
   test("врач не может открыть инбокс (403)", async () => {
     const student = await createUser({ role: "student", courseId: course.courseId });
     const cookie = await loginAs(student);
-    const res = await request(app).get("/api/staff/inbox").set("Cookie", cookie);
+    const res = await request(app).get("/api/staff/inbox").query({ courseId: course.courseId }).set("Cookie", cookie);
     expect(res.status).toBe(403);
   });
 
@@ -24,7 +24,7 @@ describe("Инбокс куратора «требует внимания»", ()
 
     const staff = await createUser({ role: "super_admin" });
     const cookie = await loginAs(staff);
-    const res = await request(app).get("/api/staff/inbox").set("Cookie", cookie);
+    const res = await request(app).get("/api/staff/inbox").query({ courseId: course.courseId }).set("Cookie", cookie);
     expect(res.status).toBe(200);
     const ids = res.body.inactive.map((r) => r.id);
     expect(ids).toContain(stale.id);
@@ -38,7 +38,7 @@ describe("Инбокс куратора «требует внимания»", ()
 
     const staff = await createUser({ role: "super_admin" });
     const cookie = await loginAs(staff);
-    const res = await request(app).get("/api/staff/inbox").set("Cookie", cookie);
+    const res = await request(app).get("/api/staff/inbox").query({ courseId: course.courseId }).set("Cookie", cookie);
     const ids = res.body.inactive.map((r) => r.id);
     expect(ids).not.toContain(finished.id);
   });
@@ -52,7 +52,7 @@ describe("Инбокс куратора «требует внимания»", ()
 
     const staff = await createUser({ role: "super_admin" });
     const cookie = await loginAs(staff);
-    const res = await request(app).get("/api/staff/inbox").set("Cookie", cookie);
+    const res = await request(app).get("/api/staff/inbox").query({ courseId: course.courseId }).set("Cookie", cookie);
     const ids = res.body.pendingCertificates.map((r) => r.id);
     expect(ids).toContain(student.id);
   });
@@ -64,7 +64,7 @@ describe("Инбокс куратора «требует внимания»", ()
 
     const staff = await createUser({ role: "super_admin" });
     const cookie = await loginAs(staff);
-    const res = await request(app).get("/api/staff/inbox").set("Cookie", cookie);
+    const res = await request(app).get("/api/staff/inbox").query({ courseId: course.courseId }).set("Cookie", cookie);
     expect(res.body.pendingCertificates).toEqual([]);
   });
 
@@ -84,7 +84,7 @@ describe("Инбокс куратора «требует внимания»", ()
     await ageRegistration(unassigned.id, 8);
 
     const cookie = await loginAs(curatorA);
-    const res = await request(app).get("/api/staff/inbox").set("Cookie", cookie);
+    const res = await request(app).get("/api/staff/inbox").query({ courseId: course.courseId }).set("Cookie", cookie);
     const ids = res.body.inactive.map((r) => r.id);
     expect(ids).toContain(mine.id);
     expect(ids).toContain(unassigned.id);

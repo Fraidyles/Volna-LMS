@@ -118,14 +118,14 @@ describe("Протоколы", () => {
     await pool.query("INSERT INTO user_specializations (user_id, specialization_id) VALUES ($1,'therapist')", [student.id]);
     const cookie = await loginAs(student);
 
-    const beforeRes = await request(app).get("/api/course/protocols").set("Cookie", cookie);
+    const beforeRes = await request(app).get("/api/course/protocols").query({ courseId: course.courseId }).set("Cookie", cookie);
     expect(beforeRes.status).toBe(200);
     expect(beforeRes.body.forYou).toEqual([]);
     expect(beforeRes.body.additional).toEqual([]);
 
     await request(app).post("/api/course/lesson-done").set("Cookie", cookie).send({ lessonId: course.lessonIds[0] });
 
-    const afterRes = await request(app).get("/api/course/protocols").set("Cookie", cookie);
+    const afterRes = await request(app).get("/api/course/protocols").query({ courseId: course.courseId }).set("Cookie", cookie);
     expect(afterRes.body.forYou.length).toBe(1);
     expect(afterRes.body.forYou[0].id).toBe(protoId);
     expect(afterRes.body.additional).toEqual([]);
@@ -149,7 +149,7 @@ describe("Протоколы", () => {
     const cookie = await loginAs(student);
     await request(app).post("/api/course/lesson-done").set("Cookie", cookie).send({ lessonId: course.lessonIds[0] });
 
-    const res = await request(app).get("/api/course/protocols").set("Cookie", cookie);
+    const res = await request(app).get("/api/course/protocols").query({ courseId: course.courseId }).set("Cookie", cookie);
     expect(res.body.forYou).toEqual([]);
     expect(res.body.additional.length).toBe(1);
     expect(res.body.additional[0].id).toBe(protoId);
@@ -176,7 +176,7 @@ describe("Протоколы", () => {
     const cookie = await loginAs(student);
     await request(app).post("/api/course/lesson-done").set("Cookie", cookie).send({ lessonId: course.lessonIds[0] });
 
-    const res = await request(app).get("/api/course/protocols").set("Cookie", cookie);
+    const res = await request(app).get("/api/course/protocols").query({ courseId: course.courseId }).set("Cookie", cookie);
     expect(res.body.forYou.length).toBe(1);
     expect(res.body.forYou[0].id).toBe(protoId);
   });
@@ -216,7 +216,7 @@ describe("Файлы-вложения к гайдам протоколов", () 
     const studentCookie = await loginAs(student);
     await request(app).post("/api/course/lesson-done").set("Cookie", studentCookie).send({ lessonId: course.lessonIds[0] });
 
-    const studentProtocols = await request(app).get("/api/course/protocols").set("Cookie", studentCookie);
+    const studentProtocols = await request(app).get("/api/course/protocols").query({ courseId: course.courseId }).set("Cookie", studentCookie);
     const studentGuide = studentProtocols.body.forYou[0].guides.find((g) => g.specializationId === "therapist");
     expect(studentGuide.files.length).toBe(1);
 

@@ -11,7 +11,7 @@ describe("Курс врача", () => {
   test("GET /course возвращает уроки, тест (без ответов) и прогресс", async () => {
     const user = await createUser({ role: "student", courseId: course.courseId });
     const cookie = await loginAs(user);
-    const res = await request(app).get("/api/course").set("Cookie", cookie);
+    const res = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
     expect(res.status).toBe(200);
     expect(res.body.lessons.length).toBeGreaterThan(0);
     expect(res.body.quiz[0].correct).toBeUndefined(); // правильный ответ не должен уходить студенту
@@ -38,7 +38,7 @@ describe("Курс врача", () => {
     const before = await request(app).get(`/api/staff/students/${user.id}`).set("Cookie", curatorCookie);
     expect(before.body.student.online).toBe(false);
 
-    await request(app).get("/api/course").set("Cookie", cookie);
+    await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
     const afterLoad = await request(app).get(`/api/staff/students/${user.id}`).set("Cookie", curatorCookie);
     expect(afterLoad.body.student.online).toBe(true);
 
@@ -61,7 +61,7 @@ describe("Курс врача", () => {
     await pool.query("UPDATE users SET assigned_curator_id=$1 WHERE id=$2", [curator.id, user.id]);
     const cookie = await loginAs(user);
 
-    await request(app).get("/api/course").set("Cookie", cookie);
+    await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
     const online = await request(app).get(`/api/staff/students/${user.id}`).set("Cookie", curatorCookie);
     expect(online.body.student.online).toBe(true);
 
@@ -83,7 +83,7 @@ describe("Курс врача", () => {
 
     // Подделанный id не должен был попасть в completed_lessons — иначе счётчик
     // "N / total уроков" на главной врача мог бы показать N больше total.
-    const after = await request(app).get("/api/course").set("Cookie", cookie);
+    const after = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
     expect(after.body.progress.completed_lessons).not.toContain("no-such-lesson-id");
   });
 
@@ -94,7 +94,7 @@ describe("Курс врача", () => {
     const wrongAnswers = {};
     wrongAnswers[course.questionIds[0]] = 2;
     wrongAnswers[course.questionIds[1]] = 2;
-    const res = await request(app).post("/api/course/quiz-submit").set("Cookie", cookie).send({ answers: wrongAnswers });
+    const res = await request(app).post("/api/course/quiz-submit").set("Cookie", cookie).send({ answers: wrongAnswers, courseId: course.courseId });
     expect(res.status).toBe(200);
     expect(res.body.score).toBe(0);
     expect(res.body.completed).toBe(false);
@@ -103,7 +103,7 @@ describe("Курс врача", () => {
     const rightAnswers = {};
     rightAnswers[course.questionIds[0]] = 0;
     rightAnswers[course.questionIds[1]] = 0;
-    const res2 = await request(app).post("/api/course/quiz-submit").set("Cookie", cookie).send({ answers: rightAnswers });
+    const res2 = await request(app).post("/api/course/quiz-submit").set("Cookie", cookie).send({ answers: rightAnswers, courseId: course.courseId });
     expect(res2.body.score).toBe(100);
     expect(res2.body.completed).toBe(true);
     expect(res2.body.certificateStatus).toBe("pending");
@@ -123,7 +123,7 @@ describe("Курс врача", () => {
     const user = await createUser({ role: "student", courseId: course.courseId });
     await pool.query("UPDATE progress SET access_expires_at=$1 WHERE user_id=$2", ["2020-01-01", user.id]);
     const cookie = await loginAs(user);
-    const getRes = await request(app).get("/api/course").set("Cookie", cookie);
+    const getRes = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
     expect(getRes.body.locked.locked).toBe(true);
     expect(getRes.body.locked.reason).toBe("expired");
   });
@@ -138,12 +138,12 @@ describe("Курс врача", () => {
       .send({ ids: [targetUser.id] });
 
     const targetCookie = await loginAs(targetUser);
-    const targetCourse = await request(app).get("/api/course").set("Cookie", targetCookie);
+    const targetCourse = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", targetCookie);
     const hiddenLesson = targetCourse.body.lessons.find((l) => l.id === course.lessonIds[0]);
     expect(hiddenLesson.hiddenForMe).toBe(true);
 
     const otherCookie = await loginAs(otherUser);
-    const otherCourse = await request(app).get("/api/course").set("Cookie", otherCookie);
+    const otherCourse = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", otherCookie);
     const notHiddenLesson = otherCourse.body.lessons.find((l) => l.id === course.lessonIds[0]);
     expect(notHiddenLesson.hiddenForMe).toBe(false);
 
@@ -159,7 +159,7 @@ describe("Курс врача", () => {
       const user = await createUser({ role: "student", courseId: course.courseId });
       const cookie = await loginAs(user);
 
-      const getRes = await request(app).get("/api/course").set("Cookie", cookie);
+      const getRes = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
       const lesson = getRes.body.lessons.find((l) => l.id === course.lessonIds[1]);
       expect(lesson.dripLockedForMe).toBe(true);
       expect(lesson.availableAt).toBeTruthy();
@@ -180,7 +180,7 @@ describe("Курс врача", () => {
       await pool.query("UPDATE progress SET created_at=now() - interval '8 days' WHERE user_id=$1", [user.id]);
       const cookie = await loginAs(user);
 
-      const getRes = await request(app).get("/api/course").set("Cookie", cookie);
+      const getRes = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
       const lesson = getRes.body.lessons.find((l) => l.id === course.lessonIds[1]);
       expect(lesson.dripLockedForMe).toBe(false);
 
@@ -204,7 +204,7 @@ describe("Курс врача", () => {
     expect(setRes.body.updated).toBe(1);
 
     const studentCookie = await loginAs(student);
-    const getRes = await request(app).get("/api/course").set("Cookie", studentCookie);
+    const getRes = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", studentCookie);
     const lesson = getRes.body.lessons.find((l) => l.id === course.lessonIds[0]);
     expect(lesson.dripLockedForMe).toBe(true);
     expect(lesson.scheduledForMe).toBe(true);
@@ -248,7 +248,7 @@ describe("Курс врача", () => {
     expect(clearRes.status).toBe(200);
 
     const studentCookie = await loginAs(student);
-    const getRes = await request(app).get("/api/course").set("Cookie", studentCookie);
+    const getRes = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", studentCookie);
     const lesson = getRes.body.lessons.find((l) => l.id === course.lessonIds[0]);
     expect(lesson.scheduledForMe).toBe(false);
     expect(lesson.dripLockedForMe).toBe(false);
@@ -264,7 +264,7 @@ describe("Курс врача", () => {
     const r2 = await request(app).post("/api/course/lesson-done").set("Cookie", cookie).send({ lessonId: course.lessonIds[1] });
     expect(r2.body.gamification.currentStreak).toBe(1); // тот же день — не задваиваем
 
-    const getRes = await request(app).get("/api/course").set("Cookie", cookie);
+    const getRes = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
     expect(getRes.body.gamification.currentStreak).toBe(1);
     expect(getRes.body.gamification.longestStreak).toBe(1);
   });
@@ -307,7 +307,7 @@ describe("Курс врача", () => {
       [JSON.stringify([course.lessonIds[0], course.lessonIds[1]]), user.id]
     );
     const cookie = await loginAs(user);
-    const res = await request(app).get("/api/course").set("Cookie", cookie);
+    const res = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
     // 2 урока * 20 + тест 80 + сертификат 100 + стрик 2*5 = 230
     expect(res.body.gamification.points).toBe(230);
   });
@@ -321,7 +321,7 @@ describe("Курс врача", () => {
       [JSON.stringify(course.lessonIds), user.id]
     );
     const cookie = await loginAs(user);
-    const res = await request(app).get("/api/course").set("Cookie", cookie);
+    const res = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
     expect(res.body.gamification.points).toBe(1000);
   });
 
@@ -329,13 +329,13 @@ describe("Курс врача", () => {
     const user = await createUser({ role: "student", courseId: course.courseId });
     const cookie = await loginAs(user);
 
-    const before = await request(app).get("/api/course").set("Cookie", cookie);
+    const before = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
     expect(before.body.progress.onboarding_dismissed).toBe(false);
 
     const dismissRes = await request(app).put("/api/course/onboarding-dismiss").set("Cookie", cookie);
     expect(dismissRes.status).toBe(200);
 
-    const after = await request(app).get("/api/course").set("Cookie", cookie);
+    const after = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
     expect(after.body.progress.onboarding_dismissed).toBe(true);
   });
 
@@ -343,19 +343,19 @@ describe("Курс врача", () => {
     const user = await createUser({ role: "student", courseId: course.courseId });
     const cookie = await loginAs(user);
 
-    const before = await request(app).get("/api/course").set("Cookie", cookie);
+    const before = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
     expect(before.body.bookmarkedLessonIds).toEqual([]);
 
     const addRes = await request(app).put(`/api/course/lessons/${course.lessonIds[0]}/bookmark`).set("Cookie", cookie)
       .send({ bookmarked: true });
     expect(addRes.status).toBe(200);
 
-    const after = await request(app).get("/api/course").set("Cookie", cookie);
+    const after = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
     expect(after.body.bookmarkedLessonIds).toEqual([course.lessonIds[0]]);
 
     await request(app).put(`/api/course/lessons/${course.lessonIds[0]}/bookmark`).set("Cookie", cookie)
       .send({ bookmarked: false });
-    const afterRemove = await request(app).get("/api/course").set("Cookie", cookie);
+    const afterRemove = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
     expect(afterRemove.body.bookmarkedLessonIds).toEqual([]);
   });
 
@@ -379,11 +379,11 @@ describe("Курс врача", () => {
       .send({ note: "Спросить куратора про дозировки" });
     expect(saveRes.status).toBe(200);
 
-    const getRes = await request(app).get("/api/course").set("Cookie", cookie);
+    const getRes = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
     expect(getRes.body.progress.lesson_notes[course.lessonIds[0]]).toBe("Спросить куратора про дозировки");
 
     await request(app).put(`/api/course/lessons/${course.lessonIds[0]}/note`).set("Cookie", cookie).send({ note: "" });
-    const getRes2 = await request(app).get("/api/course").set("Cookie", cookie);
+    const getRes2 = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
     expect(getRes2.body.progress.lesson_notes[course.lessonIds[0]]).toBeUndefined();
   });
 
@@ -402,7 +402,7 @@ describe("Курс врача", () => {
 
     const admin = await createUser({ role: "super_admin" });
     const cookie = await loginAs(admin);
-    const res = await request(app).post(`/api/course/certificate/${student.id}/issue`).set("Cookie", cookie);
+    const res = await request(app).post(`/api/course/certificate/${student.id}/issue`).set("Cookie", cookie).send({ courseId: course.courseId });
     expect(res.status).toBe(403);
     expect(res.body.error).toBe("certificates_disabled");
 
@@ -419,7 +419,7 @@ describe("Курс врача", () => {
     const admin = await createUser({ role: "super_admin" });
     const cookie = await loginAs(admin);
     const res = await request(app).post("/api/course/certificate/bulk-issue").set("Cookie", cookie)
-      .send({ studentIds: [passed.id, notPassed.id] });
+      .send({ studentIds: [passed.id, notPassed.id], courseId: course.courseId });
     expect(res.status).toBe(200);
     expect(res.body.issued).toBe(2); // маршрут выдаёт всем переданным id — фильтрация по факту сдачи теста делается на фронтенде при выборе
 
@@ -432,15 +432,15 @@ describe("Курс врача", () => {
     const student = await createUser({ role: "student", courseId: course.courseId });
     const studentCookie = await loginAs(student);
 
-    const before = await request(app).get("/api/course/certificate/download").set("Cookie", studentCookie);
+    const before = await request(app).get("/api/course/certificate/download").query({ courseId: course.courseId }).set("Cookie", studentCookie);
     expect(before.status).toBe(403);
 
     const admin = await createUser({ role: "super_admin" });
     const adminCookie = await loginAs(admin);
-    const issueRes = await request(app).post(`/api/course/certificate/${student.id}/issue`).set("Cookie", adminCookie);
+    const issueRes = await request(app).post(`/api/course/certificate/${student.id}/issue`).set("Cookie", adminCookie).send({ courseId: course.courseId });
     expect(issueRes.status).toBe(200);
 
-    const dl = await request(app).get("/api/course/certificate/download").set("Cookie", studentCookie);
+    const dl = await request(app).get("/api/course/certificate/download").query({ courseId: course.courseId }).set("Cookie", studentCookie);
     expect(dl.status).toBe(200);
     expect(dl.headers["content-type"]).toBe("application/pdf");
     expect(dl.body.length).toBeGreaterThan(1000); // непустой PDF, а не заглушка
@@ -451,7 +451,7 @@ describe("Курс врача", () => {
 
     // Повторная выдача (например, второй клик куратора) не должна перевыпускать номер —
     // иначе старый скачанный файл разошёлся бы с тем, что хранится в базе.
-    await request(app).post(`/api/course/certificate/${student.id}/issue`).set("Cookie", adminCookie);
+    await request(app).post(`/api/course/certificate/${student.id}/issue`).set("Cookie", adminCookie).send({ courseId: course.courseId });
     const numRow2 = await pool.query("SELECT certificate_number FROM progress WHERE user_id=$1", [student.id]);
     expect(numRow2.rows[0].certificate_number).toBe(number);
 
@@ -474,7 +474,7 @@ describe("Курс врача", () => {
       const targetCourseId = (await pool.query("SELECT id FROM courses LIMIT 1")).rows[0].id;
 
       const createRes = await request(app).post("/api/course/lessons").set("Cookie", cookie)
-        .send({ title: "Новый урок", duration: "4 мин", html: "<p>Текст нового урока</p>" });
+        .send({ courseId: course.courseId, title: "Новый урок", duration: "4 мин", html: "<p>Текст нового урока</p>" });
       expect(createRes.status).toBe(200);
       const newId = createRes.body.id;
 
@@ -499,7 +499,7 @@ describe("Курс врача", () => {
       const cookie = await loginAs(admin);
 
       const createRes = await request(app).post("/api/course/lessons").set("Cookie", cookie)
-        .send({ title: "Урок для отката", duration: "3 мин", html: "<p>Контент</p>" });
+        .send({ courseId: course.courseId, title: "Урок для отката", duration: "3 мин", html: "<p>Контент</p>" });
       const lessonId = createRes.body.id;
 
       const deleteRes = await request(app).delete(`/api/course/lessons/${lessonId}`).set("Cookie", cookie);
@@ -542,7 +542,7 @@ describe("Курс врача", () => {
       const targetCourseId = (await pool.query("SELECT id FROM courses LIMIT 1")).rows[0].id;
 
       const createRes = await request(app).post("/api/course/quiz-admin").set("Cookie", cookie)
-        .send({ question: "Новый вопрос?", options: ["А", "Б"], correct: 0 });
+        .send({ courseId: course.courseId, question: "Новый вопрос?", options: ["А", "Б"], correct: 0 });
       expect(createRes.status).toBe(200);
       const newQId = createRes.body.id;
 
@@ -584,7 +584,7 @@ describe("Курс врача", () => {
       const curator = await createUser({ role: "curator" });
       const cookie = await loginAs(curator);
       const res = await request(app).post("/api/course/lessons").set("Cookie", cookie)
-        .send({ title: "x", duration: "1 мин", html: "<p>x</p>" });
+        .send({ courseId: course.courseId, title: "x", duration: "1 мин", html: "<p>x</p>" });
       expect(res.status).toBe(403);
     });
   });
@@ -622,7 +622,7 @@ describe("Курс врача", () => {
 
       const student = await createUser({ role: "student", courseId: course.courseId });
       const cookie = await loginAs(student);
-      const courseRes = await request(app).get("/api/course").set("Cookie", cookie);
+      const courseRes = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
       const lessonOut = courseRes.body.lessons.find((l) => l.id === lessonId);
       expect(lessonOut.videoUrl).toBe("https://example.com/video.mp4");
       expect(lessonOut.videoTimecodes.length).toBe(2);
@@ -660,7 +660,7 @@ describe("Курс врача", () => {
         .send({ question: "Сколько будет 2+2?", options: ["3", "4", "5"], correct: 1 });
       expect(qRes.status).toBe(200);
 
-      const finalQuizRes = await request(app).get("/api/course/quiz-admin").set("Cookie", adminCookie);
+      const finalQuizRes = await request(app).get("/api/course/quiz-admin").query({ courseId: course.courseId }).set("Cookie", adminCookie);
       expect(finalQuizRes.body.quiz.some((q) => q.id === qRes.body.id)).toBe(false);
 
       const lessonQuizRes = await request(app).get(`/api/course/lessons/${lessonId}/quiz-admin`).set("Cookie", adminCookie);
@@ -687,7 +687,7 @@ describe("Курс врача", () => {
       expect(submitRes.body.score).toBe(50);
       expect(submitRes.body.completedLessons).toContain(lessonId);
 
-      const courseRes = await request(app).get("/api/course").set("Cookie", cookie);
+      const courseRes = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
       expect(courseRes.body.progress.lesson_quiz_scores[lessonId]).toBe(50);
     });
 
@@ -747,7 +747,7 @@ describe("Курс врача", () => {
       expect(restored.rows[0].lesson_id).toBe(lessonId);
 
       // И не "утёк" в итоговый тест курса.
-      const finalQuizRes = await request(app).get("/api/course/quiz-admin").set("Cookie", adminCookie);
+      const finalQuizRes = await request(app).get("/api/course/quiz-admin").query({ courseId: course.courseId }).set("Cookie", adminCookie);
       expect(finalQuizRes.body.quiz.some((q) => q.id === toDelete.body.id)).toBe(false);
     });
 
@@ -785,7 +785,7 @@ describe("Курс врача", () => {
 
       const student = await createUser({ role: "student", courseId: course.courseId });
       const cookie = await loginAs(student);
-      const courseRes = await request(app).get("/api/course").set("Cookie", cookie);
+      const courseRes = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
       const lessonOut = courseRes.body.lessons.find((l) => l.id === lessonId);
       expect(lessonOut.videoUrl).toBe(`/api/course/lessons/${lessonId}/video-file`);
 
@@ -862,7 +862,7 @@ describe("Модули курса — итоговый тест и мини-оп
     const l1 = await makeLesson("Урок A");
     const l2 = await makeLesson("Урок B");
 
-    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль 1" });
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ courseId: course.courseId, title: "Модуль 1" });
     expect(modRes.status).toBe(200);
     const moduleId = modRes.body.id;
 
@@ -871,7 +871,7 @@ describe("Модули курса — итоговый тест и мини-оп
 
     const student = await createUser({ role: "student", courseId: course.courseId });
     const cookie = await loginAs(student);
-    const courseRes = await request(app).get("/api/course").set("Cookie", cookie);
+    const courseRes = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
     const modOut = courseRes.body.modules.find((m) => m.id === moduleId);
     expect(modOut).toBeTruthy();
     expect(modOut.lessonIds.sort()).toEqual([l1, l2].sort());
@@ -881,21 +881,21 @@ describe("Модули курса — итоговый тест и мини-оп
   test("куратор и врач не могут создавать модули или назначать уроки (403)", async () => {
     const curator = await createUser({ role: "curator" });
     const curatorCookie = await loginAs(curator);
-    const res = await request(app).post("/api/course/modules").set("Cookie", curatorCookie).send({ title: "Не должно создаться" });
+    const res = await request(app).post("/api/course/modules").set("Cookie", curatorCookie).send({ courseId: course.courseId, title: "Не должно создаться" });
     expect(res.status).toBe(403);
   });
 
   test("тест модуля не попадает ни в итоговый тест курса, ни в поурочный", async () => {
     const admin = await createUser({ role: "admin" });
     const adminCookie = await loginAs(admin);
-    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль с тестом" });
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ courseId: course.courseId, title: "Модуль с тестом" });
     const moduleId = modRes.body.id;
 
     const qRes = await request(app).post(`/api/course/modules/${moduleId}/quiz-admin`).set("Cookie", adminCookie)
       .send({ question: "Сколько будет 3+3?", options: ["5", "6", "7"], correct: 1 });
     expect(qRes.status).toBe(200);
 
-    const finalQuizRes = await request(app).get("/api/course/quiz-admin").set("Cookie", adminCookie);
+    const finalQuizRes = await request(app).get("/api/course/quiz-admin").query({ courseId: course.courseId }).set("Cookie", adminCookie);
     expect(finalQuizRes.body.quiz.some((q) => q.id === qRes.body.id)).toBe(false);
 
     const moduleQuizRes = await request(app).get(`/api/course/modules/${moduleId}/quiz-admin`).set("Cookie", adminCookie);
@@ -906,7 +906,7 @@ describe("Модули курса — итоговый тест и мини-оп
   test("врач проходит тест модуля — балл сохраняется в module_quiz_scores, completed_lessons не трогается", async () => {
     const admin = await createUser({ role: "admin" });
     const adminCookie = await loginAs(admin);
-    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль для прохождения" });
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ courseId: course.courseId, title: "Модуль для прохождения" });
     const moduleId = modRes.body.id;
     const q1 = await request(app).post(`/api/course/modules/${moduleId}/quiz-admin`).set("Cookie", adminCookie)
       .send({ question: "В1", options: ["a", "b"], correct: 0 });
@@ -915,14 +915,14 @@ describe("Модули курса — итоговый тест и мини-оп
 
     const student = await createUser({ role: "student", courseId: course.courseId });
     const cookie = await loginAs(student);
-    const beforeLessons = (await request(app).get("/api/course").set("Cookie", cookie)).body.progress.completed_lessons;
+    const beforeLessons = (await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie)).body.progress.completed_lessons;
 
     const answers = {}; answers[q1.body.id] = 0; answers[q2.body.id] = 0; // второй неверный
     const submitRes = await request(app).post(`/api/course/modules/${moduleId}/quiz-submit`).set("Cookie", cookie).send({ answers });
     expect(submitRes.status).toBe(200);
     expect(submitRes.body.score).toBe(50);
 
-    const courseRes = await request(app).get("/api/course").set("Cookie", cookie);
+    const courseRes = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
     expect(courseRes.body.progress.module_quiz_scores[moduleId]).toBe(50);
     expect(courseRes.body.progress.completed_lessons).toEqual(beforeLessons);
   });
@@ -930,7 +930,7 @@ describe("Модули курса — итоговый тест и мини-оп
   test("тест несуществующего модуля и модуля без вопросов — 404", async () => {
     const admin = await createUser({ role: "admin" });
     const adminCookie = await loginAs(admin);
-    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль без теста" });
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ courseId: course.courseId, title: "Модуль без теста" });
 
     const student = await createUser({ role: "student", courseId: course.courseId });
     const cookie = await loginAs(student);
@@ -946,7 +946,7 @@ describe("Модули курса — итоговый тест и мини-оп
   test("врач отправляет мини-опрос (оценка + комментарий), админ видит его и среднюю оценку; повторная отправка обновляет, а не дублирует", async () => {
     const admin = await createUser({ role: "admin" });
     const adminCookie = await loginAs(admin);
-    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль с отзывами" });
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ courseId: course.courseId, title: "Модуль с отзывами" });
     const moduleId = modRes.body.id;
 
     const student = await createUser({ role: "student", courseId: course.courseId, name: "Отзывчивый Врач" });
@@ -974,7 +974,7 @@ describe("Модули курса — итоговый тест и мини-оп
   test("оценка вне диапазона 1-5 отклоняется (400)", async () => {
     const admin = await createUser({ role: "admin" });
     const adminCookie = await loginAs(admin);
-    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль валидации" });
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ courseId: course.courseId, title: "Модуль валидации" });
 
     const student = await createUser({ role: "student", courseId: course.courseId });
     const cookie = await loginAs(student);
@@ -985,7 +985,7 @@ describe("Модули курса — итоговый тест и мини-оп
   test("куратор и врач не могут смотреть отзывы по модулю (403)", async () => {
     const admin = await createUser({ role: "admin" });
     const adminCookie = await loginAs(admin);
-    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль приватности" });
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ courseId: course.courseId, title: "Модуль приватности" });
 
     const curator = await createUser({ role: "curator" });
     const curatorCookie = await loginAs(curator);
@@ -997,7 +997,7 @@ describe("Модули курса — итоговый тест и мини-оп
     const admin = await createUser({ role: "admin" });
     const adminCookie = await loginAs(admin);
     const l1 = await makeLesson("Урок при удалении модуля");
-    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль на удаление" });
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ courseId: course.courseId, title: "Модуль на удаление" });
     const moduleId = modRes.body.id;
     await request(app).put(`/api/course/lessons/${l1}/module`).set("Cookie", adminCookie).send({ moduleId });
 
@@ -1012,7 +1012,7 @@ describe("Модули курса — итоговый тест и мини-оп
   test("откат: созданный модуль удаляется (content.module_created)", async () => {
     const admin = await createUser({ role: "super_admin" });
     const adminCookie = await loginAs(admin);
-    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль для отката" });
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ courseId: course.courseId, title: "Модуль для отката" });
 
     const logRow = await pool.query(
       "SELECT id FROM audit_log WHERE action='content.module_created' AND target_id=$1 ORDER BY created_at DESC LIMIT 1",
@@ -1029,7 +1029,7 @@ describe("Модули курса — итоговый тест и мини-оп
   test("откат: удалённый вопрос теста модуля восстанавливается ИМЕННО в свой модуль", async () => {
     const admin = await createUser({ role: "super_admin" });
     const adminCookie = await loginAs(admin);
-    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль для отката вопроса" });
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ courseId: course.courseId, title: "Модуль для отката вопроса" });
     const moduleId = modRes.body.id;
     await request(app).post(`/api/course/modules/${moduleId}/quiz-admin`).set("Cookie", adminCookie)
       .send({ question: "Останется", options: ["a", "b"], correct: 0 });
@@ -1049,14 +1049,14 @@ describe("Модули курса — итоговый тест и мини-оп
     const restored = await pool.query("SELECT module_id FROM quiz_questions WHERE id=$1", [toDelete.body.id]);
     expect(restored.rows[0].module_id).toBe(moduleId);
 
-    const finalQuizRes = await request(app).get("/api/course/quiz-admin").set("Cookie", adminCookie);
+    const finalQuizRes = await request(app).get("/api/course/quiz-admin").query({ courseId: course.courseId }).set("Cookie", adminCookie);
     expect(finalQuizRes.body.quiz.some((q) => q.id === toDelete.body.id)).toBe(false);
   });
 
   test("последний вопрос теста модуля удалить нельзя", async () => {
     const admin = await createUser({ role: "admin" });
     const adminCookie = await loginAs(admin);
-    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль с одним вопросом" });
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ courseId: course.courseId, title: "Модуль с одним вопросом" });
     const q1 = await request(app).post(`/api/course/modules/${modRes.body.id}/quiz-admin`).set("Cookie", adminCookie)
       .send({ question: "Единственный", options: ["a", "b"], correct: 0 });
 

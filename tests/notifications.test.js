@@ -43,7 +43,7 @@ describe("Центр уведомлений", () => {
     const user = await createUser({ role: "student", courseId: course.courseId });
     const staff = await createUser({ role: "curator" });
     const staffCookie = await loginAs(staff);
-    await request(app).post(`/api/course/certificate/${user.id}/issue`).set("Cookie", staffCookie);
+    await request(app).post(`/api/course/certificate/${user.id}/issue`).set("Cookie", staffCookie).send({ courseId: course.courseId });
 
     const cookie = await loginAs(user);
     const res = await request(app).get("/api/notifications").set("Cookie", cookie);
@@ -57,7 +57,7 @@ describe("Центр уведомлений", () => {
     const adminCookie = await loginAs(admin);
 
     const createRes = await request(app).post("/api/course/lessons").set("Cookie", adminCookie)
-      .send({ title: "Уведомляемый урок", duration: "3 мин", html: "<p>Текст</p>" });
+      .send({ title: "Уведомляемый урок", duration: "3 мин", html: "<p>Текст</p>", courseId: course.courseId });
     expect(createRes.status).toBe(200);
 
     const cookieA = await loginAs(userA);
@@ -95,7 +95,7 @@ describe("Центр уведомлений", () => {
     const user = await createUser({ role: "student", courseId: course.courseId });
     const staff = await createUser({ role: "curator" });
     const staffCookie = await loginAs(staff);
-    await request(app).post(`/api/course/certificate/${user.id}/issue`).set("Cookie", staffCookie);
+    await request(app).post(`/api/course/certificate/${user.id}/issue`).set("Cookie", staffCookie).send({ courseId: course.courseId });
 
     const cookie = await loginAs(user);
     const before = await request(app).get("/api/notifications").set("Cookie", cookie);
@@ -113,7 +113,7 @@ describe("Центр уведомлений", () => {
     const user = await createUser({ role: "student", courseId: course.courseId });
     const staff = await createUser({ role: "curator" });
     const staffCookie = await loginAs(staff);
-    await request(app).post(`/api/course/certificate/${user.id}/issue`).set("Cookie", staffCookie);
+    await request(app).post(`/api/course/certificate/${user.id}/issue`).set("Cookie", staffCookie).send({ courseId: course.courseId });
     await pool.query("UPDATE progress SET access_blocked=true WHERE user_id=$1", [user.id]);
     await request(app).patch(`/api/staff/students/${user.id}/access/block`).set("Cookie", staffCookie).send({ blocked: false });
 
@@ -131,7 +131,7 @@ describe("Центр уведомлений", () => {
     const other = await createUser({ role: "student", courseId: course.courseId });
     const staff = await createUser({ role: "curator" });
     const staffCookie = await loginAs(staff);
-    await request(app).post(`/api/course/certificate/${user.id}/issue`).set("Cookie", staffCookie);
+    await request(app).post(`/api/course/certificate/${user.id}/issue`).set("Cookie", staffCookie).send({ courseId: course.courseId });
 
     const cookie = await loginAs(user);
     const list = await request(app).get("/api/notifications").set("Cookie", cookie);

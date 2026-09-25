@@ -493,3 +493,14 @@ ALTER TABLE progress DROP COLUMN IF EXISTS messages_read_at;
 -- студентов, кураторов и преподавателей.
 ALTER TABLE streams ADD COLUMN IF NOT EXISTS telegram_url TEXT;
 
+-- ---------- Этап 21: несколько курсов — врач может учиться сразу на нескольких ----------
+-- Раньше progress.user_id был первичным ключом (одна запись на врача, один курс на
+-- всю жизнь аккаунта). Теперь ключ — пара (user_id, course_id): у врача может быть
+-- несколько строк progress, по одной на каждый курс, на который он записан.
+-- DROP+ADD при каждом прогоне идемпотентен (см. соглашение файла) — на другие таблицы
+-- progress ничем не ссылается, так что пересоздание PK ничего не ломает.
+ALTER TABLE progress DROP CONSTRAINT IF EXISTS progress_pkey;
+ALTER TABLE progress ADD PRIMARY KEY (user_id, course_id);
+
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+

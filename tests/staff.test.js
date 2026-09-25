@@ -46,11 +46,11 @@ describe("Права доступа персонала", () => {
     var answers = {};
     answers[course.questionIds[0]] = 0;
     answers[course.questionIds[1]] = 2;
-    await request(app).post("/api/course/quiz-submit").set("Cookie", studentCookie).send({ answers });
+    await request(app).post("/api/course/quiz-submit").set("Cookie", studentCookie).send({ answers, courseId: course.courseId });
 
     const curator = await createUser({ role: "curator" });
     const cookie = await loginAs(curator);
-    const res = await request(app).get("/api/staff/students").set("Cookie", cookie);
+    const res = await request(app).get("/api/staff/students").query({ courseId: course.courseId }).set("Cookie", cookie);
     const row = res.body.students.find((s) => s.id === student.id);
     expect(row.quiz_answers).toEqual(answers);
   });

@@ -32,21 +32,21 @@ const HANDLERS = {
   },
   "certificate.issue": async (log) => {
     const b = requireBefore(log);
+    const courseId = log.details && log.details.courseId;
+    if (!courseId) throw new Error("Недостаточно данных для отката (курс не записан в действии)");
     await pool.query(
-      "UPDATE progress SET certificate_status=$1, certificate_issued_at=$2, certificate_issued_by=$3 WHERE user_id=$4",
-      [b.certificateStatus, b.certificateIssuedAt, b.certificateIssuedBy, log.target_id]
+      "UPDATE progress SET certificate_status=$1, certificate_issued_at=$2, certificate_issued_by=$3 WHERE user_id=$4 AND course_id=$5",
+      [b.certificateStatus, b.certificateIssuedAt, b.certificateIssuedBy, log.target_id, courseId]
     );
   },
   "content.visibility_change": async (log) => {
     const b = requireBefore(log);
-    // См. комментарий у PUT /course/visibility/:targetId — курс резолвится так же,
-    // через сам урок, а не через LIMIT 1, чтобы откат писал видимость в тот же курс,
-    // что и исходное действие.
+    // Для "quiz" (итоговый тест курса, без урока) курс не вывести ни из чего, кроме
+    // записанного в самом действии details.courseId — см. PUT /course/visibility/:targetId.
     let courseId;
     if (log.target_id === "quiz") {
-      const course = await pool.query("SELECT id FROM courses LIMIT 1");
-      if (!course.rowCount) throw new Error("Курс не найден");
-      courseId = course.rows[0].id;
+      courseId = log.details && log.details.courseId;
+      if (!courseId) throw new Error("Недостаточно данных для отката (курс не записан в действии)");
     } else {
       const lesson = await pool.query("SELECT course_id FROM lessons WHERE id=$1", [log.target_id]);
       if (!lesson.rowCount) throw new Error("Урок не найден");
@@ -99,11 +99,10 @@ const HANDLERS = {
   },
   "content.lesson_deleted": async (log) => {
     const b = requireBefore(log);
-    const course = await pool.query("SELECT id FROM courses LIMIT 1");
-    if (!course.rowCount) throw new Error("Курс не найден");
+    if (!b.courseId) throw new Error("Недостаточно данных для отката (курс не записан в действии)");
     await pool.query(
       "INSERT INTO lessons (id, course_id, idx, title, duration, html, drip_days, video_url, video_timecodes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
-      [log.target_id, course.rows[0].id, b.idx, b.title, b.duration, b.html, b.dripDays,
+      [log.target_id, b.courseId, b.idx, b.title, b.duration, b.html, b.dripDays,
         b.videoUrl || null, JSON.stringify(b.videoTimecodes || [])]
     );
   },
@@ -115,11 +114,10 @@ const HANDLERS = {
   // различает, куда восстанавливать: без них вопрос молча "переехал" бы в итоговый тест курса.
   "content.quiz_deleted": async (log) => {
     const b = requireBefore(log);
-    const course = await pool.query("SELECT id FROM courses LIMIT 1");
-    if (!course.rowCount) throw new Error("Курс не найден");
+    if (!b.courseId) throw new Error("Недостаточно данных для отката (курс не записан в действии)");
     await pool.query(
       "INSERT INTO quiz_questions (id, course_id, lesson_id, module_id, idx, question, options, correct) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
-      [log.target_id, course.rows[0].id, b.lessonId || null, b.moduleId || null, b.idx, b.question, JSON.stringify(b.options), b.correct]
+      [log.target_id, b.courseId, b.lessonId || null, b.moduleId || null, b.idx, b.question, JSON.stringify(b.options), b.correct]
     );
   },
   "content.lesson_quiz_created": async (log) => {
@@ -130,6 +128,11 @@ const HANDLERS = {
   },
   "content.module_created": async (log) => {
     await pool.query("DELETE FROM modules WHERE id=$1", [log.target_id]);
+  },
+  "course.enroll": async (log) => {
+    const courseId = log.details && log.details.courseId;
+    if (!courseId) throw new Error("Недостаточно данных для отката (курс не записан в действии)");
+    await pool.query("DELETE FROM progress WHERE user_id=$1 AND course_id=$2", [log.target_id, courseId]);
   },
   "invite.create": async (log) => {
     await pool.query("DELETE FROM invites WHERE email=$1", [log.target_id]);

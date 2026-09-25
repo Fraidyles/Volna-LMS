@@ -124,11 +124,18 @@ router.post("/register", authLimiter, async (req, res) => {
     await pool.query("DELETE FROM invites WHERE email=$1", [email]);
   }
 
+  // Курсов теперь может быть несколько — по умолчанию записываем на самый старый
+  // (флагманский демо-курс), детерминированно по created_at, а не LIMIT 1 без
+  // порядка. Если форма регистрации когда-нибудь передаст конкретный courseId
+  // (например, ссылка-приглашение на определённый курс) — записываем на него.
   if (role === "student") {
-    const course = await pool.query("SELECT id FROM courses LIMIT 1");
+    const requestedCourseId = req.body && req.body.courseId;
+    const course = requestedCourseId
+      ? await pool.query("SELECT id FROM courses WHERE id=$1", [requestedCourseId])
+      : await pool.query("SELECT id FROM courses ORDER BY created_at LIMIT 1");
     if (course.rowCount) {
       await pool.query(
-        "INSERT INTO progress (user_id, course_id) VALUES ($1,$2) ON CONFLICT (user_id) DO NOTHING",
+        "INSERT INTO progress (user_id, course_id) VALUES ($1,$2) ON CONFLICT (user_id, course_id) DO NOTHING",
         [id, course.rows[0].id]
       );
     }

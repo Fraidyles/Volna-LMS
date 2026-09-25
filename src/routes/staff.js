@@ -14,6 +14,16 @@ const { generateCertificatePdf } = require("../certificate");
 
 const router = express.Router();
 
+// Курсов теперь может быть несколько — большинство ручек ниже (список врачей,
+// инбокс, предпросмотр курса) требуют явный courseId, но продолжают работать без
+// него: по умолчанию берём самый старый курс (детерминированно, а не LIMIT 1 без
+// порядка), чтобы старые вызовы фронтенда не сломались, пока курс всего один.
+async function resolveCourseId(explicit) {
+  if (explicit) return explicit;
+  const r = await pool.query("SELECT id FROM courses ORDER BY created_at LIMIT 1");
+  return r.rowCount ? r.rows[0].id : null;
+}
+
 function canAssignRole(actingRole, targetRole) {
   if (actingRole === "super_admin") return targetRole === "admin" || targetRole === "curator";
   if (actingRole === "admin") return targetRole === "curator";
@@ -32,7 +42,7 @@ const STUDENT_FIELDS = `
   u.product, u.payment_status, u.assigned_curator_id, u.referral_code,
   COALESCE((SELECT array_agg(s.name ORDER BY s.name) FROM user_specializations us JOIN specializations s ON s.id = us.specialization_id WHERE us.user_id = u.id), '{}') AS specializations,
   COALESCE((SELECT array_agg(us.specialization_id) FROM user_specializations us WHERE us.user_id = u.id), '{}') AS specialization_ids,
-  p.completed_lessons, p.quiz_score, p.completed, p.certificate_status,
+  p.course_id, p.completed_lessons, p.quiz_score, p.completed, p.certificate_status,
   p.certificate_issued_at, p.certificate_issued_by, p.requested_full_access,
   p.access_expires_at, p.access_blocked, p.quiz_answers, p.last_seen_at, p.is_online
 `;
@@ -105,31 +115,53 @@ router.delete("/team/:id", authRequired, requireRole("admin", "super_admin"), as
   res.json({ ok: true });
 });
 
+// Список — "срез" по конкретному курсу (?courseId=, по умолчанию самый старый курс):
+// у врача теперь может быть несколько записей progress, поэтому JOIN обязательно
+// матчит ровно ОДНУ (по course_id), иначе врач с несколькими курсами задублировался
+// бы в списке. Врач без записи на выбранный курс всё равно попадает в список (LEFT
+// JOIN) — просто с пустыми учебными полями, как и раньше, когда курс был один.
 router.get("/students", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+  const courseId = await resolveCourseId(req.query.courseId);
   // Куратор видит только "своих" врачей + ещё никому не назначенных — не весь список.
-  const scopeClause = req.user.role === "curator" ? "AND (u.assigned_curator_id = $1 OR u.assigned_curator_id IS NULL)" : "";
-  const params = req.user.role === "curator" ? [req.user.id] : [];
+  const scopeClause = req.user.role === "curator" ? "AND (u.assigned_curator_id = $2 OR u.assigned_curator_id IS NULL)" : "";
+  const params = req.user.role === "curator" ? [courseId, req.user.id] : [courseId];
   const result = await pool.query(
-    `SELECT ${STUDENT_FIELDS} FROM users u LEFT JOIN progress p ON p.user_id = u.id
+    `SELECT ${STUDENT_FIELDS} FROM users u LEFT JOIN progress p ON p.user_id = u.id AND p.course_id = $1
      WHERE u.role = 'student' ${scopeClause} ORDER BY u.created_at DESC`,
     params
   );
-  res.json({ students: result.rows.map(withOnlineStatus) });
+  res.json({ students: result.rows.map(withOnlineStatus), courseId });
 });
 
 router.get("/students/:id", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
+  const courseId = await resolveCourseId(req.query.courseId);
   const result = await pool.query(
-    `SELECT ${STUDENT_FIELDS}, p.quiz_answers FROM users u LEFT JOIN progress p ON p.user_id = u.id
+    `SELECT ${STUDENT_FIELDS} FROM users u LEFT JOIN progress p ON p.user_id = u.id AND p.course_id = $2
      WHERE u.id = $1 AND u.role = 'student'`,
-    [req.params.id]
+    [req.params.id, courseId]
   );
   if (!result.rowCount) return res.status(404).json({ error: "not_found" });
-  res.json({ student: withOnlineStatus(result.rows[0]) });
+  // Список ВСЕХ курсов, на которые записан этот врач — лёгкая сводка для
+  // переключателя на карточке врача (см. GET /course/enrollments для самого врача).
+  const enrollments = await pool.query(
+    `SELECT c.id AS course_id, c.title FROM progress p JOIN courses c ON c.id = p.course_id
+     WHERE p.user_id=$1 ORDER BY p.created_at`,
+    [req.params.id]
+  );
+  res.json({
+    student: withOnlineStatus(result.rows[0]),
+    courseId,
+    enrollments: enrollments.rows.map((r) => ({ courseId: r.course_id, title: r.title }))
+  });
 });
 
+// Блокировка/срок доступа — это про аккаунт врача целиком, а не про отдельный курс
+// (например, "не оплатил"), поэтому применяется сразу ко ВСЕМ его записям progress
+// (UPDATE без course_id ниже). Для чтения "before"-значения в аудит-лог нужен один
+// детерминированный ряд — ORDER BY, а не первая попавшаяся строка.
 router.patch("/students/:id/access", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
   const expiresAt = (req.body && req.body.expiresAt) || null;
-  const before = await pool.query("SELECT access_expires_at FROM progress WHERE user_id=$1", [req.params.id]);
+  const before = await pool.query("SELECT access_expires_at FROM progress WHERE user_id=$1 ORDER BY course_id LIMIT 1", [req.params.id]);
   if (!before.rowCount) return res.status(404).json({ error: "not_found" });
   const result = await pool.query(
     "UPDATE progress SET access_expires_at=$1 WHERE user_id=$2 RETURNING user_id",
@@ -144,7 +176,7 @@ router.patch("/students/:id/access", authRequired, requireRole("curator", "admin
 
 router.post("/students/:id/access/extend", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
   const days = parseInt(req.body && req.body.days, 10) || 0;
-  const current = await pool.query("SELECT access_expires_at FROM progress WHERE user_id=$1", [req.params.id]);
+  const current = await pool.query("SELECT access_expires_at FROM progress WHERE user_id=$1 ORDER BY course_id LIMIT 1", [req.params.id]);
   if (!current.rowCount) return res.status(404).json({ error: "not_found" });
   const beforeValue = current.rows[0].access_expires_at;
 
@@ -167,7 +199,7 @@ router.post("/students/:id/access/extend", authRequired, requireRole("curator", 
 
 router.patch("/students/:id/access/block", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
   const blocked = !!(req.body && req.body.blocked);
-  const before = await pool.query("SELECT access_blocked FROM progress WHERE user_id=$1", [req.params.id]);
+  const before = await pool.query("SELECT access_blocked FROM progress WHERE user_id=$1 ORDER BY course_id LIMIT 1", [req.params.id]);
   if (!before.rowCount) return res.status(404).json({ error: "not_found" });
   const result = await pool.query(
     "UPDATE progress SET access_blocked=$1 WHERE user_id=$2 RETURNING user_id",
@@ -285,6 +317,26 @@ router.patch("/students/:id/profile", authRequired, requireRole("curator", "admi
   res.json({ ok: true });
 });
 
+// Записать врача на ещё один курс — у него теперь может быть несколько записей
+// progress параллельно (см. Этап 21). Просто создаёт новую строку progress; сама
+// запись стартует "с нуля" по этому курсу, независимо от прогресса по остальным.
+router.post("/students/:id/enroll", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
+  const courseId = req.body && req.body.courseId;
+  if (!courseId) return res.status(400).json({ error: "invalid_input", message: "Не указан курс" });
+
+  const student = await pool.query("SELECT id, name FROM users WHERE id=$1 AND role='student'", [req.params.id]);
+  if (!student.rowCount) return res.status(404).json({ error: "not_found" });
+  const course = await pool.query("SELECT id, title FROM courses WHERE id=$1", [courseId]);
+  if (!course.rowCount) return res.status(404).json({ error: "no_course" });
+
+  const existing = await pool.query("SELECT 1 FROM progress WHERE user_id=$1 AND course_id=$2", [req.params.id, courseId]);
+  if (existing.rowCount) return res.status(400).json({ error: "already_enrolled", message: "Врач уже записан на этот курс" });
+
+  await pool.query("INSERT INTO progress (user_id, course_id) VALUES ($1,$2)", [req.params.id, courseId]);
+  await logAction(req.user, "course.enroll", "student", req.params.id, student.rows[0].name, { courseId, courseTitle: course.rows[0].title }, true);
+  res.json({ ok: true });
+});
+
 router.post("/students/bulk-field", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
   const { ids, field, value } = req.body || {};
   if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "invalid_input", message: "Не выбраны врачи" });
@@ -305,11 +357,12 @@ router.post("/students/bulk-field", authRequired, requireRole("curator", "admin"
 // Куратор/админ может скачать сертификат врача сам — например, чтобы сверить номер
 // при запросе на подтверждение подлинности, не прося врача переслать файл.
 router.get("/students/:id/certificate/download", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
+  const courseId = await resolveCourseId(req.query.courseId);
   const result = await pool.query(
     `SELECT p.certificate_status, p.certificate_number, p.certificate_issued_at, u.name AS student_name, c.title AS course_title
      FROM progress p JOIN users u ON u.id = p.user_id JOIN courses c ON c.id = p.course_id
-     WHERE p.user_id = $1`,
-    [req.params.id]
+     WHERE p.user_id = $1 AND p.course_id = $2`,
+    [req.params.id, courseId]
   );
   if (!result.rowCount || result.rows[0].certificate_status !== "issued") {
     return res.status(403).json({ error: "certificate_not_issued", message: "Сертификат ещё не выдан" });
@@ -445,7 +498,8 @@ router.post("/audit-log/:id/revert", authRequired, requireRole("super_admin"), a
 /* ---------- Просмотр курса глазами врача (без создания тестового аккаунта) ---------- */
 
 router.get("/course-preview", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
-  const course = await pool.query("SELECT id, title FROM courses LIMIT 1");
+  const courseId = await resolveCourseId(req.query.courseId);
+  const course = courseId ? await pool.query("SELECT id, title FROM courses WHERE id=$1", [courseId]) : { rowCount: 0 };
   if (!course.rowCount) return res.status(404).json({ error: "no_course" });
   const lessons = await pool.query(
     "SELECT id, idx, title, duration, html, video_url, video_timecodes FROM lessons WHERE course_id=$1 ORDER BY idx",
@@ -486,13 +540,17 @@ router.get("/course-preview", authRequired, requireRole("curator", "admin", "sup
 // заглядывать по отдельности: кто пропал, кому пора выдать сертификат. Скоуп
 // куратора (свои + неназначенные) применяется тем же способом, что и к остальному
 // списку врачей.
+// Оба сигнала — по конкретному курсу (?courseId=, по умолчанию самый старый): у
+// врача теперь может быть несколько записей progress, "неактивен"/"ждёт сертификат"
+// имеет смысл только в разрезе одного курса (дрип, тест — всё это per-course).
 router.get("/inbox", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
-  const scopeClause = req.user.role === "curator" ? "AND (u.assigned_curator_id = $1 OR u.assigned_curator_id IS NULL)" : "";
-  const scopeParams = req.user.role === "curator" ? [req.user.id] : [];
+  const courseId = await resolveCourseId(req.query.courseId);
+  const scopeClause = req.user.role === "curator" ? "AND (u.assigned_curator_id = $2 OR u.assigned_curator_id IS NULL)" : "";
+  const scopeParams = req.user.role === "curator" ? [courseId, req.user.id] : [courseId];
 
   const inactive = await pool.query(
     `SELECT u.id, u.name, u.email, GREATEST(p.last_active_at, u.created_at) AS last_seen
-     FROM users u JOIN progress p ON p.user_id = u.id
+     FROM users u JOIN progress p ON p.user_id = u.id AND p.course_id = $1
      WHERE u.role='student' AND p.completed=false ${scopeClause}
        AND COALESCE(p.last_active_at, u.created_at) < now() - interval '7 days'
      ORDER BY last_seen ASC`,
@@ -502,12 +560,12 @@ router.get("/inbox", authRequired, requireRole("curator", "admin", "super_admin"
   // Пока сертификаты на курсе выключены (см. courses.certificates_enabled), этот сигнал
   // не считаем вовсе — иначе каждый прошедший демо-курс врач вечно висел бы в инбоксе
   // как "требует внимания", хотя выдавать ему на самом деле нечего.
-  const courseFlag = await pool.query("SELECT certificates_enabled FROM courses LIMIT 1");
+  const courseFlag = courseId ? await pool.query("SELECT certificates_enabled FROM courses WHERE id=$1", [courseId]) : { rowCount: 0 };
   const certsOn = courseFlag.rowCount && courseFlag.rows[0].certificates_enabled;
   const pendingCert = certsOn
     ? await pool.query(
         `SELECT u.id, u.name, u.email, p.quiz_score, p.certificate_status
-         FROM users u JOIN progress p ON p.user_id = u.id
+         FROM users u JOIN progress p ON p.user_id = u.id AND p.course_id = $1
          WHERE u.role='student' AND p.completed=true AND p.certificate_status != 'issued' ${scopeClause}
          ORDER BY u.name`,
         scopeParams
@@ -516,7 +574,8 @@ router.get("/inbox", authRequired, requireRole("curator", "admin", "super_admin"
 
   res.json({
     inactive: inactive.rows,
-    pendingCertificates: pendingCert.rows
+    pendingCertificates: pendingCert.rows,
+    courseId
   });
 });
 

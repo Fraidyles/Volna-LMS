@@ -53,10 +53,10 @@ describe("Откат действий (только главный админи�
   test("откат выдачи сертификата возвращает статус на pending", async () => {
     const superAdmin = await createUser({ role: "super_admin" });
     const cookie = await loginAs(superAdmin);
-    const student = await createUser({ role: "student" });
+    const student = await createUser({ role: "student", courseId: course.courseId });
     await pool.query("UPDATE progress SET certificate_status='pending', completed=true, quiz_score=100 WHERE user_id=$1", [student.id]);
 
-    await request(app).post(`/api/course/certificate/${student.id}/issue`).set("Cookie", cookie);
+    await request(app).post(`/api/course/certificate/${student.id}/issue`).set("Cookie", cookie).send({ courseId: course.courseId });
     let progress = await pool.query("SELECT certificate_status FROM progress WHERE user_id=$1", [student.id]);
     expect(progress.rows[0].certificate_status).toBe("issued");
 

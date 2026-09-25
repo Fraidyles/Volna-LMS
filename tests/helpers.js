@@ -42,7 +42,10 @@ async function createUser({ role = "student", name = "Тест Тестов", sp
     // с конкретным курсом (из seedCourse), он обязан передать его id явно.
     let cid = courseId;
     if (!cid) {
-      const course = await pool.query("SELECT id FROM courses LIMIT 1");
+      // ORDER BY created_at DESC — тесты не изолируют БД между файлами (общий прогон
+      // без TRUNCATE между ними), так что к моменту более позднего файла courses уже
+      // содержит несколько строк; берём самый НЕДАВНО созданный (свой для этого файла).
+      const course = await pool.query("SELECT id FROM courses ORDER BY created_at DESC LIMIT 1");
       cid = course.rowCount ? course.rows[0].id : null;
     }
     if (cid) {

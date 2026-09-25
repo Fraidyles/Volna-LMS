@@ -7,7 +7,7 @@ const pool = require("../db");
 const { authRequired, requireRole } = require("../middleware/auth");
 const { logAction } = require("../audit");
 const { sanitizeLessonHtml } = require("../sanitize");
-const { notify, notifyAllStudents } = require("../notifications");
+const { notify, notifyEnrolledStudents } = require("../notifications");
 const { requireStudentScope, filterToScope } = require("../access");
 const { generateCertificateNumber } = require("../util");
 const { generateCertificatePdf } = require("../certificate");
@@ -97,17 +97,43 @@ function computePoints(pr) {
   return Math.min(MAX_POINTS, lessonsPoints + quizPoints + certPoints + streakPoints);
 }
 
-// Курс с уроками (без правильных ответов теста) + текущий прогресс врача +
-// какие блоки скрыты именно от него + заблокирован ли у него доступ.
-// Курс определяется по progress.course_id ЭТОГО врача, а не "первым попавшимся" —
-// важно уже сейчас, чтобы не превратиться в баг, когда курсов станет несколько.
-router.get("/", authRequired, requireRole("student"), async (req, res) => {
-  const progressRow = await pool.query("SELECT * FROM progress WHERE user_id=$1", [req.user.id]);
+// Список курсов, на которые записан врач (может быть несколько параллельно/по
+// очереди) — лёгкая сводка для переключателя курсов на фронтенде, без полного
+// содержимого (уроков/тестов) каждого курса.
+router.get("/enrollments", authRequired, requireRole("student"), async (req, res) => {
+  const result = await pool.query(
+    `SELECT c.id AS course_id, c.title, c.certificates_enabled, p.completed, p.certificate_status,
+            p.quiz_score, p.completed_lessons,
+            (SELECT COUNT(*)::int FROM lessons WHERE course_id = c.id) AS lessons_count
+     FROM progress p JOIN courses c ON c.id = p.course_id
+     WHERE p.user_id=$1 ORDER BY p.created_at`,
+    [req.user.id]
+  );
+  res.json({
+    enrollments: result.rows.map((r) => ({
+      courseId: r.course_id, title: r.title, certificatesEnabled: r.certificates_enabled,
+      completed: r.completed, certificateStatus: r.certificate_status, quizScore: r.quiz_score,
+      completedLessonsCount: (r.completed_lessons || []).length, lessonsCount: r.lessons_count
+    }))
+  });
+});
+
+// Курс с уроками (без правильных ответов теста) + текущий прогресс врача по ЭТОМУ
+// курсу + какие блоки скрыты именно от него + заблокирован ли у него доступ.
+// :courseId явный (а не "единственный курс в базе") — у врача теперь может быть
+// несколько параллельных записей progress, по одной на каждый курс.
+// Префикс /content/ — не просто "/:courseId": иначе этот wildcard-роут перехватил бы
+// все остальные однословные GET-пути ниже (/protocols, /materials, /quiz-admin, /modules...).
+router.get("/content/:courseId", authRequired, requireRole("student"), async (req, res) => {
+  const progressRow = await pool.query(
+    "SELECT * FROM progress WHERE user_id=$1 AND course_id=$2", [req.user.id, req.params.courseId]
+  );
   if (!progressRow.rowCount) return res.status(404).json({ error: "no_progress" });
   const pr = progressRow.rows[0];
 
-  // Открыл главную — значит точно "в сети"; дальше это поддерживает периодический
-  // heartbeat с фронтенда, пока вкладка открыта (см. PUT /heartbeat и POST /offline ниже).
+  // Открыл курс — значит точно "в сети"; дальше это поддерживает периодический
+  // heartbeat с фронтенда, пока вкладка открыта (см. PUT /heartbeat и POST /offline
+  // ниже). Статус "в сети" общий для врача, а не по курсу — обновляем все его строки.
   pool.query("UPDATE progress SET last_seen_at=now(), is_online=true WHERE user_id=$1", [req.user.id]).catch(() => {});
 
   const course = await pool.query("SELECT id, title, certificates_enabled FROM courses WHERE id=$1", [pr.course_id]);
@@ -204,20 +230,20 @@ router.post("/lesson-done", authRequired, requireRole("student"), async (req, re
   const lessonId = req.body && req.body.lessonId;
   if (!lessonId) return res.status(400).json({ error: "invalid_input" });
 
-  const progressRow = await pool.query("SELECT * FROM progress WHERE user_id=$1", [req.user.id]);
-  if (!progressRow.rowCount) return res.status(404).json({ error: "no_progress" });
+  // Курс определяем по самому уроку (он однозначно принадлежит одному курсу), а не
+  // через LIMIT 1 или "единственную" запись progress — у врача их теперь может быть
+  // несколько (по одной на каждый курс, на который он записан).
+  const lessonRow = await pool.query("SELECT drip_days, course_id FROM lessons WHERE id=$1", [lessonId]);
+  if (!lessonRow.rowCount) return res.status(404).json({ error: "not_found", message: "Урок не найден" });
+
+  const progressRow = await pool.query(
+    "SELECT * FROM progress WHERE user_id=$1 AND course_id=$2", [req.user.id, lessonRow.rows[0].course_id]
+  );
+  if (!progressRow.rowCount) return res.status(404).json({ error: "not_found", message: "Урок не найден в этом курсе" });
   const pr = progressRow.rows[0];
 
   const lock = computeLocked(pr);
   if (lock.locked) return res.status(403).json({ error: "access_locked", message: "Доступ к курсу ограничен" });
-
-  // Урок обязательно должен принадлежать ИМЕННО курсу этого врача — иначе
-  // (lessonRow.rowCount===0 для несуществующего/чужого id) проверка дрип-лока
-  // ниже просто пропускалась бы, и любая произвольная строка в теле запроса
-  // молча попадала бы в completed_lessons, раздувая счёт "N / total уроков"
-  // и очки геймификации без реального прохождения урока.
-  const lessonRow = await pool.query("SELECT drip_days FROM lessons WHERE id=$1 AND course_id=$2", [lessonId, pr.course_id]);
-  if (!lessonRow.rowCount) return res.status(404).json({ error: "not_found", message: "Урок не найден в этом курсе" });
 
   const hiddenFor = await getHiddenForMap(pr.course_id);
   if ((hiddenFor[lessonId] || []).indexOf(req.user.id) !== -1) {
@@ -239,8 +265,8 @@ router.post("/lesson-done", authRequired, requireRole("student"), async (req, re
   const streak = nextStreak(pr);
   await pool.query(
     `UPDATE progress SET completed_lessons=$1, last_active_at=now(),
-     current_streak=$2, longest_streak=$3, last_streak_date=$4 WHERE user_id=$5`,
-    [JSON.stringify(list), streak.currentStreak, streak.longestStreak, streak.lastStreakDate, req.user.id]
+     current_streak=$2, longest_streak=$3, last_streak_date=$4 WHERE user_id=$5 AND course_id=$6`,
+    [JSON.stringify(list), streak.currentStreak, streak.longestStreak, streak.lastStreakDate, req.user.id, pr.course_id]
   );
   const points = computePoints({ ...pr, completed_lessons: list, current_streak: streak.currentStreak });
   res.json({ ok: true, completedLessons: list, gamification: { currentStreak: streak.currentStreak, longestStreak: streak.longestStreak, points } });
@@ -248,8 +274,10 @@ router.post("/lesson-done", authRequired, requireRole("student"), async (req, re
 
 router.post("/quiz-submit", authRequired, requireRole("student"), async (req, res) => {
   const answers = (req.body && req.body.answers) || {};
+  const courseId = req.body && req.body.courseId;
+  if (!courseId) return res.status(400).json({ error: "invalid_input" });
 
-  const progressRow = await pool.query("SELECT * FROM progress WHERE user_id=$1", [req.user.id]);
+  const progressRow = await pool.query("SELECT * FROM progress WHERE user_id=$1 AND course_id=$2", [req.user.id, courseId]);
   if (!progressRow.rowCount) return res.status(404).json({ error: "no_progress" });
   const pr = progressRow.rows[0];
 
@@ -276,9 +304,9 @@ router.post("/quiz-submit", authRequired, requireRole("student"), async (req, re
   await pool.query(
     `UPDATE progress SET quiz_answers=$1, quiz_score=$2, completed=$3, certificate_status=$4, last_active_at=now(),
      current_streak=$5, longest_streak=$6, last_streak_date=$7
-     WHERE user_id=$8`,
+     WHERE user_id=$8 AND course_id=$9`,
     [JSON.stringify(answers), score, completed, certificateStatus,
-      streak.currentStreak, streak.longestStreak, streak.lastStreakDate, req.user.id]
+      streak.currentStreak, streak.longestStreak, streak.lastStreakDate, req.user.id, pr.course_id]
   );
 
   res.json({ score, completed, certificateStatus, gamification: { currentStreak: streak.currentStreak, longestStreak: streak.longestStreak } });
@@ -314,7 +342,11 @@ router.put("/onboarding-dismiss", authRequired, requireRole("student"), async (r
 // «дополнительные» — остальные протоколы из уже пройденных уроков, без фильтрации
 // по релевантности (см. решение из обсуждения фичи — не прячем, а просто делим).
 router.get("/protocols", authRequired, requireRole("student"), async (req, res) => {
-  const progressRow = await pool.query("SELECT completed_lessons FROM progress WHERE user_id=$1", [req.user.id]);
+  const courseId = req.query.courseId;
+  if (!courseId) return res.status(400).json({ error: "invalid_input", message: "Не указан курс" });
+  const progressRow = await pool.query(
+    "SELECT completed_lessons FROM progress WHERE user_id=$1 AND course_id=$2", [req.user.id, courseId]
+  );
   if (!progressRow.rowCount) return res.status(404).json({ error: "no_progress" });
   const completedLessons = progressRow.rows[0].completed_lessons || [];
 
@@ -395,48 +427,67 @@ router.put("/lessons/:id/bookmark", authRequired, requireRole("student"), async 
 });
 
 // Личная заметка врача к уроку — видна только ему самому, хранится в progress.lesson_notes.
+// Курс определяем по самому уроку — как и в /lesson-done.
 router.put("/lessons/:id/note", authRequired, requireRole("student"), async (req, res) => {
   const note = (req.body && typeof req.body.note === "string") ? req.body.note : "";
-  const progressRow = await pool.query("SELECT lesson_notes FROM progress WHERE user_id=$1", [req.user.id]);
+  const lesson = await pool.query("SELECT course_id FROM lessons WHERE id=$1", [req.params.id]);
+  if (!lesson.rowCount) return res.status(404).json({ error: "not_found" });
+  const progressRow = await pool.query(
+    "SELECT lesson_notes FROM progress WHERE user_id=$1 AND course_id=$2", [req.user.id, lesson.rows[0].course_id]
+  );
   if (!progressRow.rowCount) return res.status(404).json({ error: "no_progress" });
   const notes = progressRow.rows[0].lesson_notes || {};
   if (note.trim()) notes[req.params.id] = note.trim();
   else delete notes[req.params.id];
-  await pool.query("UPDATE progress SET lesson_notes=$1 WHERE user_id=$2", [JSON.stringify(notes), req.user.id]);
+  await pool.query(
+    "UPDATE progress SET lesson_notes=$1 WHERE user_id=$2 AND course_id=$3",
+    [JSON.stringify(notes), req.user.id, lesson.rows[0].course_id]
+  );
   res.json({ ok: true });
 });
 
 router.post("/request-full-access", authRequired, requireRole("student"), async (req, res) => {
-  await pool.query("UPDATE progress SET requested_full_access=true WHERE user_id=$1", [req.user.id]);
+  const courseId = req.body && req.body.courseId;
+  if (!courseId) return res.status(400).json({ error: "invalid_input" });
+  const result = await pool.query(
+    "UPDATE progress SET requested_full_access=true WHERE user_id=$1 AND course_id=$2 RETURNING user_id",
+    [req.user.id, courseId]
+  );
+  if (!result.rowCount) return res.status(404).json({ error: "no_progress" });
   res.json({ ok: true });
 });
 
+// courseId в теле — раньше сертификат был один на врача, теперь у него может быть
+// несколько записей progress (по одной на каждый курс), нужно явно указать, за какой курс выдаём.
 router.post(
   "/certificate/:studentId/issue",
   authRequired,
   requireRole("curator", "admin", "super_admin"),
   requireStudentScope("studentId"),
   async (req, res) => {
-    const courseFlag = await pool.query("SELECT certificates_enabled FROM courses LIMIT 1");
+    const courseId = req.body && req.body.courseId;
+    if (!courseId) return res.status(400).json({ error: "invalid_input", message: "Не указан курс" });
+    const courseFlag = await pool.query("SELECT certificates_enabled FROM courses WHERE id=$1", [courseId]);
     if (!courseFlag.rowCount || !courseFlag.rows[0].certificates_enabled) {
       return res.status(403).json({ error: "certificates_disabled", message: "Сертификаты пока не выдаются (демо-курс)" });
     }
     const before = await pool.query(
-      "SELECT certificate_status, certificate_issued_at, certificate_issued_by, certificate_number FROM progress WHERE user_id=$1",
-      [req.params.studentId]
+      "SELECT certificate_status, certificate_issued_at, certificate_issued_by, certificate_number FROM progress WHERE user_id=$1 AND course_id=$2",
+      [req.params.studentId, courseId]
     );
     if (!before.rowCount) return res.status(404).json({ error: "not_found" });
     // COALESCE — номер выпускается один раз и переживает повторную выдачу (например,
     // после отката и повторного issue тем же куратором): если он уже есть, оставляем как есть.
     const result = await pool.query(
       `UPDATE progress SET certificate_status='issued', certificate_issued_at=now(), certificate_issued_by=$1,
-       certificate_number=COALESCE(certificate_number, $3)
-       WHERE user_id=$2 RETURNING user_id`,
-      [req.user.name, req.params.studentId, generateCertificateNumber()]
+       certificate_number=COALESCE(certificate_number, $4)
+       WHERE user_id=$2 AND course_id=$3 RETURNING user_id`,
+      [req.user.name, req.params.studentId, courseId, generateCertificateNumber()]
     );
     if (!result.rowCount) return res.status(404).json({ error: "not_found" });
     const u = await pool.query("SELECT name FROM users WHERE id=$1", [req.params.studentId]);
     await logAction(req.user, "certificate.issue", "student", req.params.studentId, u.rows[0] && u.rows[0].name, {
+      courseId,
       before: {
         certificateStatus: before.rows[0].certificate_status,
         certificateIssuedAt: before.rows[0].certificate_issued_at,
@@ -449,9 +500,12 @@ router.post(
 );
 
 // Массовая выдача — тот же путь, что и у одиночной выдачи, просто в цикле по списку
-// (каждая выдача логируется отдельной записью, чтобы откат остался точечным).
+// (каждая выдача логируется отдельной записью, чтобы откат остался точечным). Один
+// courseId на всю пачку — массово выдают сертификаты за один и тот же курс.
 router.post("/certificate/bulk-issue", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
-  const courseFlag = await pool.query("SELECT certificates_enabled FROM courses LIMIT 1");
+  const courseId = req.body && req.body.courseId;
+  if (!courseId) return res.status(400).json({ error: "invalid_input", message: "Не указан курс" });
+  const courseFlag = await pool.query("SELECT certificates_enabled FROM courses WHERE id=$1", [courseId]);
   if (!courseFlag.rowCount || !courseFlag.rows[0].certificates_enabled) {
     return res.status(403).json({ error: "certificates_disabled", message: "Сертификаты пока не выдаются (демо-курс)" });
   }
@@ -462,19 +516,20 @@ router.post("/certificate/bulk-issue", authRequired, requireRole("curator", "adm
   let issued = 0;
   for (const studentId of scopedIds) {
     const before = await pool.query(
-      "SELECT certificate_status, certificate_issued_at, certificate_issued_by, certificate_number FROM progress WHERE user_id=$1",
-      [studentId]
+      "SELECT certificate_status, certificate_issued_at, certificate_issued_by, certificate_number FROM progress WHERE user_id=$1 AND course_id=$2",
+      [studentId, courseId]
     );
     if (!before.rowCount) continue;
     const result = await pool.query(
       `UPDATE progress SET certificate_status='issued', certificate_issued_at=now(), certificate_issued_by=$1,
-       certificate_number=COALESCE(certificate_number, $3)
-       WHERE user_id=$2 RETURNING user_id`,
-      [req.user.name, studentId, generateCertificateNumber()]
+       certificate_number=COALESCE(certificate_number, $4)
+       WHERE user_id=$2 AND course_id=$3 RETURNING user_id`,
+      [req.user.name, studentId, courseId, generateCertificateNumber()]
     );
     if (!result.rowCount) continue;
     const u = await pool.query("SELECT name FROM users WHERE id=$1", [studentId]);
     await logAction(req.user, "certificate.issue", "student", studentId, u.rows[0] && u.rows[0].name, {
+      courseId,
       before: {
         certificateStatus: before.rows[0].certificate_status,
         certificateIssuedAt: before.rows[0].certificate_issued_at,
@@ -489,12 +544,16 @@ router.post("/certificate/bulk-issue", authRequired, requireRole("curator", "adm
 
 // PDF рендерится на лету при каждом скачивании (см. src/certificate.js) — файл нигде
 // не хранится на диске, только certificate_number/certificate_issued_at в progress.
+// ?courseId= обязателен — у врача теперь может быть несколько сертификатов, по одному
+// на каждый пройденный курс.
 router.get("/certificate/download", authRequired, requireRole("student"), async (req, res) => {
+  const courseId = req.query.courseId;
+  if (!courseId) return res.status(400).json({ error: "invalid_input", message: "Не указан курс" });
   const result = await pool.query(
     `SELECT p.certificate_status, p.certificate_number, p.certificate_issued_at, u.name AS student_name, c.title AS course_title
      FROM progress p JOIN users u ON u.id = p.user_id JOIN courses c ON c.id = p.course_id
-     WHERE p.user_id = $1`,
-    [req.user.id]
+     WHERE p.user_id = $1 AND p.course_id = $2`,
+    [req.user.id, courseId]
   );
   if (!result.rowCount || result.rows[0].certificate_status !== "issued") {
     return res.status(403).json({ error: "certificate_not_issued", message: "Сертификат ещё не выдан" });
@@ -514,7 +573,9 @@ router.get("/certificate/download", authRequired, requireRole("student"), async 
 /* ---------- Видимость материалов по врачам ---------- */
 
 router.get("/materials", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
-  const course = await pool.query("SELECT id, title, certificates_enabled FROM courses LIMIT 1");
+  const courseId = req.query.courseId;
+  if (!courseId) return res.json({ lessons: [] });
+  const course = await pool.query("SELECT id, title, certificates_enabled FROM courses WHERE id=$1", [courseId]);
   if (!course.rowCount) return res.json({ lessons: [] });
   const lessons = await pool.query(
     "SELECT id, idx, title, has_draft, drip_days FROM lessons WHERE course_id=$1 ORDER BY idx",
@@ -524,9 +585,9 @@ router.get("/materials", authRequired, requireRole("curator", "admin", "super_ad
 });
 
 router.get("/visibility", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
-  const course = await pool.query("SELECT id FROM courses LIMIT 1");
-  if (!course.rowCount) return res.json({ hiddenFor: {} });
-  res.json({ hiddenFor: await getHiddenForMap(course.rows[0].id) });
+  const courseId = req.query.courseId;
+  if (!courseId) return res.json({ hiddenFor: {} });
+  res.json({ hiddenFor: await getHiddenForMap(courseId) });
 });
 
 router.put("/visibility/:targetId", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
@@ -534,17 +595,15 @@ router.put("/visibility/:targetId", authRequired, requireRole("curator", "admin"
   if (!Array.isArray(ids)) return res.status(400).json({ error: "invalid_input" });
 
   // targetId — либо реальный id урока (тогда курс однозначно определяется по нему),
-  // либо служебное значение "quiz" (тест общий на курс, урока нет) — тогда, как и
-  // везде в остальном коде на один курс, берём единственный существующий курс.
-  // Важно резолвить именно так, а не всегда через LIMIT 1: если курсов когда-нибудь
-  // станет больше одного, LIMIT 1 без ORDER BY может вернуть не тот курс, которому
-  // принадлежит urok, и видимость молча запишется не туда.
+  // либо служебное значение "quiz" (тест общий на курс, урока нет) — тогда курс нужно
+  // передать явно (courseId в теле), потому что урока, из которого его можно вывести, нет.
   let courseId;
   let targetTitle;
   if (req.params.targetId === "quiz") {
-    const course = await pool.query("SELECT id FROM courses LIMIT 1");
+    courseId = req.body && req.body.courseId;
+    if (!courseId) return res.status(400).json({ error: "invalid_input", message: "Не указан курс" });
+    const course = await pool.query("SELECT id FROM courses WHERE id=$1", [courseId]);
     if (!course.rowCount) return res.status(404).json({ error: "no_course" });
-    courseId = course.rows[0].id;
     targetTitle = "Итоговый тест";
   } else {
     const lesson = await pool.query("SELECT course_id, title FROM lessons WHERE id=$1", [req.params.targetId]);
@@ -563,7 +622,7 @@ router.put("/visibility/:targetId", authRequired, requireRole("curator", "admin"
     [courseId, JSON.stringify(map)]
   );
   await logAction(req.user, "content.visibility_change", "lesson", req.params.targetId, req.params.targetId,
-    { hiddenCount: ids.length, before: { ids: beforeIds } }, true);
+    { courseId, hiddenCount: ids.length, before: { ids: beforeIds } }, true);
 
   // Уведомляем только тех, у кого материал именно ОТКРЫЛСЯ (был в скрытых, стал видимым) —
   // а не всех, кого затронуло изменение списка, иначе про каждое скрытие тоже прилетало бы уведомление.
@@ -588,13 +647,12 @@ router.get("/lessons/:id", authRequired, requireRole("admin", "super_admin"), as
 /* ---------- Конструктор курса: добавить/удалить/переставить урок (только администраторы) ---------- */
 
 router.post("/lessons", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
-  const { title, duration, html } = req.body || {};
+  const { title, duration, html, courseId } = req.body || {};
   if (!title || !title.trim() || !html || !html.trim()) {
     return res.status(400).json({ error: "invalid_input", message: "Заполните заголовок и содержимое урока" });
   }
-  const course = await pool.query("SELECT id FROM courses LIMIT 1");
+  const course = await pool.query("SELECT id FROM courses WHERE id=$1", [courseId]);
   if (!course.rowCount) return res.status(404).json({ error: "no_course" });
-  const courseId = course.rows[0].id;
 
   const maxIdx = await pool.query("SELECT COALESCE(MAX(idx), -1) AS m FROM lessons WHERE course_id=$1", [courseId]);
   const id = crypto.randomUUID();
@@ -604,7 +662,7 @@ router.post("/lessons", authRequired, requireRole("admin", "super_admin"), async
     [id, courseId, maxIdx.rows[0].m + 1, title.trim(), duration || "", clean]
   );
   await logAction(req.user, "content.lesson_created", "lesson", id, title.trim(), {}, true);
-  await notifyAllStudents("new_lesson", "Новый урок", `Появился новый урок: «${title.trim()}».`);
+  await notifyEnrolledStudents(courseId, "new_lesson", "Новый урок", `Появился новый урок: «${title.trim()}».`);
   res.json({ ok: true, id });
 });
 
@@ -633,19 +691,22 @@ router.delete("/lessons/:id", authRequired, requireRole("admin", "super_admin"),
   // отката (best-effort), как и для других вложенных сущностей урока.
   await logAction(req.user, "content.lesson_deleted", "lesson", l.id, l.title, {
     before: {
-      idx: l.idx, title: l.title, duration: l.duration, html: l.html, dripDays: l.drip_days,
+      courseId: l.course_id, idx: l.idx, title: l.title, duration: l.duration, html: l.html, dripDays: l.drip_days,
       videoUrl: l.video_url, videoTimecodes: l.video_timecodes
     }
   }, true);
   res.json({ ok: true });
 });
 
+// Курс определяем по первому уроку из списка — весь список обязан целиком совпадать
+// с уроками одного курса (проверка ниже), явный courseId от фронтенда не нужен.
 router.put("/lessons/reorder", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
   const ids = (req.body && req.body.orderedIds) || [];
   if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "invalid_input" });
-  const course = await pool.query("SELECT id FROM courses LIMIT 1");
-  if (!course.rowCount) return res.status(404).json({ error: "no_course" });
-  const existing = await pool.query("SELECT id FROM lessons WHERE course_id=$1", [course.rows[0].id]);
+  const firstLesson = await pool.query("SELECT course_id FROM lessons WHERE id=$1", [ids[0]]);
+  if (!firstLesson.rowCount) return res.status(404).json({ error: "no_course" });
+  const courseId = firstLesson.rows[0].course_id;
+  const existing = await pool.query("SELECT id FROM lessons WHERE course_id=$1", [courseId]);
   const existingIds = existing.rows.map((r) => r.id);
   if (ids.length !== existingIds.length || !existingIds.every((id) => ids.includes(id))) {
     return res.status(400).json({ error: "invalid_input", message: "Список должен содержать все уроки курса ровно один раз" });
@@ -653,7 +714,7 @@ router.put("/lessons/reorder", authRequired, requireRole("admin", "super_admin")
   for (let i = 0; i < ids.length; i++) {
     await pool.query("UPDATE lessons SET idx=$1 WHERE id=$2", [i, ids[i]]);
   }
-  await logAction(req.user, "content.lessons_reordered", "course", course.rows[0].id, null, { order: ids });
+  await logAction(req.user, "content.lessons_reordered", "course", courseId, null, { order: ids });
   res.json({ ok: true });
 });
 
@@ -794,23 +855,25 @@ router.post("/lessons/:id/restore/:historyId", authRequired, requireRole("admin"
 
 // Полный список вопросов теста с правильными ответами — только для редактирования администратором
 router.get("/quiz-admin", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
-  const course = await pool.query("SELECT id FROM courses LIMIT 1");
-  if (!course.rowCount) return res.json({ quiz: [] });
+  const courseId = req.query.courseId;
+  if (!courseId) return res.json({ quiz: [] });
   const quiz = await pool.query(
     "SELECT id, idx, question, options, correct FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL ORDER BY idx",
-    [course.rows[0].id]
+    [courseId]
   );
   res.json({ quiz: quiz.rows });
 });
 
 // Роут reorder ДОЛЖЕН быть объявлен раньше "/quiz-admin/:id" — иначе Express матчит его
 // первым попавшимся PUT "/quiz-admin/:id" (с id="reorder") и запрос никогда сюда не доходит.
+// Курс определяем по первому вопросу из списка — как и в /lessons/reorder.
 router.put("/quiz-admin/reorder", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
   const ids = (req.body && req.body.orderedIds) || [];
   if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "invalid_input" });
-  const course = await pool.query("SELECT id FROM courses LIMIT 1");
-  if (!course.rowCount) return res.status(404).json({ error: "no_course" });
-  const existing = await pool.query("SELECT id FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL", [course.rows[0].id]);
+  const firstQuestion = await pool.query("SELECT course_id FROM quiz_questions WHERE id=$1", [ids[0]]);
+  if (!firstQuestion.rowCount) return res.status(404).json({ error: "no_course" });
+  const courseId = firstQuestion.rows[0].course_id;
+  const existing = await pool.query("SELECT id FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL", [courseId]);
   const existingIds = existing.rows.map((r) => r.id);
   if (ids.length !== existingIds.length || !existingIds.every((id) => ids.includes(id))) {
     return res.status(400).json({ error: "invalid_input", message: "Список должен содержать все вопросы ровно один раз" });
@@ -818,7 +881,7 @@ router.put("/quiz-admin/reorder", authRequired, requireRole("admin", "super_admi
   for (let i = 0; i < ids.length; i++) {
     await pool.query("UPDATE quiz_questions SET idx=$1 WHERE id=$2", [i, ids[i]]);
   }
-  await logAction(req.user, "content.quiz_reordered", "course", course.rows[0].id, null, { order: ids });
+  await logAction(req.user, "content.quiz_reordered", "course", courseId, null, { order: ids });
   res.json({ ok: true });
 });
 
@@ -845,7 +908,7 @@ router.put("/quiz-admin/:id", authRequired, requireRole("admin", "super_admin"),
 });
 
 router.post("/quiz-admin", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
-  const { question, options, correct } = req.body || {};
+  const { question, options, correct, courseId } = req.body || {};
   if (!question || !question.trim() || !Array.isArray(options) || options.length < 2) {
     return res.status(400).json({ error: "invalid_input", message: "Заполните вопрос и минимум 2 варианта ответа" });
   }
@@ -853,9 +916,8 @@ router.post("/quiz-admin", authRequired, requireRole("admin", "super_admin"), as
   if (isNaN(correctIdx) || correctIdx < 0 || correctIdx >= options.length) {
     return res.status(400).json({ error: "invalid_input", message: "Укажите корректный правильный вариант" });
   }
-  const course = await pool.query("SELECT id FROM courses LIMIT 1");
+  const course = await pool.query("SELECT id FROM courses WHERE id=$1", [courseId]);
   if (!course.rowCount) return res.status(404).json({ error: "no_course" });
-  const courseId = course.rows[0].id;
 
   const maxIdx = await pool.query("SELECT COALESCE(MAX(idx), -1) AS m FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL", [courseId]);
   const id = crypto.randomUUID();
@@ -885,7 +947,7 @@ router.delete("/quiz-admin/:id", authRequired, requireRole("admin", "super_admin
   }
   await pool.query("DELETE FROM quiz_questions WHERE id=$1", [req.params.id]);
   await logAction(req.user, "content.quiz_deleted", "quiz_question", q.id, q.question, {
-    before: { idx: q.idx, question: q.question, options: q.options, correct: q.correct, lessonId: q.lesson_id, moduleId: q.module_id }
+    before: { courseId: q.course_id, idx: q.idx, question: q.question, options: q.options, correct: q.correct, lessonId: q.lesson_id, moduleId: q.module_id }
   }, true);
   res.json({ ok: true });
 });
@@ -1042,15 +1104,17 @@ router.post("/lessons/:id/quiz-submit", authRequired, requireRole("student"), as
   const answers = (req.body && req.body.answers) || {};
   const lessonId = req.params.id;
 
-  const progressRow = await pool.query("SELECT * FROM progress WHERE user_id=$1", [req.user.id]);
-  if (!progressRow.rowCount) return res.status(404).json({ error: "no_progress" });
+  const lessonRow = await pool.query("SELECT drip_days, course_id FROM lessons WHERE id=$1", [lessonId]);
+  if (!lessonRow.rowCount) return res.status(404).json({ error: "not_found", message: "Урок не найден" });
+
+  const progressRow = await pool.query(
+    "SELECT * FROM progress WHERE user_id=$1 AND course_id=$2", [req.user.id, lessonRow.rows[0].course_id]
+  );
+  if (!progressRow.rowCount) return res.status(404).json({ error: "not_found", message: "Урок не найден в этом курсе" });
   const pr = progressRow.rows[0];
 
   const lock = computeLocked(pr);
   if (lock.locked) return res.status(403).json({ error: "access_locked", message: "Доступ к курсу ограничен" });
-
-  const lessonRow = await pool.query("SELECT drip_days FROM lessons WHERE id=$1 AND course_id=$2", [lessonId, pr.course_id]);
-  if (!lessonRow.rowCount) return res.status(404).json({ error: "not_found", message: "Урок не найден в этом курсе" });
 
   const hiddenFor = await getHiddenForMap(pr.course_id);
   if ((hiddenFor[lessonId] || []).indexOf(req.user.id) !== -1) {
@@ -1081,8 +1145,8 @@ router.post("/lessons/:id/quiz-submit", authRequired, requireRole("student"), as
   const streak = nextStreak(pr);
   await pool.query(
     `UPDATE progress SET lesson_quiz_scores=$1, completed_lessons=$2, last_active_at=now(),
-     current_streak=$3, longest_streak=$4, last_streak_date=$5 WHERE user_id=$6`,
-    [JSON.stringify(scores), JSON.stringify(list), streak.currentStreak, streak.longestStreak, streak.lastStreakDate, req.user.id]
+     current_streak=$3, longest_streak=$4, last_streak_date=$5 WHERE user_id=$6 AND course_id=$7`,
+    [JSON.stringify(scores), JSON.stringify(list), streak.currentStreak, streak.longestStreak, streak.lastStreakDate, req.user.id, pr.course_id]
   );
   const points = computePoints({ ...pr, completed_lessons: list, current_streak: streak.currentStreak });
   res.json({
@@ -1099,15 +1163,17 @@ router.post("/lessons/:id/quiz-submit", authRequired, requireRole("student"), as
 router.post("/modules/:id/quiz-submit", authRequired, requireRole("student"), async (req, res) => {
   const answers = (req.body && req.body.answers) || {};
 
-  const progressRow = await pool.query("SELECT * FROM progress WHERE user_id=$1", [req.user.id]);
-  if (!progressRow.rowCount) return res.status(404).json({ error: "no_progress" });
+  const module = await pool.query("SELECT id, course_id FROM modules WHERE id=$1", [req.params.id]);
+  if (!module.rowCount) return res.status(404).json({ error: "not_found" });
+
+  const progressRow = await pool.query(
+    "SELECT * FROM progress WHERE user_id=$1 AND course_id=$2", [req.user.id, module.rows[0].course_id]
+  );
+  if (!progressRow.rowCount) return res.status(404).json({ error: "not_found" });
   const pr = progressRow.rows[0];
 
   const lock = computeLocked(pr);
   if (lock.locked) return res.status(403).json({ error: "access_locked", message: "Доступ к курсу ограничен" });
-
-  const module = await pool.query("SELECT id FROM modules WHERE id=$1 AND course_id=$2", [req.params.id, pr.course_id]);
-  if (!module.rowCount) return res.status(404).json({ error: "not_found" });
 
   const questions = await pool.query("SELECT id, correct FROM quiz_questions WHERE module_id=$1", [req.params.id]);
   if (!questions.rowCount) return res.status(404).json({ error: "no_quiz", message: "У этого модуля нет теста" });
@@ -1119,8 +1185,8 @@ router.post("/modules/:id/quiz-submit", authRequired, requireRole("student"), as
   const scores = pr.module_quiz_scores || {};
   scores[req.params.id] = score;
   await pool.query(
-    "UPDATE progress SET module_quiz_scores=$1, last_active_at=now() WHERE user_id=$2",
-    [JSON.stringify(scores), req.user.id]
+    "UPDATE progress SET module_quiz_scores=$1, last_active_at=now() WHERE user_id=$2 AND course_id=$3",
+    [JSON.stringify(scores), req.user.id, pr.course_id]
   );
   res.json({ ok: true, score });
 });
@@ -1134,11 +1200,13 @@ router.post("/modules/:id/feedback", authRequired, requireRole("student"), async
   if (isNaN(ratingNum) || ratingNum < 1 || ratingNum > 5) {
     return res.status(400).json({ error: "invalid_input", message: "Оценка должна быть от 1 до 5" });
   }
-  const progressRow = await pool.query("SELECT course_id FROM progress WHERE user_id=$1", [req.user.id]);
-  if (!progressRow.rowCount) return res.status(404).json({ error: "no_progress" });
-
-  const module = await pool.query("SELECT id FROM modules WHERE id=$1 AND course_id=$2", [req.params.id, progressRow.rows[0].course_id]);
+  const module = await pool.query("SELECT id, course_id FROM modules WHERE id=$1", [req.params.id]);
   if (!module.rowCount) return res.status(404).json({ error: "not_found" });
+
+  const progressRow = await pool.query(
+    "SELECT user_id FROM progress WHERE user_id=$1 AND course_id=$2", [req.user.id, module.rows[0].course_id]
+  );
+  if (!progressRow.rowCount) return res.status(404).json({ error: "no_progress" });
 
   const cleanComment = (comment || "").toString().trim() || null;
   await pool.query(
@@ -1152,9 +1220,8 @@ router.post("/modules/:id/feedback", authRequired, requireRole("student"), async
 /* ---------- Модули: администрирование (только admin/super_admin) ---------- */
 
 router.get("/modules", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
-  const course = await pool.query("SELECT id FROM courses LIMIT 1");
-  if (!course.rowCount) return res.json({ modules: [], unassignedLessons: [] });
-  const courseId = course.rows[0].id;
+  const courseId = req.query.courseId;
+  if (!courseId) return res.json({ modules: [], allLessons: [] });
 
   const modules = await pool.query("SELECT id, idx, title FROM modules WHERE course_id=$1 ORDER BY idx", [courseId]);
   const lessons = await pool.query("SELECT id, idx, title, module_id FROM lessons WHERE course_id=$1 ORDER BY idx", [courseId]);
@@ -1185,11 +1252,10 @@ router.get("/modules", authRequired, requireRole("admin", "super_admin"), async 
 });
 
 router.post("/modules", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
-  const { title } = req.body || {};
+  const { title, courseId } = req.body || {};
   if (!title || !title.trim()) return res.status(400).json({ error: "invalid_input", message: "Укажите название модуля" });
-  const course = await pool.query("SELECT id FROM courses LIMIT 1");
+  const course = await pool.query("SELECT id FROM courses WHERE id=$1", [courseId]);
   if (!course.rowCount) return res.status(404).json({ error: "no_course" });
-  const courseId = course.rows[0].id;
 
   const maxIdx = await pool.query("SELECT COALESCE(MAX(idx), -1) AS m FROM modules WHERE course_id=$1", [courseId]);
   const id = crypto.randomUUID();
