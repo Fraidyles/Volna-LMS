@@ -938,7 +938,6 @@ function renderAuthScreen(mode){
           '</div>' +
           '<div class="field"><label>Email</label><input class="input" type="email" name="email" required></div>' +
           '<div class="field"><label>Телефон <span style="font-weight:400;color:var(--muted-2);">(необязательно)</span></label><input class="input" type="tel" name="phone"></div>' +
-          '<div class="field"><label>Место работы <span style="font-weight:400;color:var(--muted-2);">(необязательно)</span></label><input class="input" name="workplace"></div>' +
           '<div class="field"><label>Пароль <span style="font-weight:400;color:var(--muted-2);">(от 6 символов)</span></label><input class="input" type="password" name="password" required minlength="6"></div>' +
           '<div class="field"><label>Код сотрудника <span style="font-weight:400;color:var(--muted-2);">(только если вас пригласили куратором/администратором — уточните код у пригласившего)</span></label><input class="input" name="staffInviteCode" placeholder="Оставьте пустым, если регистрируетесь на курс"></div>' +
           '<div class="err-text" id="authError" style="display:none;"></div>' +
@@ -4732,7 +4731,7 @@ function wireEvents(root){
       try{
         var d2=await api("/auth/register", { method:"POST", body: JSON.stringify({
           name:fd2.get("name"), specializationId:fd2.get("specializationId"), email:fd2.get("email"),
-          phone:fd2.get("phone"), workplace:fd2.get("workplace"), password:fd2.get("password"),
+          phone:fd2.get("phone"), password:fd2.get("password"),
           staffInviteCode:fd2.get("staffInviteCode"),
           interestIds: fd2.getAll("interestIds")
         }) });
