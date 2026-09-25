@@ -94,11 +94,11 @@ router.get("/", authRequired, requireRole("student"), async (req, res) => {
   const courseId = course.rows[0].id;
 
   const lessons = await pool.query(
-    "SELECT id, idx, title, duration, html, drip_days, video_url, video_timecodes FROM lessons WHERE course_id=$1 ORDER BY idx",
+    "SELECT id, idx, title, duration, html, drip_days, video_url, video_timecodes, module_id FROM lessons WHERE course_id=$1 ORDER BY idx",
     [courseId]
   );
   const quiz = await pool.query(
-    "SELECT id, idx, question, options FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL ORDER BY idx",
+    "SELECT id, idx, question, options FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL ORDER BY idx",
     [courseId]
   );
   // Поурочные тесты — без правильных ответов, сгруппированы по lesson_id, чтобы
@@ -112,6 +112,22 @@ router.get("/", authRequired, requireRole("student"), async (req, res) => {
     if (!lessonQuizzes[q.lesson_id]) lessonQuizzes[q.lesson_id] = [];
     lessonQuizzes[q.lesson_id].push({ id: q.id, question: q.question, options: q.options });
   });
+  // Тесты по модулям — та же идея, сгруппированы по module_id.
+  const moduleQuizRows = await pool.query(
+    "SELECT id, module_id, idx, question, options FROM quiz_questions WHERE course_id=$1 AND module_id IS NOT NULL ORDER BY idx",
+    [courseId]
+  );
+  const moduleQuizzes = {};
+  moduleQuizRows.rows.forEach((q) => {
+    if (!moduleQuizzes[q.module_id]) moduleQuizzes[q.module_id] = [];
+    moduleQuizzes[q.module_id].push({ id: q.id, question: q.question, options: q.options });
+  });
+  const modulesRows = await pool.query("SELECT id, idx, title FROM modules WHERE course_id=$1 ORDER BY idx", [courseId]);
+  const moduleFeedbackGiven = await pool.query(
+    `SELECT mf.module_id FROM module_feedback mf JOIN modules m ON m.id = mf.module_id
+     WHERE mf.user_id=$1 AND m.course_id=$2`,
+    [req.user.id, courseId]
+  );
   const hiddenFor = await getHiddenForMap(courseId);
   const overrides = await pool.query(
     "SELECT lesson_id, unlock_at FROM lesson_schedule_overrides WHERE student_id=$1",
@@ -128,12 +144,20 @@ router.get("/", authRequired, requireRole("student"), async (req, res) => {
       id: l.id, idx: l.idx, title: l.title, duration: l.duration, html: sanitizeLessonHtml(l.html),
       videoUrl: l.video_url, videoTimecodes: l.video_timecodes || [],
       quiz: lessonQuizzes[l.id] || [],
+      moduleId: l.module_id,
       hiddenForMe: (hiddenFor[l.id] || []).indexOf(req.user.id) !== -1,
       dripLockedForMe: drip.locked,
       scheduledForMe: drip.scheduled,
       availableAt: drip.availableAt
     };
   });
+  // Модуль с итоговым тестом (если у него вообще есть вопросы) и списком своих
+  // уроков — фронтенд по нему решает, когда после урока показать гейт «тест + отзыв».
+  const modulesOut = modulesRows.rows.map((m) => ({
+    id: m.id, idx: m.idx, title: m.title,
+    lessonIds: lessons.rows.filter((l) => l.module_id === m.id).map((l) => l.id),
+    quiz: moduleQuizzes[m.id] || []
+  }));
 
   const unread = await pool.query(
     "SELECT COUNT(*)::int AS cnt FROM messages WHERE student_id=$1 AND from_role='curator' AND created_at > COALESCE($2::timestamptz, '-infinity')",
@@ -145,6 +169,8 @@ router.get("/", authRequired, requireRole("student"), async (req, res) => {
   res.json({
     course: course.rows[0],
     lessons: lessonsOut,
+    modules: modulesOut,
+    moduleFeedbackGiven: moduleFeedbackGiven.rows.map((r) => r.module_id),
     bookmarkedLessonIds: bookmarks.rows.map((r) => r.lesson_id),
     quiz: quiz.rows.map((q) => ({ id: q.id, question: q.question, options: q.options })),
     quizHiddenForMe: (hiddenFor.quiz || []).indexOf(req.user.id) !== -1,
@@ -221,7 +247,7 @@ router.post("/quiz-submit", authRequired, requireRole("student"), async (req, re
     return res.status(403).json({ error: "content_hidden", message: "Тест временно недоступен" });
   }
 
-  const questions = await pool.query("SELECT id, correct FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL", [pr.course_id]);
+  const questions = await pool.query("SELECT id, correct FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL", [pr.course_id]);
 
   let correctCount = 0;
   questions.rows.forEach((q) => {
@@ -718,7 +744,7 @@ router.get("/quiz-admin", authRequired, requireRole("admin", "super_admin"), asy
   const course = await pool.query("SELECT id FROM courses LIMIT 1");
   if (!course.rowCount) return res.json({ quiz: [] });
   const quiz = await pool.query(
-    "SELECT id, idx, question, options, correct FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL ORDER BY idx",
+    "SELECT id, idx, question, options, correct FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL ORDER BY idx",
     [course.rows[0].id]
   );
   res.json({ quiz: quiz.rows });
@@ -731,7 +757,7 @@ router.put("/quiz-admin/reorder", authRequired, requireRole("admin", "super_admi
   if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "invalid_input" });
   const course = await pool.query("SELECT id FROM courses LIMIT 1");
   if (!course.rowCount) return res.status(404).json({ error: "no_course" });
-  const existing = await pool.query("SELECT id FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL", [course.rows[0].id]);
+  const existing = await pool.query("SELECT id FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL", [course.rows[0].id]);
   const existingIds = existing.rows.map((r) => r.id);
   if (ids.length !== existingIds.length || !existingIds.every((id) => ids.includes(id))) {
     return res.status(400).json({ error: "invalid_input", message: "Список должен содержать все вопросы ровно один раз" });
@@ -778,7 +804,7 @@ router.post("/quiz-admin", authRequired, requireRole("admin", "super_admin"), as
   if (!course.rowCount) return res.status(404).json({ error: "no_course" });
   const courseId = course.rows[0].id;
 
-  const maxIdx = await pool.query("SELECT COALESCE(MAX(idx), -1) AS m FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL", [courseId]);
+  const maxIdx = await pool.query("SELECT COALESCE(MAX(idx), -1) AS m FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL", [courseId]);
   const id = crypto.randomUUID();
   await pool.query(
     "INSERT INTO quiz_questions (id, course_id, idx, question, options, correct) VALUES ($1,$2,$3,$4,$5,$6)",
@@ -788,22 +814,25 @@ router.post("/quiz-admin", authRequired, requireRole("admin", "super_admin"), as
   res.json({ ok: true, id });
 });
 
-// Общий для итогового теста курса И поурочных тестов — удаляемый вопрос сам несёт
-// признак (lesson_id), по нему и считаем "последний вопрос своей группы", а не всего курса.
+// Общий для итогового теста курса, поурочных тестов И тестов по модулям — удаляемый
+// вопрос сам несёт признак (lesson_id/module_id), по нему и считаем "последний
+// вопрос своей группы", а не всего курса.
 router.delete("/quiz-admin/:id", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
   const before = await pool.query("SELECT * FROM quiz_questions WHERE id=$1", [req.params.id]);
   if (!before.rowCount) return res.status(404).json({ error: "not_found" });
   const q = before.rows[0];
 
-  const count = q.lesson_id
+  const count = q.module_id
+    ? await pool.query("SELECT COUNT(*)::int AS c FROM quiz_questions WHERE module_id=$1", [q.module_id])
+    : q.lesson_id
     ? await pool.query("SELECT COUNT(*)::int AS c FROM quiz_questions WHERE lesson_id=$1", [q.lesson_id])
-    : await pool.query("SELECT COUNT(*)::int AS c FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL", [q.course_id]);
+    : await pool.query("SELECT COUNT(*)::int AS c FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL", [q.course_id]);
   if (count.rows[0].c <= 1) {
     return res.status(400).json({ error: "last_question", message: "Должен остаться хотя бы один вопрос" });
   }
   await pool.query("DELETE FROM quiz_questions WHERE id=$1", [req.params.id]);
   await logAction(req.user, "content.quiz_deleted", "quiz_question", q.id, q.question, {
-    before: { idx: q.idx, question: q.question, options: q.options, correct: q.correct, lessonId: q.lesson_id }
+    before: { idx: q.idx, question: q.question, options: q.options, correct: q.correct, lessonId: q.lesson_id, moduleId: q.module_id }
   }, true);
   res.json({ ok: true });
 });
@@ -947,6 +976,214 @@ router.post("/lessons/:id/quiz-submit", authRequired, requireRole("student"), as
   res.json({
     score, completedLessons: list,
     gamification: { currentStreak: streak.currentStreak, longestStreak: streak.longestStreak, points }
+  });
+});
+
+/* ---------- Модули: группа уроков, после которой — итоговый тест по модулю и мини-опрос ---------- */
+
+// Итоговый тест модуля — тот же принцип, что и поурочный (см. выше), но не
+// привязан к конкретному уроку и не трогает completed_lessons: гейт после
+// последнего урока модуля решает фронтенд сам, здесь только подсчёт балла.
+router.post("/modules/:id/quiz-submit", authRequired, requireRole("student"), async (req, res) => {
+  const answers = (req.body && req.body.answers) || {};
+
+  const progressRow = await pool.query("SELECT * FROM progress WHERE user_id=$1", [req.user.id]);
+  if (!progressRow.rowCount) return res.status(404).json({ error: "no_progress" });
+  const pr = progressRow.rows[0];
+
+  const lock = computeLocked(pr);
+  if (lock.locked) return res.status(403).json({ error: "access_locked", message: "Доступ к курсу ограничен" });
+
+  const module = await pool.query("SELECT id FROM modules WHERE id=$1 AND course_id=$2", [req.params.id, pr.course_id]);
+  if (!module.rowCount) return res.status(404).json({ error: "not_found" });
+
+  const questions = await pool.query("SELECT id, correct FROM quiz_questions WHERE module_id=$1", [req.params.id]);
+  if (!questions.rowCount) return res.status(404).json({ error: "no_quiz", message: "У этого модуля нет теста" });
+
+  let correctCount = 0;
+  questions.rows.forEach((q) => { if (answers[q.id] === q.correct) correctCount++; });
+  const score = Math.round((correctCount / questions.rowCount) * 100);
+
+  const scores = pr.module_quiz_scores || {};
+  scores[req.params.id] = score;
+  await pool.query(
+    "UPDATE progress SET module_quiz_scores=$1, last_active_at=now() WHERE user_id=$2",
+    [JSON.stringify(scores), req.user.id]
+  );
+  res.json({ ok: true, score });
+});
+
+// Мини-опрос по модулю — интерактивная оценка 1-5, комментарий по желанию.
+// Повторное прохождение (ON CONFLICT) обновляет тот же отзыв, а не плодит новый —
+// один врач высказывается по одному модулю один раз (последний ответ считается актуальным).
+router.post("/modules/:id/feedback", authRequired, requireRole("student"), async (req, res) => {
+  const { rating, comment } = req.body || {};
+  const ratingNum = parseInt(rating, 10);
+  if (isNaN(ratingNum) || ratingNum < 1 || ratingNum > 5) {
+    return res.status(400).json({ error: "invalid_input", message: "Оценка должна быть от 1 до 5" });
+  }
+  const progressRow = await pool.query("SELECT course_id FROM progress WHERE user_id=$1", [req.user.id]);
+  if (!progressRow.rowCount) return res.status(404).json({ error: "no_progress" });
+
+  const module = await pool.query("SELECT id FROM modules WHERE id=$1 AND course_id=$2", [req.params.id, progressRow.rows[0].course_id]);
+  if (!module.rowCount) return res.status(404).json({ error: "not_found" });
+
+  const cleanComment = (comment || "").toString().trim() || null;
+  await pool.query(
+    `INSERT INTO module_feedback (id, module_id, user_id, rating, comment) VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (module_id, user_id) DO UPDATE SET rating=$4, comment=$5, created_at=now()`,
+    [crypto.randomUUID(), req.params.id, req.user.id, ratingNum, cleanComment]
+  );
+  res.json({ ok: true });
+});
+
+/* ---------- Модули: администрирование (только admin/super_admin) ---------- */
+
+router.get("/modules", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const course = await pool.query("SELECT id FROM courses LIMIT 1");
+  if (!course.rowCount) return res.json({ modules: [], unassignedLessons: [] });
+  const courseId = course.rows[0].id;
+
+  const modules = await pool.query("SELECT id, idx, title FROM modules WHERE course_id=$1 ORDER BY idx", [courseId]);
+  const lessons = await pool.query("SELECT id, idx, title, module_id FROM lessons WHERE course_id=$1 ORDER BY idx", [courseId]);
+  const quizCounts = await pool.query(
+    "SELECT module_id, COUNT(*)::int AS c FROM quiz_questions WHERE module_id IS NOT NULL AND course_id=$1 GROUP BY module_id",
+    [courseId]
+  );
+  const feedbackStats = await pool.query(
+    `SELECT mf.module_id, COUNT(*)::int AS c, AVG(mf.rating)::float AS avg
+     FROM module_feedback mf JOIN modules m ON m.id = mf.module_id
+     WHERE m.course_id=$1 GROUP BY mf.module_id`,
+    [courseId]
+  );
+  const quizCountMap = {};
+  quizCounts.rows.forEach((r) => { quizCountMap[r.module_id] = r.c; });
+  const feedbackMap = {};
+  feedbackStats.rows.forEach((r) => { feedbackMap[r.module_id] = { count: r.c, average: r.avg }; });
+
+  res.json({
+    modules: modules.rows.map((m) => ({
+      id: m.id, idx: m.idx, title: m.title,
+      lessonIds: lessons.rows.filter((l) => l.module_id === m.id).map((l) => l.id),
+      quizCount: quizCountMap[m.id] || 0,
+      feedback: feedbackMap[m.id] || { count: 0, average: null }
+    })),
+    allLessons: lessons.rows.map((l) => ({ id: l.id, title: l.title, moduleId: l.module_id }))
+  });
+});
+
+router.post("/modules", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const { title } = req.body || {};
+  if (!title || !title.trim()) return res.status(400).json({ error: "invalid_input", message: "Укажите название модуля" });
+  const course = await pool.query("SELECT id FROM courses LIMIT 1");
+  if (!course.rowCount) return res.status(404).json({ error: "no_course" });
+  const courseId = course.rows[0].id;
+
+  const maxIdx = await pool.query("SELECT COALESCE(MAX(idx), -1) AS m FROM modules WHERE course_id=$1", [courseId]);
+  const id = crypto.randomUUID();
+  await pool.query("INSERT INTO modules (id, course_id, idx, title) VALUES ($1,$2,$3,$4)", [id, courseId, maxIdx.rows[0].m + 1, title.trim()]);
+  await logAction(req.user, "content.module_created", "module", id, title.trim(), {}, true);
+  res.json({ ok: true, id, title: title.trim() });
+});
+
+router.put("/modules/:id", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const { title } = req.body || {};
+  if (!title || !title.trim()) return res.status(400).json({ error: "invalid_input", message: "Укажите название модуля" });
+  const before = await pool.query("SELECT title FROM modules WHERE id=$1", [req.params.id]);
+  if (!before.rowCount) return res.status(404).json({ error: "not_found" });
+  await pool.query("UPDATE modules SET title=$1 WHERE id=$2", [title.trim(), req.params.id]);
+  await logAction(req.user, "content.module_updated", "module", req.params.id, title.trim(), { before: { title: before.rows[0].title } });
+  res.json({ ok: true });
+});
+
+router.delete("/modules/:id", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const before = await pool.query("SELECT title FROM modules WHERE id=$1", [req.params.id]);
+  if (!before.rowCount) return res.status(404).json({ error: "not_found" });
+  // Уроки модуля НЕ удаляются — просто отвязываются (lessons.module_id ON DELETE SET NULL),
+  // тест модуля и отзывы уходят каскадом (FK ON DELETE CASCADE у соответствующих таблиц).
+  await pool.query("DELETE FROM modules WHERE id=$1", [req.params.id]);
+  await logAction(req.user, "content.module_deleted", "module", req.params.id, before.rows[0].title, {});
+  res.json({ ok: true });
+});
+
+// Привязка/отвязка урока к модулю — moduleId:null убирает урок из любого модуля.
+router.put("/lessons/:id/module", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const moduleId = (req.body && req.body.moduleId) || null;
+  const lesson = await pool.query("SELECT id, course_id FROM lessons WHERE id=$1", [req.params.id]);
+  if (!lesson.rowCount) return res.status(404).json({ error: "not_found" });
+  if (moduleId) {
+    const module = await pool.query("SELECT id FROM modules WHERE id=$1 AND course_id=$2", [moduleId, lesson.rows[0].course_id]);
+    if (!module.rowCount) return res.status(404).json({ error: "not_found", message: "Модуль не найден" });
+  }
+  await pool.query("UPDATE lessons SET module_id=$1 WHERE id=$2", [moduleId, req.params.id]);
+  await logAction(req.user, "content.lesson_module_assigned", "lesson", req.params.id, null, { moduleId });
+  res.json({ ok: true, moduleId });
+});
+
+/* ---------- Итоговый тест модуля: администрирование ---------- */
+
+router.get("/modules/:id/quiz-admin", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const module = await pool.query("SELECT id FROM modules WHERE id=$1", [req.params.id]);
+  if (!module.rowCount) return res.status(404).json({ error: "not_found" });
+  const quiz = await pool.query(
+    "SELECT id, idx, question, options, correct FROM quiz_questions WHERE module_id=$1 ORDER BY idx",
+    [req.params.id]
+  );
+  res.json({ quiz: quiz.rows });
+});
+
+router.post("/modules/:id/quiz-admin", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const { question, options, correct } = req.body || {};
+  if (!question || !question.trim() || !Array.isArray(options) || options.length < 2) {
+    return res.status(400).json({ error: "invalid_input", message: "Заполните вопрос и минимум 2 варианта ответа" });
+  }
+  const correctIdx = parseInt(correct, 10);
+  if (isNaN(correctIdx) || correctIdx < 0 || correctIdx >= options.length) {
+    return res.status(400).json({ error: "invalid_input", message: "Укажите корректный правильный вариант" });
+  }
+  const module = await pool.query("SELECT id, course_id FROM modules WHERE id=$1", [req.params.id]);
+  if (!module.rowCount) return res.status(404).json({ error: "not_found" });
+
+  const maxIdx = await pool.query("SELECT COALESCE(MAX(idx), -1) AS m FROM quiz_questions WHERE module_id=$1", [req.params.id]);
+  const id = crypto.randomUUID();
+  await pool.query(
+    "INSERT INTO quiz_questions (id, course_id, module_id, idx, question, options, correct) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+    [id, module.rows[0].course_id, req.params.id, maxIdx.rows[0].m + 1, question.trim(), JSON.stringify(options), correctIdx]
+  );
+  await logAction(req.user, "content.module_quiz_created", "quiz_question", id, question.trim(), { moduleId: req.params.id }, true);
+  res.json({ ok: true, id });
+});
+
+router.put("/modules/:id/quiz-admin/reorder", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const ids = (req.body && req.body.orderedIds) || [];
+  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "invalid_input" });
+  const existing = await pool.query("SELECT id FROM quiz_questions WHERE module_id=$1", [req.params.id]);
+  const existingIds = existing.rows.map((r) => r.id);
+  if (ids.length !== existingIds.length || !existingIds.every((id) => ids.includes(id))) {
+    return res.status(400).json({ error: "invalid_input", message: "Список должен содержать все вопросы ровно один раз" });
+  }
+  for (let i = 0; i < ids.length; i++) {
+    await pool.query("UPDATE quiz_questions SET idx=$1 WHERE id=$2", [i, ids[i]]);
+  }
+  await logAction(req.user, "content.module_quiz_reordered", "module", req.params.id, null, { order: ids });
+  res.json({ ok: true });
+});
+
+// Отзывы по модулю — читает только admin/super_admin (та же зона, что и остальной
+// конструктор курса): список с именами врачей + средняя оценка.
+router.get("/modules/:id/feedback", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const module = await pool.query("SELECT id FROM modules WHERE id=$1", [req.params.id]);
+  if (!module.rowCount) return res.status(404).json({ error: "not_found" });
+  const rows = await pool.query(
+    `SELECT mf.rating, mf.comment, mf.created_at, u.name AS user_name
+     FROM module_feedback mf JOIN users u ON u.id = mf.user_id
+     WHERE mf.module_id=$1 ORDER BY mf.created_at DESC`,
+    [req.params.id]
+  );
+  const average = rows.rowCount ? rows.rows.reduce((s, r) => s + r.rating, 0) / rows.rowCount : null;
+  res.json({
+    feedback: rows.rows.map((r) => ({ rating: r.rating, comment: r.comment, createdAt: r.created_at, userName: r.user_name })),
+    average, count: rows.rowCount
   });
 });
 

@@ -399,7 +399,7 @@ router.get("/course-preview", authRequired, requireRole("curator", "admin", "sup
     [course.rows[0].id]
   );
   const quiz = await pool.query(
-    "SELECT id, idx, question, options FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL ORDER BY idx",
+    "SELECT id, idx, question, options FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL ORDER BY idx",
     [course.rows[0].id]
   );
   const lessonQuizRows = await pool.query(
@@ -418,9 +418,11 @@ router.get("/course-preview", authRequired, requireRole("curator", "admin", "sup
     })),
     quiz: quiz.rows.map((q) => ({ id: q.id, question: q.question, options: q.options })),
     quizHiddenForMe: false,
+    modules: [], // предпросмотр не собирает модули: гейт «тест + отзыв» тут не нужен
+    moduleFeedbackGiven: [],
     progress: {
       completed_lessons: [], quiz_score: null, completed: false, certificate_status: "none",
-      requested_full_access: false, lesson_quiz_scores: {}
+      requested_full_access: false, lesson_quiz_scores: {}, module_quiz_scores: {}
     },
     locked: { locked: false, reason: null }
   });

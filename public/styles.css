@@ -254,6 +254,12 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
 .progress-ring-inner{width:47px;height:47px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-weight:700;font-size:12.5px;}
 .streak-flame{color:var(--accent);}
 
+/* Звёзды мини-опроса по модулю — кликабельная оценка вместо текстового поля. */
+.star-btn{background:none;border:none;padding:4px;cursor:pointer;color:var(--line-2);transition:color .12s;}
+.star-btn .ic{stroke:none;fill:currentColor;}
+.star-btn:hover{color:var(--status-attention);}
+.star-btn.active{color:var(--status-attention);}
+
 /* ---------------- Плеер урока ---------------- */
 .player{display:grid;grid-template-columns:270px 1fr;border-radius:var(--radius-m);overflow:hidden;background:var(--surface);box-shadow:var(--shadow);border:var(--border-hairline);}
 @media (max-width:800px){.player{grid-template-columns:1fr;}.lesson-nav{display:flex;overflow-x:auto;border-bottom:var(--border-hairline);border-right:none;}}

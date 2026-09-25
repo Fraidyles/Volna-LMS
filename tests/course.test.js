@@ -756,3 +756,223 @@ describe("Курс врача", () => {
     });
   });
 });
+
+describe("Модули курса — итоговый тест и мини-опрос", () => {
+  async function makeLesson(title) {
+    const id = "lesson-module-" + crypto.randomUUID().slice(0, 8);
+    await pool.query(
+      "INSERT INTO lessons (id, course_id, idx, title, duration, html) VALUES ($1,$2,$3,$4,$5,$6)",
+      [id, course.courseId, 100, title || "Урок модуля", "5 мин", "<p>Контент</p>"]
+    );
+    return id;
+  }
+
+  test("админ создаёт модуль, привязывает уроки — врач видит его в GET /course с правильным составом", async () => {
+    const admin = await createUser({ role: "admin" });
+    const adminCookie = await loginAs(admin);
+    const l1 = await makeLesson("Урок A");
+    const l2 = await makeLesson("Урок B");
+
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль 1" });
+    expect(modRes.status).toBe(200);
+    const moduleId = modRes.body.id;
+
+    await request(app).put(`/api/course/lessons/${l1}/module`).set("Cookie", adminCookie).send({ moduleId });
+    await request(app).put(`/api/course/lessons/${l2}/module`).set("Cookie", adminCookie).send({ moduleId });
+
+    const student = await createUser({ role: "student", courseId: course.courseId });
+    const cookie = await loginAs(student);
+    const courseRes = await request(app).get("/api/course").set("Cookie", cookie);
+    const modOut = courseRes.body.modules.find((m) => m.id === moduleId);
+    expect(modOut).toBeTruthy();
+    expect(modOut.lessonIds.sort()).toEqual([l1, l2].sort());
+    expect(courseRes.body.lessons.find((l) => l.id === l1).moduleId).toBe(moduleId);
+  });
+
+  test("куратор и врач не могут создавать модули или назначать уроки (403)", async () => {
+    const curator = await createUser({ role: "curator" });
+    const curatorCookie = await loginAs(curator);
+    const res = await request(app).post("/api/course/modules").set("Cookie", curatorCookie).send({ title: "Не должно создаться" });
+    expect(res.status).toBe(403);
+  });
+
+  test("тест модуля не попадает ни в итоговый тест курса, ни в поурочный", async () => {
+    const admin = await createUser({ role: "admin" });
+    const adminCookie = await loginAs(admin);
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль с тестом" });
+    const moduleId = modRes.body.id;
+
+    const qRes = await request(app).post(`/api/course/modules/${moduleId}/quiz-admin`).set("Cookie", adminCookie)
+      .send({ question: "Сколько будет 3+3?", options: ["5", "6", "7"], correct: 1 });
+    expect(qRes.status).toBe(200);
+
+    const finalQuizRes = await request(app).get("/api/course/quiz-admin").set("Cookie", adminCookie);
+    expect(finalQuizRes.body.quiz.some((q) => q.id === qRes.body.id)).toBe(false);
+
+    const moduleQuizRes = await request(app).get(`/api/course/modules/${moduleId}/quiz-admin`).set("Cookie", adminCookie);
+    expect(moduleQuizRes.body.quiz.length).toBe(1);
+    expect(moduleQuizRes.body.quiz[0].correct).toBe(1);
+  });
+
+  test("врач проходит тест модуля — балл сохраняется в module_quiz_scores, completed_lessons не трогается", async () => {
+    const admin = await createUser({ role: "admin" });
+    const adminCookie = await loginAs(admin);
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль для прохождения" });
+    const moduleId = modRes.body.id;
+    const q1 = await request(app).post(`/api/course/modules/${moduleId}/quiz-admin`).set("Cookie", adminCookie)
+      .send({ question: "В1", options: ["a", "b"], correct: 0 });
+    const q2 = await request(app).post(`/api/course/modules/${moduleId}/quiz-admin`).set("Cookie", adminCookie)
+      .send({ question: "В2", options: ["a", "b"], correct: 1 });
+
+    const student = await createUser({ role: "student", courseId: course.courseId });
+    const cookie = await loginAs(student);
+    const beforeLessons = (await request(app).get("/api/course").set("Cookie", cookie)).body.progress.completed_lessons;
+
+    const answers = {}; answers[q1.body.id] = 0; answers[q2.body.id] = 0; // второй неверный
+    const submitRes = await request(app).post(`/api/course/modules/${moduleId}/quiz-submit`).set("Cookie", cookie).send({ answers });
+    expect(submitRes.status).toBe(200);
+    expect(submitRes.body.score).toBe(50);
+
+    const courseRes = await request(app).get("/api/course").set("Cookie", cookie);
+    expect(courseRes.body.progress.module_quiz_scores[moduleId]).toBe(50);
+    expect(courseRes.body.progress.completed_lessons).toEqual(beforeLessons);
+  });
+
+  test("тест несуществующего модуля и модуля без вопросов — 404", async () => {
+    const admin = await createUser({ role: "admin" });
+    const adminCookie = await loginAs(admin);
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль без теста" });
+
+    const student = await createUser({ role: "student", courseId: course.courseId });
+    const cookie = await loginAs(student);
+
+    const noSuchModule = await request(app).post("/api/course/modules/no-such-id/quiz-submit").set("Cookie", cookie).send({ answers: {} });
+    expect(noSuchModule.status).toBe(404);
+
+    const noQuiz = await request(app).post(`/api/course/modules/${modRes.body.id}/quiz-submit`).set("Cookie", cookie).send({ answers: {} });
+    expect(noQuiz.status).toBe(404);
+    expect(noQuiz.body.error).toBe("no_quiz");
+  });
+
+  test("врач отправляет мини-опрос (оценка + комментарий), админ видит его и среднюю оценку; повторная отправка обновляет, а не дублирует", async () => {
+    const admin = await createUser({ role: "admin" });
+    const adminCookie = await loginAs(admin);
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль с отзывами" });
+    const moduleId = modRes.body.id;
+
+    const student = await createUser({ role: "student", courseId: course.courseId, name: "Отзывчивый Врач" });
+    const cookie = await loginAs(student);
+
+    const fbRes = await request(app).post(`/api/course/modules/${moduleId}/feedback`).set("Cookie", cookie)
+      .send({ rating: 4, comment: "Было полезно, но длинновато" });
+    expect(fbRes.status).toBe(200);
+
+    let feedbackList = await request(app).get(`/api/course/modules/${moduleId}/feedback`).set("Cookie", adminCookie);
+    expect(feedbackList.body.count).toBe(1);
+    expect(feedbackList.body.average).toBe(4);
+    expect(feedbackList.body.feedback[0].comment).toBe("Было полезно, но длинновато");
+    expect(feedbackList.body.feedback[0].userName).toBe("Отзывчивый Врач");
+
+    // Повторная отправка от того же врача обновляет отзыв, а не добавляет второй.
+    await request(app).post(`/api/course/modules/${moduleId}/feedback`).set("Cookie", cookie)
+      .send({ rating: 5, comment: "" });
+    feedbackList = await request(app).get(`/api/course/modules/${moduleId}/feedback`).set("Cookie", adminCookie);
+    expect(feedbackList.body.count).toBe(1);
+    expect(feedbackList.body.average).toBe(5);
+    expect(feedbackList.body.feedback[0].comment).toBe(null);
+  });
+
+  test("оценка вне диапазона 1-5 отклоняется (400)", async () => {
+    const admin = await createUser({ role: "admin" });
+    const adminCookie = await loginAs(admin);
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль валидации" });
+
+    const student = await createUser({ role: "student", courseId: course.courseId });
+    const cookie = await loginAs(student);
+    const res = await request(app).post(`/api/course/modules/${modRes.body.id}/feedback`).set("Cookie", cookie).send({ rating: 7 });
+    expect(res.status).toBe(400);
+  });
+
+  test("куратор и врач не могут смотреть отзывы по модулю (403)", async () => {
+    const admin = await createUser({ role: "admin" });
+    const adminCookie = await loginAs(admin);
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль приватности" });
+
+    const curator = await createUser({ role: "curator" });
+    const curatorCookie = await loginAs(curator);
+    const res = await request(app).get(`/api/course/modules/${modRes.body.id}/feedback`).set("Cookie", curatorCookie);
+    expect(res.status).toBe(403);
+  });
+
+  test("удаление модуля отвязывает уроки (module_id=null), но сами уроки остаются", async () => {
+    const admin = await createUser({ role: "admin" });
+    const adminCookie = await loginAs(admin);
+    const l1 = await makeLesson("Урок при удалении модуля");
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль на удаление" });
+    const moduleId = modRes.body.id;
+    await request(app).put(`/api/course/lessons/${l1}/module`).set("Cookie", adminCookie).send({ moduleId });
+
+    const delRes = await request(app).delete(`/api/course/modules/${moduleId}`).set("Cookie", adminCookie);
+    expect(delRes.status).toBe(200);
+
+    const lessonCheck = await pool.query("SELECT module_id FROM lessons WHERE id=$1", [l1]);
+    expect(lessonCheck.rowCount).toBe(1);
+    expect(lessonCheck.rows[0].module_id).toBe(null);
+  });
+
+  test("откат: созданный модуль удаляется (content.module_created)", async () => {
+    const admin = await createUser({ role: "super_admin" });
+    const adminCookie = await loginAs(admin);
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль для отката" });
+
+    const logRow = await pool.query(
+      "SELECT id FROM audit_log WHERE action='content.module_created' AND target_id=$1 ORDER BY created_at DESC LIMIT 1",
+      [modRes.body.id]
+    );
+    expect(logRow.rowCount).toBe(1);
+    const revertRes = await request(app).post(`/api/staff/audit-log/${logRow.rows[0].id}/revert`).set("Cookie", adminCookie);
+    expect(revertRes.status).toBe(200);
+
+    const check = await pool.query("SELECT id FROM modules WHERE id=$1", [modRes.body.id]);
+    expect(check.rowCount).toBe(0);
+  });
+
+  test("откат: удалённый вопрос теста модуля восстанавливается ИМЕННО в свой модуль", async () => {
+    const admin = await createUser({ role: "super_admin" });
+    const adminCookie = await loginAs(admin);
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль для отката вопроса" });
+    const moduleId = modRes.body.id;
+    await request(app).post(`/api/course/modules/${moduleId}/quiz-admin`).set("Cookie", adminCookie)
+      .send({ question: "Останется", options: ["a", "b"], correct: 0 });
+    const toDelete = await request(app).post(`/api/course/modules/${moduleId}/quiz-admin`).set("Cookie", adminCookie)
+      .send({ question: "Удалим и откатим", options: ["a", "b"], correct: 1 });
+
+    const deleteRes = await request(app).delete(`/api/course/quiz-admin/${toDelete.body.id}`).set("Cookie", adminCookie);
+    expect(deleteRes.status).toBe(200);
+
+    const logRow = await pool.query(
+      "SELECT id FROM audit_log WHERE action='content.quiz_deleted' AND target_id=$1 ORDER BY created_at DESC LIMIT 1",
+      [toDelete.body.id]
+    );
+    const revertRes = await request(app).post(`/api/staff/audit-log/${logRow.rows[0].id}/revert`).set("Cookie", adminCookie);
+    expect(revertRes.status).toBe(200);
+
+    const restored = await pool.query("SELECT module_id FROM quiz_questions WHERE id=$1", [toDelete.body.id]);
+    expect(restored.rows[0].module_id).toBe(moduleId);
+
+    const finalQuizRes = await request(app).get("/api/course/quiz-admin").set("Cookie", adminCookie);
+    expect(finalQuizRes.body.quiz.some((q) => q.id === toDelete.body.id)).toBe(false);
+  });
+
+  test("последний вопрос теста модуля удалить нельзя", async () => {
+    const admin = await createUser({ role: "admin" });
+    const adminCookie = await loginAs(admin);
+    const modRes = await request(app).post("/api/course/modules").set("Cookie", adminCookie).send({ title: "Модуль с одним вопросом" });
+    const q1 = await request(app).post(`/api/course/modules/${modRes.body.id}/quiz-admin`).set("Cookie", adminCookie)
+      .send({ question: "Единственный", options: ["a", "b"], correct: 0 });
+
+    const res = await request(app).delete(`/api/course/quiz-admin/${q1.body.id}`).set("Cookie", adminCookie);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("last_question");
+  });
+});

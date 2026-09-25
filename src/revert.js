@@ -103,20 +103,26 @@ const HANDLERS = {
   "content.quiz_created": async (log) => {
     await pool.query("DELETE FROM quiz_questions WHERE id=$1", [log.target_id]);
   },
-  // Общий обработчик и для итогового теста курса, и для поурочного (см. общий
-  // DELETE /quiz-admin/:id в routes/course.js) — details.before.lessonId различает,
-  // куда восстанавливать: без него вопрос молча "переехал" бы в итоговый тест курса.
+  // Общий обработчик для итогового теста курса, поурочного И теста по модулю (см.
+  // общий DELETE /quiz-admin/:id в routes/course.js) — details.before.lessonId/moduleId
+  // различает, куда восстанавливать: без них вопрос молча "переехал" бы в итоговый тест курса.
   "content.quiz_deleted": async (log) => {
     const b = requireBefore(log);
     const course = await pool.query("SELECT id FROM courses LIMIT 1");
     if (!course.rowCount) throw new Error("Курс не найден");
     await pool.query(
-      "INSERT INTO quiz_questions (id, course_id, lesson_id, idx, question, options, correct) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-      [log.target_id, course.rows[0].id, b.lessonId || null, b.idx, b.question, JSON.stringify(b.options), b.correct]
+      "INSERT INTO quiz_questions (id, course_id, lesson_id, module_id, idx, question, options, correct) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+      [log.target_id, course.rows[0].id, b.lessonId || null, b.moduleId || null, b.idx, b.question, JSON.stringify(b.options), b.correct]
     );
   },
   "content.lesson_quiz_created": async (log) => {
     await pool.query("DELETE FROM quiz_questions WHERE id=$1", [log.target_id]);
+  },
+  "content.module_quiz_created": async (log) => {
+    await pool.query("DELETE FROM quiz_questions WHERE id=$1", [log.target_id]);
+  },
+  "content.module_created": async (log) => {
+    await pool.query("DELETE FROM modules WHERE id=$1", [log.target_id]);
   },
   "invite.create": async (log) => {
     await pool.query("DELETE FROM invites WHERE email=$1", [log.target_id]);

@@ -404,3 +404,34 @@ CREATE INDEX IF NOT EXISTS idx_protocol_guide_files_guide ON protocol_guide_file
 ALTER TABLE protocol_guides ALTER COLUMN guide_html DROP NOT NULL;
 ALTER TABLE protocol_guides ALTER COLUMN guide_html SET DEFAULT '';
 
+-- ---------- Этап 13: модули курса — итоговый тест и мини-опрос после каждого модуля ----------
+-- Модуль — группа уроков курса (например, 8 подряд). Урок вне модуля (module_id NULL)
+-- ведёт себя как раньше — без гейта после себя.
+CREATE TABLE IF NOT EXISTS modules (
+  id          TEXT PRIMARY KEY,
+  course_id   TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  idx         INT NOT NULL,
+  title       TEXT NOT NULL
+);
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS module_id TEXT REFERENCES modules(id) ON DELETE SET NULL;
+
+-- Тест по модулю — тот же quiz_questions, третья группа наравне с итоговым тестом
+-- курса (lesson_id IS NULL, module_id IS NULL) и поурочным (lesson_id IS NOT NULL).
+ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS module_id TEXT REFERENCES modules(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_quiz_module ON quiz_questions(module_id);
+
+ALTER TABLE progress ADD COLUMN IF NOT EXISTS module_quiz_scores JSONB NOT NULL DEFAULT '{}';
+
+-- Мини-опрос по модулю — интерактивный, не текстовая форма: оценка 1-5 звёзд
+-- обязательна, комментарий по желанию. Один отзыв на пару (модуль, врач) —
+-- повторное прохождение (если врач вернётся к урокам модуля) обновляет его.
+CREATE TABLE IF NOT EXISTS module_feedback (
+  id          TEXT PRIMARY KEY,
+  module_id   TEXT NOT NULL REFERENCES modules(id) ON DELETE CASCADE,
+  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  rating      INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  comment     TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (module_id, user_id)
+);
+

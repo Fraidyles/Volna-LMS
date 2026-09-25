@@ -22,7 +22,9 @@ var view = "loading";
 var specializationsList = [];  // справочник специализаций — грузится один раз при старте (нужен и до входа, на форме регистрации)
 var course = null;             // {course, lessons, quiz, progress} — для врача
 var studentState = { tab:"course", navKey:"course", lessonIndex:0, quizMode:false, quizSubmitted:false, messagesSubTab:"curator", materialsSearch:"", materialsFilter:"all", materialsAutoFocus:false,
-  lessonStage:"intro", videoEnded:false, lessonQuizAnswers:{}, lessonQuizResult:null, protocolsLoaded:false };
+  lessonStage:"intro", videoEnded:false, lessonQuizAnswers:{}, lessonQuizResult:null, protocolsLoaded:false,
+  // Гейт после последнего урока модуля: null | "quiz" | "feedback".
+  moduleGateStage:null, moduleGateId:null, moduleQuizResult:null, moduleFeedbackRating:0, moduleFeedbackComment:"" };
 var staffState = { mainTab:"home", navKey:"home", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],unanswered:[],pendingCertificates:[]}, digest:null, chatTemplates:[] };
 // Открытый выпадающий список шаблонов над конкретным полем ввода (id textarea) —
 // null, если ни один не открыт. Редактор — отдельная мини-форма добавления/правки
@@ -76,12 +78,17 @@ var previewMode = false;
 var previewReturnTab = "students";
 var tempPasswordResult = null; // {name, tempPassword} — показать один раз после сброса пароля
 var lessonEditor = { open:false, isNew:false, id:null, title:"", duration:"", html:"", dripDays:null, hasDraft:false, publishedTitle:"", publishedDuration:"", publishedHtml:"", history:[], showHistory:false, showPreview:false };
-var quizEditor = { open:false, isNew:false, id:null, question:"", options:[], correct:0, lessonId:null };
+var quizEditor = { open:false, isNew:false, id:null, question:"", options:[], correct:0, lessonId:null, moduleId:null };
 // Видео с главами-таймкодами у конкретного урока (отдельно от WYSIWYG-содержимого урока).
 var videoEditor = { open:false, lessonId:null, lessonTitle:"", videoUrl:"", timecodes:[] };
 // Поурочный «развлекательный» тест — свой список вопросов на каждый урок,
 // отдельно от staffState.quizAdmin (это только итоговый тест курса).
 var lessonQuizManager = { open:false, lessonId:null, lessonTitle:"", questions:[] };
+// Модули курса (admin/super_admin) — список + состав каждого модуля, отдельно
+// от staffState.materials (все уроки курса, без группировки).
+var moduleManagerState = { modules:[], allLessons:[] };
+var moduleQuizManager = { open:false, moduleId:null, moduleTitle:"", questions:[] };
+var moduleFeedbackViewer = { open:false, moduleId:null, moduleTitle:"", feedback:[], average:null, count:0 };
 var adminProtocolsState = { list:[] };
 var protocolEditor = { open:false, id:null, title:"", summary:"", guides:[], lessonIds:[] };
 var specializationEditor = { open:false, id:null, name:"" }; // редактирование названия специализации (создание — отдельной мини-формой на странице)
@@ -392,6 +399,11 @@ async function loadStaffData(){
       var qa = await api("/course/quiz-admin");
       staffState.quizAdmin = qa.quiz;
     }catch(e){}
+    try{
+      var mods = await api("/course/modules");
+      moduleManagerState.modules = mods.modules;
+      moduleManagerState.allLessons = mods.allLessons;
+    }catch(e){}
     await loadAuditLog();
     try{
       var acts = await api("/staff/audit-log/actions");
@@ -479,6 +491,12 @@ function render(){
   }
   if(lessonQuizManager.open && view==="staff"){
     app.appendChild(renderLessonQuizManagerDrawer());
+  }
+  if(moduleQuizManager.open && view==="staff"){
+    app.appendChild(renderModuleQuizManagerDrawer());
+  }
+  if(moduleFeedbackViewer.open && view==="staff"){
+    app.appendChild(renderModuleFeedbackViewerDrawer());
   }
   if(protocolEditor.open && view==="staff"){
     app.appendChild(renderProtocolEditorModal());
@@ -698,6 +716,54 @@ function renderLessonQuizManagerDrawer(){
   return el('<div class="overlay" data-action="overlay-close-lesson-quiz-manager"><div class="drawer" data-stop="1" style="width:min(560px,100%);">'+body+'</div></div>');
 }
 
+function renderModuleQuizManagerDrawer(){
+  var body = '<div class="drawer-head"><b style="font-size:16px;">Итоговый тест модуля «'+escapeHtml(moduleQuizManager.moduleTitle)+'»</b><button class="btn btn-ghost btn-sm" data-action="close-module-quiz-manager">Закрыть ✕</button></div>' +
+    '<div class="drawer-body">' +
+      '<p class="hint" style="margin-top:0;">Показывается врачу сразу после последнего урока модуля, перед мини-опросом. Без вопросов — сразу переходит к опросу.</p>' +
+      '<div style="display:flex;justify-content:flex-end;margin-bottom:10px;"><button class="btn btn-sm btn-primary" data-action="open-module-quiz-creator">+ Добавить вопрос</button></div>';
+  if(!moduleQuizManager.questions.length){
+    body += '<div class="empty-state" style="padding:24px 10px;">Вопросов пока нет — тест модуля не появится, только мини-опрос.</div>';
+  } else {
+    moduleQuizManager.questions.forEach(function(q,i){
+      var qIsFirst=i===0, qIsLast=i===moduleQuizManager.questions.length-1;
+      body += '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);">' +
+        '<div style="display:flex;flex-direction:column;gap:2px;">' +
+          '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-module-quiz-question" data-idx="'+i+'" data-dir="up"'+(qIsFirst?' disabled':'')+' title="Выше">↑</button>' +
+          '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-module-quiz-question" data-idx="'+i+'" data-dir="down"'+(qIsLast?' disabled':'')+' title="Ниже">↓</button></div>' +
+        '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+(i+1)+'. '+escapeHtml(q.question)+'</b><span style="font-size:12px;color:var(--muted);">'+q.options.length+' варианта, правильный: «'+escapeHtml(q.options[q.correct]||"")+'»</span></div>' +
+        '<button class="btn btn-sm btn-ghost" data-action="open-module-quiz-editor" data-id="'+q.id+'">Редактировать</button>' +
+        '<button class="btn btn-sm btn-ghost" data-action="delete-quiz-question" data-id="'+q.id+'" title="Удалить вопрос">'+icon("trash","ic-sm")+'</button></div>';
+    });
+  }
+  body += '</div>';
+  return el('<div class="overlay" data-action="overlay-close-module-quiz-manager"><div class="drawer" data-stop="1" style="width:min(560px,100%);">'+body+'</div></div>');
+}
+
+function renderModuleFeedbackViewerDrawer(){
+  var v = moduleFeedbackViewer;
+  var body = '<div class="drawer-head"><b style="font-size:16px;">Отзывы о модуле «'+escapeHtml(v.moduleTitle)+'»</b><button class="btn btn-ghost btn-sm" data-action="close-module-feedback-viewer">Закрыть ✕</button></div>' +
+    '<div class="drawer-body">';
+  if(!v.feedback.length){
+    body += '<div class="empty-state" style="padding:24px 10px;">Пока никто не оставил отзыв по этому модулю.</div>';
+  } else {
+    body += '<div class="card" style="padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;">' +
+      icon("star","ic-lg") +
+      '<div><b style="font-size:18px;display:block;">'+v.average.toFixed(1)+' / 5</b><span style="font-size:12px;color:var(--muted);">'+v.count+' '+(v.count===1?'отзыв':'отзывов')+'</span></div>' +
+    '</div>';
+    v.feedback.forEach(function(f){
+      body += '<div style="padding:10px 0;border-bottom:1px solid var(--line-2);">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
+          '<b style="font-size:13px;">'+escapeHtml(f.userName)+'</b>' +
+          '<span style="font-size:12.5px;color:var(--status-attention);">'+'★'.repeat(f.rating)+'<span style="color:var(--line-2);">'+'★'.repeat(5-f.rating)+'</span></span>' +
+        '</div>' +
+        (f.comment ? '<p style="font-size:13px;margin:0;color:var(--muted);">'+escapeHtml(f.comment)+'</p>' : '') +
+      '</div>';
+    });
+  }
+  body += '</div>';
+  return el('<div class="overlay" data-action="overlay-close-module-feedback-viewer"><div class="drawer" data-stop="1" style="width:min(480px,100%);">'+body+'</div></div>');
+}
+
 function renderTempPasswordModal(){
   var body = '<div class="drawer-head"><b style="font-size:16px;">Новый пароль создан</b><button class="btn btn-ghost btn-sm" data-action="close-temp-password">Закрыть ✕</button></div>' +
     '<div class="drawer-body">' +
@@ -908,6 +974,7 @@ function renderSidebar(){
     items += sidebarItem("protocols","doctor","Протоколы", snavKey==="protocols");
     if(isAdmin){
       items += sidebarItem("team","users","Команда", snavKey==="team");
+      items += sidebarItem("modules","clipboard","Модули", snavKey==="modules");
       items += sidebarItem("audit","list","Журнал", snavKey==="audit");
     }
     items += sidebarItem("chats","message","Чаты", snavKey==="chats", chatsBadge);
@@ -1292,8 +1359,30 @@ function resetLessonStageState(){
   studentState.lessonQuizAnswers = {};
   studentState.lessonQuizResult = null;
 }
+// Модуль, все уроки которого уже пройдены, но отзыв по нему ещё не оставлен —
+// именно отзыв (не тест) считается финальным шагом гейта, поэтому проверяем по
+// нему: так гейт переживает перезагрузку страницы (studentState не хранится на
+// сервере) и не пропускает шаг, если врач закрыл вкладку сразу после теста модуля.
+function findPendingModuleGate(){
+  var doneIds = (course.progress && course.progress.completed_lessons) || [];
+  var given = course.moduleFeedbackGiven || [];
+  return (course.modules||[]).find(function(m){
+    return m.lessonIds.length>0 &&
+      m.lessonIds.every(function(id){ return doneIds.indexOf(id)!==-1; }) &&
+      given.indexOf(m.id)===-1;
+  }) || null;
+}
+function resetModuleGateState(){
+  studentState.moduleGateStage = null;
+  studentState.moduleGateId = null;
+  studentState.moduleQuizResult = null;
+  studentState.moduleFeedbackRating = 0;
+  studentState.moduleFeedbackComment = "";
+}
 // Куда вести врача после "урок пройден" — на следующий незаблокированный урок,
 // либо на итоговый тест курса, либо (если и то, и другое недоступно) остаёмся на месте.
+// Если пройденный урок закрыл модуль — это подхватит renderCoursePlayer() сам
+// (см. findPendingModuleGate) на следующей отрисовке, отдельно решать тут не нужно.
 function advanceAfterLesson(){
   var nextIdx = -1;
   for(var i=studentState.lessonIndex+1;i<course.lessons.length;i++){
@@ -1306,6 +1395,17 @@ function advanceAfterLesson(){
 }
 
 function renderCoursePlayer(){
+  if(!studentState.moduleGateStage){
+    var pendingModule = findPendingModuleGate();
+    if(pendingModule){
+      studentState.moduleGateId = pendingModule.id;
+      studentState.moduleGateStage = (pendingModule.quiz && pendingModule.quiz.length) ? "quiz" : "feedback";
+      studentState.moduleQuizResult = null;
+      studentState.moduleFeedbackRating = 0;
+      studentState.moduleFeedbackComment = "";
+    }
+  }
+  if(studentState.moduleGateStage) return renderModuleGate();
   if(studentState.quizMode) return renderQuizOrCert();
   var idx = studentState.lessonIndex;
   var lesson = course.lessons[idx];
@@ -1431,6 +1531,61 @@ function renderLessonQuizStage(lesson){
     html += '</div>';
   });
   html += '<button class="btn btn-primary btn-block" type="submit">Завершить тест</button></form>';
+  return html;
+}
+
+// Гейт после последнего урока модуля: сначала итоговый тест по модулю (если у него
+// есть вопросы), потом мини-опрос — оба шага в одном "плеере", без сайдбара с
+// уроками (тот же приём, что и renderQuizOrCert для итогового теста курса).
+function renderModuleGate(){
+  var mod = (course.modules||[]).find(function(m){ return m.id===studentState.moduleGateId; });
+  if(!mod){ resetModuleGateState(); return renderCoursePlayer(); }
+  var body = '<div class="lesson-body">' +
+    (studentState.moduleGateStage==="quiz" ? renderModuleQuizStage(mod) : renderModuleFeedbackStage(mod)) +
+  '</div>';
+  return el('<div class="player" style="margin-top:6px;grid-template-columns:1fr;">'+body+'</div>');
+}
+
+function renderModuleQuizStage(mod){
+  var result = studentState.moduleQuizResult;
+  if(result){
+    return '<div class="empty-state" style="padding:40px 10px;">' +
+      '<div class="big">'+icon(result.score>=60?"badge":"star","ic-lg")+'</div>' +
+      '<b style="font-size:20px;display:block;margin-bottom:6px;">'+result.score+'%</b>' +
+      '<p style="color:var(--muted);">Итоговый тест модуля «'+escapeHtml(mod.title)+'» — для закрепления материала.</p>' +
+      '<button class="btn btn-primary" style="margin-top:14px;" data-action="module-gate-to-feedback">Далее → короткий отзыв</button>' +
+    '</div>';
+  }
+  var html = '<div class="meta" style="margin-bottom:2px;">Модуль «'+escapeHtml(mod.title)+'» пройден</div>' +
+    '<h3 style="margin-top:4px;">Итоговый тест модуля</h3>' +
+    '<div class="meta">'+mod.quiz.length+' вопросов</div>' +
+    '<form id="moduleQuizForm" data-module-id="'+mod.id+'">';
+  mod.quiz.forEach(function(q,qi){
+    html += '<div class="quiz-q"><p class="qtext">'+(qi+1)+'. '+escapeHtml(q.question)+'</p>';
+    q.options.forEach(function(opt,oi){
+      html += '<label class="opt"><input type="radio" name="'+q.id+'" value="'+oi+'" required> '+escapeHtml(opt)+'</label>';
+    });
+    html += '</div>';
+  });
+  html += '<button class="btn btn-primary btn-block" type="submit">Завершить тест</button></form>';
+  return html;
+}
+
+// Интерактивный мини-тест обратной связи — не текстовая форма, а клик по звёздам
+// (обязателен) + необязательный комментарий. Кнопка недоступна, пока не выбрана оценка.
+function renderModuleFeedbackStage(mod){
+  var rating = studentState.moduleFeedbackRating || 0;
+  var html = '<div class="meta" style="margin-bottom:2px;">Модуль «'+escapeHtml(mod.title)+'» пройден</div>' +
+    '<h3 style="margin-top:4px;">Как вам этот модуль?</h3>' +
+    '<p class="meta">Оцените и, если хотите, добавьте пару слов — куратор это увидит.</p>' +
+    '<div style="display:flex;gap:4px;margin:18px 0 14px;">';
+  for(var i=1;i<=5;i++){
+    html += '<button type="button" class="star-btn'+(i<=rating?' active':'')+'" data-action="set-module-feedback-rating" data-value="'+i+'" aria-label="'+i+' из 5">'+icon("star","ic-lg")+'</button>';
+  }
+  html += '</div>' +
+    '<textarea class="input" id="moduleFeedbackComment" style="height:80px;" placeholder="Комментарий необязателен">'+escapeHtml(studentState.moduleFeedbackComment||"")+'</textarea>' +
+    '<button class="btn btn-primary" style="margin-top:14px;" data-action="submit-module-feedback" data-module-id="'+mod.id+'"'+(rating?'':' disabled')+'>Отправить и продолжить</button>' +
+    (rating?'':'<p class="hint" style="margin-top:6px;">Выберите оценку, чтобы продолжить.</p>');
   return html;
 }
 
@@ -1902,6 +2057,8 @@ function renderStaffShell(){
     content.appendChild(renderDashboardTab());
   } else if(staffState.mainTab === "protocols"){
     content.appendChild(renderProtocolsAdminTab());
+  } else if(staffState.mainTab === "modules" && (me.role==="admin"||me.role==="super_admin")){
+    content.appendChild(renderModulesAdminTab());
   } else if(staffState.mainTab === "audit" && (me.role==="admin"||me.role==="super_admin")){
     content.appendChild(renderAuditLogTab());
   } else if(staffState.mainTab === "chats"){
@@ -3045,6 +3202,63 @@ function renderSpecializationsCard(){
   return html;
 }
 
+// Модули курса (admin/super_admin) — группировка уроков, у каждого модуля свой
+// итоговый тест (staffState.quizAdmin-подобный список, свой набор вопросов) и
+// свои отзывы врачей. Привязка урока к модулю — просто смена module_id урока,
+// поэтому «добавление» урока в один модуль автоматически убирает его из другого.
+function renderModulesAdminTab(){
+  var html = '<div class="card" style="padding:18px 20px;">' +
+    '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Модули курса</b>' +
+    '<p style="font-size:12.5px;color:var(--muted);margin:0 0 14px;">Группа уроков — например, 8 подряд. По прохождении всех уроков модуля врачу показывается итоговый тест модуля (если вы его добавили) и короткий обязательный отзыв.</p>' +
+    '<form id="moduleCreateForm" style="display:flex;gap:8px;">' +
+      '<input class="input" name="title" placeholder="Название модуля" required style="flex:1;">' +
+      '<button class="btn btn-sm btn-primary" type="submit">Добавить модуль</button>' +
+    '</form>' +
+  '</div>';
+
+  if(!moduleManagerState.modules.length){
+    html += '<div class="empty-state" style="padding:30px 10px;">Модулей пока нет — уроки идут одним общим списком, без гейта после них.</div>';
+  } else {
+    moduleManagerState.modules.forEach(function(m){
+      var lessonsInModule = moduleManagerState.allLessons.filter(function(l){ return l.moduleId===m.id; });
+      var availableLessons = moduleManagerState.allLessons.filter(function(l){ return l.moduleId!==m.id; });
+      var avgLabel = m.feedback.average!==null ? ' · ★'+m.feedback.average.toFixed(1) : '';
+      html += '<div class="card" style="padding:14px 16px;margin-top:12px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">' +
+          '<b style="font-size:13.5px;">'+escapeHtml(m.title)+'</b>' +
+          '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+            '<button class="btn btn-sm btn-ghost" data-action="open-module-quiz-manager" data-id="'+m.id+'" data-title="'+escapeHtml(m.title)+'">Тест ('+m.quizCount+')</button>' +
+            '<button class="btn btn-sm btn-ghost" data-action="open-module-feedback-viewer" data-id="'+m.id+'" data-title="'+escapeHtml(m.title)+'">Отзывы ('+m.feedback.count+avgLabel+')</button>' +
+            '<button class="btn btn-sm btn-ghost" data-action="rename-module" data-id="'+m.id+'" data-title="'+escapeHtml(m.title)+'" title="Переименовать">'+icon("gear","ic-sm")+'</button>' +
+            '<button class="btn btn-sm btn-ghost" data-action="delete-module" data-id="'+m.id+'" data-title="'+escapeHtml(m.title)+'" title="Удалить">'+icon("trash","ic-sm")+'</button>' +
+          '</div>' +
+        '</div>';
+      if(!lessonsInModule.length){
+        html += '<p class="hint" style="margin:0 0 8px;">В модуле пока нет уроков.</p>';
+      } else {
+        html += '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px;">';
+        lessonsInModule.forEach(function(l){
+          html += '<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;padding:4px 0;border-bottom:1px solid var(--line-2);">' +
+            '<span style="flex:1;">'+escapeHtml(l.title)+'</span>' +
+            '<button class="btn btn-sm btn-ghost" data-action="unassign-module-lesson" data-id="'+l.id+'" title="Убрать из модуля">'+icon("trash","ic-sm")+'</button>' +
+          '</div>';
+        });
+        html += '</div>';
+      }
+      if(availableLessons.length){
+        html += '<div style="display:flex;gap:8px;align-items:center;">' +
+          '<select class="input" id="addLessonSelect-'+m.id+'" style="flex:1;">' +
+            availableLessons.map(function(l){ return '<option value="'+l.id+'">'+escapeHtml(l.title)+(l.moduleId?' (сейчас в другом модуле)':'')+'</option>'; }).join('') +
+          '</select>' +
+          '<button type="button" class="btn btn-sm btn-ghost" data-action="assign-module-lesson" data-module-id="'+m.id+'">Добавить урок</button>' +
+        '</div>';
+      }
+      html += '</div>';
+    });
+  }
+  return el('<div>'+html+'</div>');
+}
+
 function renderProtocolsAdminTab(){
   var isProtocolAdmin = me.role==="admin" || me.role==="super_admin";
   var html = isProtocolAdmin ? renderSpecializationsCard() : '';
@@ -3554,6 +3768,32 @@ function wireEvents(root){
       advanceAfterLesson();
       render(); return;
     }
+    if(action==="module-gate-to-feedback"){
+      studentState.moduleGateStage="feedback"; studentState.moduleQuizResult=null; render(); return;
+    }
+    if(action==="set-module-feedback-rating"){
+      studentState.moduleFeedbackRating = parseInt(t.getAttribute("data-value"),10); render(); return;
+    }
+    if(action==="submit-module-feedback"){
+      var mfModuleId = t.getAttribute("data-module-id");
+      var mfComment = document.getElementById("moduleFeedbackComment");
+      studentState.moduleFeedbackComment = mfComment ? mfComment.value : "";
+      if(!studentState.moduleFeedbackRating){ showToast("Выберите оценку"); return; }
+      if(!previewMode){
+        try{
+          await api("/course/modules/"+mfModuleId+"/feedback", { method:"POST", body: JSON.stringify({
+            rating: studentState.moduleFeedbackRating, comment: studentState.moduleFeedbackComment
+          }) });
+        }catch(err){ showToast(err.message); return; }
+      }
+      if(!course.moduleFeedbackGiven) course.moduleFeedbackGiven=[];
+      if(course.moduleFeedbackGiven.indexOf(mfModuleId)===-1) course.moduleFeedbackGiven.push(mfModuleId);
+      resetModuleGateState();
+      // lessonIndex/quizMode уже стоят на следующем шаге — их выставил
+      // advanceAfterLesson() ДО того, как renderCoursePlayer показал этот гейт
+      // (см. findPendingModuleGate); здесь просто убираем гейт с дороги.
+      render(); return;
+    }
     if(action==="request-full"){
       if(previewMode){ showToast("Режим просмотра — заявки не отправляются"); return; }
       t.disabled=true;
@@ -3835,11 +4075,11 @@ function wireEvents(root){
     if(action==="open-quiz-editor"){
       var q=staffState.quizAdmin.find(function(x){ return x.id===t.getAttribute("data-id"); });
       if(!q) return;
-      quizEditor = { open:true, isNew:false, id:q.id, question:q.question, options:q.options.slice(), correct:q.correct, lessonId:null };
+      quizEditor = { open:true, isNew:false, id:q.id, question:q.question, options:q.options.slice(), correct:q.correct, lessonId:null, moduleId:null };
       render(); return;
     }
     if(action==="open-quiz-creator"){
-      quizEditor = { open:true, isNew:true, id:null, question:"", options:["",""], correct:0, lessonId:null };
+      quizEditor = { open:true, isNew:true, id:null, question:"", options:["",""], correct:0, lessonId:null, moduleId:null };
       render(); return;
     }
     if(action==="close-quiz-editor"){ quizEditor.open=false; render(); return; }
@@ -3854,6 +4094,10 @@ function wireEvents(root){
         if(lessonQuizManager.open){
           var lqd=await api("/course/lessons/"+lessonQuizManager.lessonId+"/quiz-admin");
           lessonQuizManager.questions=lqd.quiz;
+        } else if(moduleQuizManager.open){
+          var mqd=await api("/course/modules/"+moduleQuizManager.moduleId+"/quiz-admin");
+          moduleQuizManager.questions=mqd.quiz;
+          await loadStaffData(); // обновить счётчик вопросов у карточки модуля
         } else {
           await loadStaffData();
         }
@@ -3907,13 +4151,13 @@ function wireEvents(root){
     if(action==="close-lesson-quiz-manager"){ lessonQuizManager.open=false; render(); return; }
     if(action==="overlay-close-lesson-quiz-manager" && !e.target.closest("[data-stop]")){ lessonQuizManager.open=false; render(); return; }
     if(action==="open-lesson-quiz-creator"){
-      quizEditor = { open:true, isNew:true, id:null, question:"", options:["",""], correct:0, lessonId:lessonQuizManager.lessonId };
+      quizEditor = { open:true, isNew:true, id:null, question:"", options:["",""], correct:0, lessonId:lessonQuizManager.lessonId, moduleId:null };
       render(); return;
     }
     if(action==="open-lesson-quiz-editor"){
       var lq=lessonQuizManager.questions.find(function(x){ return x.id===t.getAttribute("data-id"); });
       if(!lq) return;
-      quizEditor = { open:true, isNew:false, id:lq.id, question:lq.question, options:lq.options.slice(), correct:lq.correct, lessonId:lessonQuizManager.lessonId };
+      quizEditor = { open:true, isNew:false, id:lq.id, question:lq.question, options:lq.options.slice(), correct:lq.correct, lessonId:lessonQuizManager.lessonId, moduleId:null };
       render(); return;
     }
     if(action==="move-lesson-quiz-question"){
@@ -3928,6 +4172,79 @@ function wireEvents(root){
       }catch(err){ showToast(err.message); }
       render(); return;
     }
+
+    /* ---------- Модули курса ---------- */
+    if(action==="rename-module"){
+      var rmTitle = prompt("Новое название модуля:", t.getAttribute("data-title"));
+      if(!rmTitle || !rmTitle.trim()) return;
+      try{
+        await api("/course/modules/"+t.getAttribute("data-id"), { method:"PUT", body: JSON.stringify({ title: rmTitle.trim() }) });
+        await loadStaffData();
+        showToast("Модуль переименован");
+      }catch(err){ showToast(err.message); }
+      render(); return;
+    }
+    if(action==="delete-module"){
+      if(!confirm('Удалить модуль «'+t.getAttribute("data-title")+'»? Уроки останутся, но перестанут быть в модуле — тест и отзывы модуля удалятся.')) return;
+      try{ await api("/course/modules/"+t.getAttribute("data-id"), { method:"DELETE" }); await loadStaffData(); showToast("Модуль удалён"); }
+      catch(err){ showToast(err.message); }
+      render(); return;
+    }
+    if(action==="assign-module-lesson"){
+      var amModuleId=t.getAttribute("data-module-id");
+      var amSelect=document.getElementById("addLessonSelect-"+amModuleId);
+      if(!amSelect || !amSelect.value) return;
+      try{ await api("/course/lessons/"+amSelect.value+"/module", { method:"PUT", body: JSON.stringify({ moduleId: amModuleId }) }); await loadStaffData(); showToast("Урок добавлен в модуль"); }
+      catch(err){ showToast(err.message); }
+      render(); return;
+    }
+    if(action==="unassign-module-lesson"){
+      try{ await api("/course/lessons/"+t.getAttribute("data-id")+"/module", { method:"PUT", body: JSON.stringify({ moduleId: null }) }); await loadStaffData(); showToast("Урок убран из модуля"); }
+      catch(err){ showToast(err.message); }
+      render(); return;
+    }
+    if(action==="open-module-quiz-manager"){
+      moduleQuizManager = { open:true, moduleId:t.getAttribute("data-id"), moduleTitle:t.getAttribute("data-title"), questions:[] };
+      render();
+      try{ var mqm=await api("/course/modules/"+moduleQuizManager.moduleId+"/quiz-admin"); moduleQuizManager.questions=mqm.quiz; }
+      catch(err){ showToast(err.message); }
+      render(); return;
+    }
+    if(action==="close-module-quiz-manager"){ moduleQuizManager.open=false; render(); return; }
+    if(action==="overlay-close-module-quiz-manager" && !e.target.closest("[data-stop]")){ moduleQuizManager.open=false; render(); return; }
+    if(action==="open-module-quiz-creator"){
+      quizEditor = { open:true, isNew:true, id:null, question:"", options:["",""], correct:0, lessonId:null, moduleId:moduleQuizManager.moduleId };
+      render(); return;
+    }
+    if(action==="open-module-quiz-editor"){
+      var mq=moduleQuizManager.questions.find(function(x){ return x.id===t.getAttribute("data-id"); });
+      if(!mq) return;
+      quizEditor = { open:true, isNew:false, id:mq.id, question:mq.question, options:mq.options.slice(), correct:mq.correct, lessonId:null, moduleId:moduleQuizManager.moduleId };
+      render(); return;
+    }
+    if(action==="move-module-quiz-question"){
+      var mmIdx=parseInt(t.getAttribute("data-idx"),10); var mmDir=t.getAttribute("data-dir");
+      var mmIds=moduleQuizManager.questions.map(function(x){ return x.id; });
+      var mmSwap = mmDir==="up" ? mmIdx-1 : mmIdx+1;
+      if(mmSwap<0 || mmSwap>=mmIds.length) return;
+      var tmpm=mmIds[mmIdx]; mmIds[mmIdx]=mmIds[mmSwap]; mmIds[mmSwap]=tmpm;
+      try{
+        await api("/course/modules/"+moduleQuizManager.moduleId+"/quiz-admin/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: mmIds }) });
+        var mmd=await api("/course/modules/"+moduleQuizManager.moduleId+"/quiz-admin"); moduleQuizManager.questions=mmd.quiz;
+      }catch(err){ showToast(err.message); }
+      render(); return;
+    }
+    if(action==="open-module-feedback-viewer"){
+      moduleFeedbackViewer = { open:true, moduleId:t.getAttribute("data-id"), moduleTitle:t.getAttribute("data-title"), feedback:[], average:null, count:0 };
+      render();
+      try{
+        var mfv=await api("/course/modules/"+moduleFeedbackViewer.moduleId+"/feedback");
+        moduleFeedbackViewer.feedback=mfv.feedback; moduleFeedbackViewer.average=mfv.average; moduleFeedbackViewer.count=mfv.count;
+      }catch(err){ showToast(err.message); }
+      render(); return;
+    }
+    if(action==="close-module-feedback-viewer"){ moduleFeedbackViewer.open=false; render(); return; }
+    if(action==="overlay-close-module-feedback-viewer" && !e.target.closest("[data-stop]")){ moduleFeedbackViewer.open=false; render(); return; }
 
     /* ---------- Протоколы ---------- */
     if(action==="open-protocol-creator"){
@@ -4349,9 +4666,12 @@ function wireEvents(root){
       var opts=quizEditor.options.map(function(_,i){ return fdqe.get("opt"+i); });
       var correctVal=parseInt(fdqe.get("correct"),10);
       var isLessonQuiz = !!quizEditor.lessonId;
+      var isModuleQuiz = !!quizEditor.moduleId;
       try{
         if(quizEditor.isNew){
-          var createUrl = isLessonQuiz ? "/course/lessons/"+quizEditor.lessonId+"/quiz-admin" : "/course/quiz-admin";
+          var createUrl = isLessonQuiz ? "/course/lessons/"+quizEditor.lessonId+"/quiz-admin"
+            : isModuleQuiz ? "/course/modules/"+quizEditor.moduleId+"/quiz-admin"
+            : "/course/quiz-admin";
           await api(createUrl, { method:"POST", body: JSON.stringify({ question:fdqe.get("question"), options:opts, correct:correctVal }) });
           quizEditor.open=false; showToast("Вопрос добавлен");
         } else {
@@ -4362,6 +4682,9 @@ function wireEvents(root){
         }
         if(isLessonQuiz){
           var lqRefresh=await api("/course/lessons/"+quizEditor.lessonId+"/quiz-admin"); lessonQuizManager.questions=lqRefresh.quiz;
+        } else if(isModuleQuiz){
+          var mqRefresh=await api("/course/modules/"+quizEditor.moduleId+"/quiz-admin"); moduleQuizManager.questions=mqRefresh.quiz;
+          await loadStaffData(); // обновить счётчик вопросов у карточки модуля
         } else {
           await loadStaffData();
         }
@@ -4425,6 +4748,17 @@ function wireEvents(root){
         showToast("Специализация добавлена");
       }catch(err){ showToast(err.message); }
       btnSc.disabled=false; render(); return;
+    }
+    if(e.target.id==="moduleCreateForm"){
+      e.preventDefault();
+      var fdmc=new FormData(e.target);
+      var btnMc=e.target.querySelector("button[type=submit]"); btnMc.disabled=true;
+      try{
+        await api("/course/modules", { method:"POST", body: JSON.stringify({ title:fdmc.get("title") }) });
+        await loadStaffData();
+        showToast("Модуль добавлен");
+      }catch(err){ showToast(err.message); }
+      btnMc.disabled=false; render(); return;
     }
     if(e.target.id==="changePasswordForm"){
       e.preventDefault();
@@ -4515,6 +4849,22 @@ function wireEvents(root){
         course.progress.lesson_quiz_scores[lqLessonId]=rlq.score;
         studentState.lessonQuizResult = { score: rlq.score };
       }catch(err){ showToast(err.message); btnlq.disabled=false; btnlq.textContent="Завершить тест"; return; }
+      render(); return;
+    }
+    if(e.target.id==="moduleQuizForm"){
+      e.preventDefault();
+      var mqModuleId = e.target.getAttribute("data-module-id");
+      var mqModule = (course.modules||[]).find(function(m){ return m.id===mqModuleId; });
+      var fdmq=new FormData(e.target); var mqAnswers={};
+      (mqModule.quiz||[]).forEach(function(q){ mqAnswers[q.id]=parseInt(fdmq.get(q.id),10); });
+      var btnmq=e.target.querySelector("button[type=submit]"); btnmq.disabled=true; btnmq.textContent="Считаем результат…";
+      if(previewMode){ studentState.moduleQuizResult={ score:100 }; render(); return; }
+      try{
+        var rmq = await api("/course/modules/"+mqModuleId+"/quiz-submit", { method:"POST", body: JSON.stringify({ answers: mqAnswers }) });
+        if(!course.progress.module_quiz_scores) course.progress.module_quiz_scores={};
+        course.progress.module_quiz_scores[mqModuleId]=rmq.score;
+        studentState.moduleQuizResult = { score: rmq.score };
+      }catch(err){ showToast(err.message); btnmq.disabled=false; btnmq.textContent="Завершить тест"; return; }
       render(); return;
     }
     if(e.target.id==="inviteStudentForm"){
