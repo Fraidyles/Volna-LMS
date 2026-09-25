@@ -1,4 +1,5 @@
 const request = require("supertest");
+const crypto = require("crypto");
 const { app, pool, seedCourse, createUser, loginAs } = require("./helpers");
 
 let course;
@@ -569,6 +570,125 @@ describe("Курс врача", () => {
       const res = await request(app).post("/api/course/lessons").set("Cookie", cookie)
         .send({ title: "x", duration: "1 мин", html: "<p>x</p>" });
       expect(res.status).toBe(403);
+    });
+  });
+
+  describe("Видео с таймкодами и поурочный тест", () => {
+    // Не через POST /course/lessons: та ручка создаёт урок в "первом попавшемся"
+    // курсе (SELECT ... LIMIT 1 без ORDER BY, см. её реализацию) — при параллельном
+    // запуске нескольких тестовых файлов, каждый из которых сам сеет свой курс,
+    // это может оказаться не тем course.courseId, что использован в этом файле.
+    // Вставляем урок напрямую в ИМЕННО этот курс, как и seedCourse() в helpers.js.
+    async function makeLesson() {
+      const id = "lesson-video-" + crypto.randomUUID().slice(0, 8);
+      await pool.query(
+        "INSERT INTO lessons (id, course_id, idx, title, duration, html) VALUES ($1,$2,$3,$4,$5,$6)",
+        [id, course.courseId, 99, "Урок с видео", "10 мин", "<p>Интро</p>"]
+      );
+      return id;
+    }
+
+    test("админ сохраняет видео и главы, врач видит их в GET /course", async () => {
+      const admin = await createUser({ role: "admin" });
+      const adminCookie = await loginAs(admin);
+      const lessonId = await makeLesson();
+
+      const videoRes = await request(app).put(`/api/course/lessons/${lessonId}/video`).set("Cookie", adminCookie).send({
+        videoUrl: "https://example.com/video.mp4",
+        timecodes: [
+          { time: 30, title: "Введение", summary: "<p>О чём урок</p>" },
+          { time: 5, title: "Приветствие" }
+        ]
+      });
+      expect(videoRes.status).toBe(200);
+      expect(videoRes.body.timecodes.length).toBe(2);
+      expect(videoRes.body.timecodes[0].time).toBe(5); // отсортированы по времени
+
+      const student = await createUser({ role: "student", courseId: course.courseId });
+      const cookie = await loginAs(student);
+      const courseRes = await request(app).get("/api/course").set("Cookie", cookie);
+      const lessonOut = courseRes.body.lessons.find((l) => l.id === lessonId);
+      expect(lessonOut.videoUrl).toBe("https://example.com/video.mp4");
+      expect(lessonOut.videoTimecodes.length).toBe(2);
+      expect(lessonOut.videoTimecodes[0].title).toBe("Приветствие");
+    });
+
+    test("глава без времени или названия отклоняется (400)", async () => {
+      const admin = await createUser({ role: "admin" });
+      const adminCookie = await loginAs(admin);
+      const lessonId = await makeLesson();
+      const res = await request(app).put(`/api/course/lessons/${lessonId}/video`).set("Cookie", adminCookie).send({
+        timecodes: [{ time: 10 }]
+      });
+      expect(res.status).toBe(400);
+    });
+
+    test("админ создаёт поурочный тест, он не попадает в итоговый тест курса", async () => {
+      const admin = await createUser({ role: "admin" });
+      const adminCookie = await loginAs(admin);
+      const lessonId = await makeLesson();
+
+      const qRes = await request(app).post(`/api/course/lessons/${lessonId}/quiz-admin`).set("Cookie", adminCookie)
+        .send({ question: "Сколько будет 2+2?", options: ["3", "4", "5"], correct: 1 });
+      expect(qRes.status).toBe(200);
+
+      const finalQuizRes = await request(app).get("/api/course/quiz-admin").set("Cookie", adminCookie);
+      expect(finalQuizRes.body.quiz.some((q) => q.id === qRes.body.id)).toBe(false);
+
+      const lessonQuizRes = await request(app).get(`/api/course/lessons/${lessonId}/quiz-admin`).set("Cookie", adminCookie);
+      expect(lessonQuizRes.body.quiz.length).toBe(1);
+      expect(lessonQuizRes.body.quiz[0].correct).toBe(1);
+    });
+
+    test("врач проходит поурочный тест — считается балл, урок помечается пройденным, очки растут", async () => {
+      const admin = await createUser({ role: "admin" });
+      const adminCookie = await loginAs(admin);
+      const lessonId = await makeLesson();
+      const q1 = await request(app).post(`/api/course/lessons/${lessonId}/quiz-admin`).set("Cookie", adminCookie)
+        .send({ question: "В1", options: ["a", "b"], correct: 0 });
+      const q2 = await request(app).post(`/api/course/lessons/${lessonId}/quiz-admin`).set("Cookie", adminCookie)
+        .send({ question: "В2", options: ["a", "b"], correct: 1 });
+
+      const student = await createUser({ role: "student", courseId: course.courseId });
+      const cookie = await loginAs(student);
+
+      const answers = {}; answers[q1.body.id] = 0; answers[q2.body.id] = 0; // второй ответ неверный
+      const submitRes = await request(app).post(`/api/course/lessons/${lessonId}/quiz-submit`).set("Cookie", cookie)
+        .send({ answers });
+      expect(submitRes.status).toBe(200);
+      expect(submitRes.body.score).toBe(50);
+      expect(submitRes.body.completedLessons).toContain(lessonId);
+
+      const courseRes = await request(app).get("/api/course").set("Cookie", cookie);
+      expect(courseRes.body.progress.lesson_quiz_scores[lessonId]).toBe(50);
+    });
+
+    test("тест несуществующего/чужого урока — 404, тест урока без вопросов — 404", async () => {
+      const admin = await createUser({ role: "admin" });
+      const adminCookie = await loginAs(admin);
+      const lessonId = await makeLesson();
+
+      const student = await createUser({ role: "student", courseId: course.courseId });
+      const cookie = await loginAs(student);
+
+      const noSuchLesson = await request(app).post("/api/course/lessons/no-such-id/quiz-submit").set("Cookie", cookie).send({ answers: {} });
+      expect(noSuchLesson.status).toBe(404);
+
+      const noQuiz = await request(app).post(`/api/course/lessons/${lessonId}/quiz-submit`).set("Cookie", cookie).send({ answers: {} });
+      expect(noQuiz.status).toBe(404);
+      expect(noQuiz.body.error).toBe("no_quiz");
+    });
+
+    test("последний вопрос поурочного теста удалить нельзя", async () => {
+      const admin = await createUser({ role: "admin" });
+      const adminCookie = await loginAs(admin);
+      const lessonId = await makeLesson();
+      const q1 = await request(app).post(`/api/course/lessons/${lessonId}/quiz-admin`).set("Cookie", adminCookie)
+        .send({ question: "В1", options: ["a", "b"], correct: 0 });
+
+      const res = await request(app).delete(`/api/course/quiz-admin/${q1.body.id}`).set("Cookie", adminCookie);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe("last_question");
     });
   });
 });

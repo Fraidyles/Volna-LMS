@@ -83,8 +83,8 @@ const HANDLERS = {
   "student.profile_update": async (log) => {
     const b = requireBefore(log);
     await pool.query(
-      "UPDATE users SET name=$1, phone=$2, workplace=$3, specialization=$4 WHERE id=$5",
-      [b.name, b.phone, b.workplace, b.specialization, log.target_id]
+      "UPDATE users SET name=$1, phone=$2, workplace=$3, specialization=$4, specialization_id=$5 WHERE id=$6",
+      [b.name, b.phone, b.workplace, b.specialization, b.specialization_id || null, log.target_id]
     );
   },
   "content.lesson_created": async (log) => {
@@ -95,8 +95,9 @@ const HANDLERS = {
     const course = await pool.query("SELECT id FROM courses LIMIT 1");
     if (!course.rowCount) throw new Error("Курс не найден");
     await pool.query(
-      "INSERT INTO lessons (id, course_id, idx, title, duration, html, drip_days) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-      [log.target_id, course.rows[0].id, b.idx, b.title, b.duration, b.html, b.dripDays]
+      "INSERT INTO lessons (id, course_id, idx, title, duration, html, drip_days, video_url, video_timecodes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+      [log.target_id, course.rows[0].id, b.idx, b.title, b.duration, b.html, b.dripDays,
+        b.videoUrl || null, JSON.stringify(b.videoTimecodes || [])]
     );
   },
   "content.quiz_created": async (log) => {

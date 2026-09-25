@@ -19,8 +19,10 @@ function assignableRoleOptions(actingRole){
 /* ============================= СОСТОЯНИЕ ============================= */
 var me = null;                 // текущий пользователь {id,email,name,role,...}
 var view = "loading";
+var specializationsList = [];  // справочник специализаций — грузится один раз при старте (нужен и до входа, на форме регистрации)
 var course = null;             // {course, lessons, quiz, progress} — для врача
-var studentState = { tab:"course", navKey:"course", lessonIndex:0, quizMode:false, quizSubmitted:false, messagesSubTab:"curator", materialsSearch:"", materialsFilter:"all", materialsAutoFocus:false };
+var studentState = { tab:"course", navKey:"course", lessonIndex:0, quizMode:false, quizSubmitted:false, messagesSubTab:"curator", materialsSearch:"", materialsFilter:"all", materialsAutoFocus:false,
+  lessonStage:"intro", videoEnded:false, lessonQuizAnswers:{}, lessonQuizResult:null, protocolsLoaded:false };
 var staffState = { mainTab:"home", navKey:"home", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],unanswered:[],pendingCertificates:[]}, digest:null, chatTemplates:[] };
 // Открытый выпадающий список шаблонов над конкретным полем ввода (id textarea) —
 // null, если ни один не открыт. Редактор — отдельная мини-форма добавления/правки
@@ -35,6 +37,9 @@ var streamChat = { open:false, streamId:null, streamName:"" };
 var notifState = { items:[], unreadCount:0 };
 var mySessionsList = [];
 var mySessionsLoaded = false;
+var studentProtocols = { forYou:[], additional:[] };
+var protocolExpanded = {}; // id протокола -> открыта ли карточка гайда
+var protocolGuideTab = {}; // id протокола -> id специализации выбранного гайда (переключатель "показать другие")
 var notifPollTimer = null;
 var courseVisibility = {}; // {lessonId|"quiz": [uid,...]} — для вкладки «Материалы» у персонала
 var directory = []; // все сотрудники (admin+curator+super_admin) — для фильтра/назначения куратора
@@ -71,7 +76,15 @@ var previewMode = false;
 var previewReturnTab = "students";
 var tempPasswordResult = null; // {name, tempPassword} — показать один раз после сброса пароля
 var lessonEditor = { open:false, isNew:false, id:null, title:"", duration:"", html:"", dripDays:null, hasDraft:false, publishedTitle:"", publishedDuration:"", publishedHtml:"", history:[], showHistory:false, showPreview:false };
-var quizEditor = { open:false, isNew:false, id:null, question:"", options:[], correct:0 };
+var quizEditor = { open:false, isNew:false, id:null, question:"", options:[], correct:0, lessonId:null };
+// Видео с главами-таймкодами у конкретного урока (отдельно от WYSIWYG-содержимого урока).
+var videoEditor = { open:false, lessonId:null, lessonTitle:"", videoUrl:"", timecodes:[] };
+// Поурочный «развлекательный» тест — свой список вопросов на каждый урок,
+// отдельно от staffState.quizAdmin (это только итоговый тест курса).
+var lessonQuizManager = { open:false, lessonId:null, lessonTitle:"", questions:[] };
+var adminProtocolsState = { list:[] };
+var protocolEditor = { open:false, id:null, title:"", summary:"", guides:[], lessonIds:[] };
+var specializationEditor = { open:false, id:null, name:"" }; // редактирование названия специализации (создание — отдельной мини-формой на странице)
 
 function pad2(n){ return (n<10?"0":"")+n; }
 function isoDate(d){ return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); }
@@ -148,6 +161,7 @@ function magnet(kind, label){
 }
 function fmtDate(iso){ if(!iso) return "—"; try{ return new Date(iso).toLocaleDateString("ru-RU",{day:"numeric",month:"short",year:"numeric"}); }catch(e){ return "—"; } }
 function fmtTime(iso){ if(!iso) return ""; try{ return new Date(iso).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}); }catch(e){ return ""; } }
+function fmtTimecode(sec){ sec=Math.max(0,Math.round(sec||0)); var m=Math.floor(sec/60), s=sec%60; return m+":"+(s<10?"0":"")+s; }
 function ruPluralClient(n, one, few, many){
   var mod100 = n % 100, mod10 = n % 10;
   if(mod100>=11 && mod100<=14) return many;
@@ -202,6 +216,7 @@ async function api(path, opts){
 async function init(){
   var refParam = new URLSearchParams(window.location.search).get("ref");
   if(refParam) sessionStorage.setItem("lms-ref-code", refParam);
+  try{ var specData = await api("/specializations"); specializationsList = specData.specializations; }catch(e){}
   try{
     var data = await api("/auth/me");
     me = data.user;
@@ -261,6 +276,14 @@ async function loadNotifications(){
 }
 // «Мой профиль» → «Текущие сеансы» — грузится лениво, только когда открыли эту
 // страницу, а не при каждом входе (в отличие от чатов/уведомлений, это не бейдж).
+// «Ваши протоколы» — грузится лениво при первом заходе на страницу, а не при
+// каждом входе (в отличие от чатов/уведомлений, тут нет бейджа, который нужно
+// держать актуальным постоянно).
+async function loadProtocols(){
+  try{ var d = await api("/course/protocols"); studentProtocols = { forYou:d.forYou, additional:d.additional }; }
+  catch(e){ studentProtocols = { forYou:[], additional:[] }; }
+  studentState.protocolsLoaded = true;
+}
 async function loadMySessions(){
   try{ var d = await api("/auth/sessions"); mySessionsList = d.sessions; }
   catch(e){ mySessionsList = []; }
@@ -339,6 +362,10 @@ async function loadStaffData(){
       var qa = await api("/course/quiz-admin");
       staffState.quizAdmin = qa.quiz;
     }catch(e){}
+    try{
+      var pr = await api("/protocols");
+      adminProtocolsState.list = pr.protocols;
+    }catch(e){}
     await loadAuditLog();
     try{
       var acts = await api("/staff/audit-log/actions");
@@ -412,10 +439,58 @@ function render(){
   if(lessonEditor.open && view==="staff"){
     app.appendChild(renderLessonEditorModal());
   }
+  if(videoEditor.open && view==="staff"){
+    app.appendChild(renderVideoEditorModal());
+  }
+  if(lessonQuizManager.open && view==="staff"){
+    app.appendChild(renderLessonQuizManagerDrawer());
+  }
+  if(protocolEditor.open && view==="staff"){
+    app.appendChild(renderProtocolEditorModal());
+  }
+  if(specializationEditor.open && view==="staff"){
+    app.appendChild(renderSpecializationEditorModal());
+  }
+  // quizEditor открывается поверх других модалок (и как редактор итогового теста,
+  // и как редактор поурочного — см. lessonQuizManager) — поэтому монтируется последним,
+  // чтобы его оверлей всегда оказывался сверху и не перекрывался открывшей его модалкой.
   if(quizEditor.open && view==="staff"){
     app.appendChild(renderQuizEditorModal());
   }
   wireEvents(app);
+  if(view==="student" && studentState.tab==="lesson" && !studentState.quizMode && studentState.lessonStage==="video"){
+    setTimeout(wireLessonVideo, 0);
+  }
+}
+
+// Подсветка текущей главы под видео обновляется через timeupdate БЕЗ полного
+// render() на каждый тик (десятки раз в секунду) — иначе моргало бы видео и
+// сбивался прогресс воспроизведения. render() дёргаем только на реальных
+// переходах состояния (глава сменилась, видео закончилось).
+function wireLessonVideo(){
+  var v = document.getElementById("lessonVideoPlayer");
+  if(!v || !course) return;
+  var lesson = course.lessons[studentState.lessonIndex];
+  if(!lesson) return;
+  var tcs = lesson.videoTimecodes||[];
+  var lastChapterId = null;
+  function updateChapter(){
+    var t = v.currentTime;
+    var current = null;
+    tcs.forEach(function(tc){ if(t>=tc.time) current=tc; });
+    if(current && current.id===lastChapterId) return;
+    lastChapterId = current ? current.id : null;
+    var panel = document.getElementById("lessonChapterSummary");
+    if(panel) panel.innerHTML = current ? (current.summary||'') : '';
+    document.querySelectorAll(".chapter-item").forEach(function(el){
+      el.classList.toggle("active", !!current && el.getAttribute("data-chapter-id")===current.id);
+    });
+  }
+  v.addEventListener("timeupdate", updateChapter);
+  v.addEventListener("ended", function(){
+    if(!studentState.videoEnded){ studentState.videoEnded=true; render(); }
+  });
+  updateChapter();
 }
 
 // Рукописный WYSIWYG на contenteditable + document.execCommand — сознательно без внешних
@@ -512,6 +587,78 @@ function renderQuizEditorModal(){
   return el('<div class="overlay" data-action="overlay-close-quiz-editor"><div class="drawer" data-stop="1" style="width:min(520px,100%);">'+body+'</div></div>');
 }
 
+function parseTimecodeInput(str){
+  str = (str||"").trim();
+  if(/^\d+:\d{1,2}$/.test(str)){ var parts=str.split(":"); return parseInt(parts[0],10)*60+parseInt(parts[1],10); }
+  var n = parseInt(str,10);
+  return isNaN(n) ? 0 : n;
+}
+// Перед add/remove главы синхронизируем то, что уже введено в открытых полях,
+// обратно в состояние — иначе перерисовка стёрла бы несохранённый ввод (то же,
+// что и с вариантами ответа в renderQuizEditorModal).
+function syncVideoEditorFromDom(){
+  var frm = document.getElementById("videoEditorForm");
+  if(!frm) return;
+  videoEditor.videoUrl = frm.videoUrl.value;
+  videoEditor.timecodes = videoEditor.timecodes.map(function(tc,i){
+    var timeField = frm["time_"+i], titleField = frm["title_"+i], summaryField = frm["summary_"+i];
+    return {
+      id: tc.id,
+      time: timeField ? parseTimecodeInput(timeField.value) : tc.time,
+      title: titleField ? titleField.value : tc.title,
+      summary: summaryField ? summaryField.value : tc.summary
+    };
+  });
+}
+
+function renderVideoEditorModal(){
+  var body = '<div class="drawer-head"><b style="font-size:16px;">Видео урока «'+escapeHtml(videoEditor.lessonTitle)+'»</b><button class="btn btn-ghost btn-sm" data-action="close-video-editor">Закрыть ✕</button></div>' +
+    '<div class="drawer-body"><form id="videoEditorForm">' +
+      '<div class="field"><label>Ссылка на видео <span style="font-weight:400;color:var(--muted-2);">(прямой URL на mp4-файл)</span></label><input class="input" name="videoUrl" value="'+escapeHtml(videoEditor.videoUrl||"")+'" placeholder="https://…/video.mp4"></div>' +
+      '<label>Главы по таймкодам <span style="font-weight:400;color:var(--muted-2);">(необязательно — под видео появится сводка по текущей главе)</span></label>';
+  videoEditor.timecodes.forEach(function(tc,i){
+    body += '<div class="card" style="padding:12px 14px;margin-bottom:10px;">' +
+      '<div style="display:flex;gap:8px;margin-bottom:8px;">' +
+        '<input class="input" style="max-width:90px;" name="time_'+i+'" value="'+escapeHtml(typeof tc.time==="number"?fmtTimecode(tc.time):(tc.time||""))+'" placeholder="мм:сс">' +
+        '<input class="input" style="flex:1;" name="title_'+i+'" value="'+escapeHtml(tc.title||"")+'" placeholder="Тема главы" required>' +
+        '<button type="button" class="btn btn-sm btn-ghost" data-action="remove-video-timecode" data-idx="'+i+'" title="Удалить главу">✕</button>' +
+      '</div>' +
+      '<textarea class="input" name="summary_'+i+'" style="height:56px;font-size:13px;" placeholder="Краткая сводка по теме (покажется под видео)">'+escapeHtml(tc.summary||"")+'</textarea>' +
+    '</div>';
+  });
+  body += '<button type="button" class="btn btn-sm btn-ghost" style="margin-bottom:14px;" data-action="add-video-timecode">+ Добавить главу</button>' +
+      '<div class="err-text" id="videoEditorError" style="display:none;"></div>' +
+      '<button class="btn btn-primary btn-block" type="submit">Сохранить видео</button>' +
+    '</form></div>';
+  return el('<div class="overlay" data-action="overlay-close-video-editor"><div class="drawer" data-stop="1" style="width:min(560px,100%);">'+body+'</div></div>');
+}
+
+// Список поурочных вопросов конкретного урока — свой набор, отдельно от
+// staffState.quizAdmin (итоговый тест курса). Редактирование каждого вопроса
+// переиспользует renderQuizEditorModal (quizEditor.lessonId различает, куда слать запрос).
+function renderLessonQuizManagerDrawer(){
+  var body = '<div class="drawer-head"><b style="font-size:16px;">Поурочный тест «'+escapeHtml(lessonQuizManager.lessonTitle)+'»</b><button class="btn btn-ghost btn-sm" data-action="close-lesson-quiz-manager">Закрыть ✕</button></div>' +
+    '<div class="drawer-body">' +
+      '<p class="hint" style="margin-top:0;">«Развлекательный» тест на запоминание материала — открывается врачу после просмотра видео, не влияет на итоговый сертификат.</p>' +
+      '<div style="display:flex;justify-content:flex-end;margin-bottom:10px;"><button class="btn btn-sm btn-primary" data-action="open-lesson-quiz-creator">+ Добавить вопрос</button></div>';
+  if(!lessonQuizManager.questions.length){
+    body += '<div class="empty-state" style="padding:24px 10px;">Вопросов пока нет — без них шаг «Тест» у этого урока просто не появится.</div>';
+  } else {
+    lessonQuizManager.questions.forEach(function(q,i){
+      var qIsFirst=i===0, qIsLast=i===lessonQuizManager.questions.length-1;
+      body += '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);">' +
+        '<div style="display:flex;flex-direction:column;gap:2px;">' +
+          '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-lesson-quiz-question" data-idx="'+i+'" data-dir="up"'+(qIsFirst?' disabled':'')+' title="Выше">↑</button>' +
+          '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-lesson-quiz-question" data-idx="'+i+'" data-dir="down"'+(qIsLast?' disabled':'')+' title="Ниже">↓</button></div>' +
+        '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+(i+1)+'. '+escapeHtml(q.question)+'</b><span style="font-size:12px;color:var(--muted);">'+q.options.length+' варианта, правильный: «'+escapeHtml(q.options[q.correct]||"")+'»</span></div>' +
+        '<button class="btn btn-sm btn-ghost" data-action="open-lesson-quiz-editor" data-id="'+q.id+'">Редактировать</button>' +
+        '<button class="btn btn-sm btn-ghost" data-action="delete-quiz-question" data-id="'+q.id+'" title="Удалить вопрос">'+icon("trash","ic-sm")+'</button></div>';
+    });
+  }
+  body += '</div>';
+  return el('<div class="overlay" data-action="overlay-close-lesson-quiz-manager"><div class="drawer" data-stop="1" style="width:min(560px,100%);">'+body+'</div></div>');
+}
+
 function renderTempPasswordModal(){
   var body = '<div class="drawer-head"><b style="font-size:16px;">Новый пароль создан</b><button class="btn btn-ghost btn-sm" data-action="close-temp-password">Закрыть ✕</button></div>' +
     '<div class="drawer-body">' +
@@ -561,7 +708,7 @@ function renderProfileModal(){
   var body = '<div class="drawer-head"><b style="font-size:16px;">Профиль</b><button class="btn btn-ghost btn-sm" data-action="close-profile-editor">Закрыть ✕</button></div>' +
     '<div class="drawer-body"><form id="profileEditorForm">' +
       '<div class="field"><label>Имя и фамилия</label><input class="input" name="name" required value="'+escapeHtml(me.name||"")+'"></div>' +
-      (isStudent ? '<div class="field"><label>Специализация</label><input class="input" name="specialization" value="'+escapeHtml(me.specialization||"")+'"></div>' : '') +
+      (isStudent ? renderProfileSpecializationFields() : '') +
       '<div class="field"><label>Телефон</label><input class="input" type="tel" name="phone" value="'+escapeHtml(me.phone||"")+'"></div>' +
       (isStudent ? '<div class="field"><label>Место работы</label><input class="input" name="workplace" value="'+escapeHtml(me.workplace||"")+'"></div>' : '') +
       '<div class="field"><label>Email</label><div class="input" style="background:var(--line-2);color:var(--muted);">'+escapeHtml(me.email||"")+'</div><p class="hint">Email нельзя изменить самостоятельно — обратитесь к куратору.</p></div>' +
@@ -574,6 +721,37 @@ function renderProfileModal(){
 }
 
 /* ============================= РЕНДЕР: АВТОРИЗАЦИЯ ============================= */
+// Специализация — фиксированный справочник (не свободный текст), от него зависит
+// автоматический подбор протоколов под профиль врача (см. «Ваши протоколы»).
+function renderSpecializationOptions(selectedId){
+  return specializationsList.map(function(s){
+    return '<option value="'+s.id+'"'+(selectedId===s.id?' selected':'')+'>'+escapeHtml(s.name)+'</option>';
+  }).join('');
+}
+// Общий блок «Специализация» + «Хочу развиваться в...» для формы профиля —
+// используется и в модалке (renderProfileModal), и на странице «Мой профиль».
+function renderProfileSpecializationFields(){
+  return '<div class="field"><label>Специализация</label><select class="input" name="specializationId">' +
+      '<option value="">Не указана</option>' +
+      renderSpecializationOptions(me.specializationId||null) +
+    '</select></div>' +
+    '<div class="field"><label>Хочу развиваться в <span style="font-weight:400;color:var(--muted-2);">(необязательно)</span></label>' +
+      renderSpecializationCheckboxes(me.interestIds||[]) +
+    '</div>';
+}
+function renderSpecializationCheckboxes(selectedIds){
+  var sel = selectedIds || [];
+  var html = '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
+  specializationsList.forEach(function(s){
+    var checked = sel.indexOf(s.id)!==-1;
+    html += '<label class="chip-check">' +
+      '<input type="checkbox" name="interestIds" value="'+s.id+'"'+(checked?' checked':'')+'>'+escapeHtml(s.name) +
+    '</label>';
+  });
+  html += '</div>';
+  return html;
+}
+
 function renderAuthScreen(mode){
   var isLogin = mode === "login";
   var left =
@@ -605,7 +783,13 @@ function renderAuthScreen(mode){
         '<h2 style="font-size:19px;margin:0 0 20px;">Расскажите о себе</h2>' +
         '<form id="registerForm">' +
           '<div class="field"><label>Имя и фамилия</label><input class="input" name="name" required placeholder="Например, Анна Ковалёва"></div>' +
-          '<div class="field"><label>Специализация</label><input class="input" name="specialization" required placeholder="Например, терапевт, эндокринолог"></div>' +
+          '<div class="field"><label>Специализация</label><select class="input" name="specializationId" required>' +
+            '<option value="">Выберите специализацию</option>' +
+            renderSpecializationOptions(null) +
+          '</select></div>' +
+          '<div class="field"><label>Хочу развиваться в <span style="font-weight:400;color:var(--muted-2);">(необязательно, можно несколько)</span></label>' +
+            renderSpecializationCheckboxes([]) +
+          '</div>' +
           '<div class="field"><label>Email</label><input class="input" type="email" name="email" required></div>' +
           '<div class="field"><label>Телефон <span style="font-weight:400;color:var(--muted-2);">(необязательно)</span></label><input class="input" type="tel" name="phone"></div>' +
           '<div class="field"><label>Место работы <span style="font-weight:400;color:var(--muted-2);">(необязательно)</span></label><input class="input" name="workplace"></div>' +
@@ -662,6 +846,10 @@ function renderSidebar(){
       items += sidebarItem("schedule","calendar","Расписание", navKey==="schedule");
       items += sidebarItem("materials","folder","Материалы обучения", navKey==="materials");
       items += sidebarItem("progress","chartbar","Мой прогресс", navKey==="progress");
+      // Разблокируется после первого пройденного урока — до этого в коллекции нечему появиться.
+      if((course && course.progress && (course.progress.completed_lessons||[]).length>0)){
+        items += sidebarItem("protocols","doctor","Ваши протоколы", navKey==="protocols");
+      }
       items += sidebarItem("messages","message","Чаты", navKey==="messages", msgBadge);
       items += sidebarItem("notifications","bell","Уведомления", navKey==="notifications", notifBadge);
       items += sidebarItem("settings","gear","Настройки", navKey==="settings");
@@ -680,6 +868,7 @@ function renderSidebar(){
     items += sidebarItem("dashboard","chartbar","Аналитика", snavKey==="dashboard");
     if(isAdmin){
       items += sidebarItem("team","users","Команда", snavKey==="team");
+      items += sidebarItem("protocols","doctor","Протоколы", snavKey==="protocols");
       items += sidebarItem("audit","list","Журнал", snavKey==="audit");
     }
     items += sidebarItem("chats","message","Чаты", snavKey==="chats", chatsBadge);
@@ -745,6 +934,8 @@ function renderStudentShell(){
     content.appendChild(renderStudentMaterials());
   } else if(studentState.tab === "progress" && !previewMode){
     content.appendChild(renderMyProgressPage());
+  } else if(studentState.tab === "protocols" && !previewMode){
+    content.appendChild(renderProtocolsPage());
   } else if(studentState.tab === "notifications" && !previewMode){
     content.appendChild(renderNotificationsPage());
   } else if(studentState.tab === "settings" && !previewMode){
@@ -1048,6 +1239,35 @@ function renderStudentMaterials(){
   return el(html);
 }
 
+// Формат урока: текстовое интро (как и раньше) → видео с главами по таймкодам
+// (если куратор его добавил) → поурочный «развлекательный» тест на запоминание
+// (если куратор его добавил). Оба шага опциональны — урок без видео и теста
+// работает ровно как раньше (одна кнопка "Урок пройден, далее →").
+function lessonStagesFor(lesson){
+  var stages = ["intro"];
+  if(lesson.videoUrl) stages.push("video");
+  if(lesson.quiz && lesson.quiz.length) stages.push("quiz");
+  return stages;
+}
+function resetLessonStageState(){
+  studentState.lessonStage = "intro";
+  studentState.videoEnded = false;
+  studentState.lessonQuizAnswers = {};
+  studentState.lessonQuizResult = null;
+}
+// Куда вести врача после "урок пройден" — на следующий незаблокированный урок,
+// либо на итоговый тест курса, либо (если и то, и другое недоступно) остаёмся на месте.
+function advanceAfterLesson(){
+  var nextIdx = -1;
+  for(var i=studentState.lessonIndex+1;i<course.lessons.length;i++){
+    if(!course.lessons[i].hiddenForMe && !course.lessons[i].dripLockedForMe){ nextIdx=i; break; }
+  }
+  resetLessonStageState();
+  if(nextIdx!==-1){ studentState.lessonIndex=nextIdx; }
+  else if(!course.quizHiddenForMe){ studentState.quizMode=true; studentState.quizSubmitted=false; }
+  else { showToast("Пока больше нечего проходить — куратор скоро откроет остальные материалы"); studentState.tab="course"; studentState.quizMode=false; }
+}
+
 function renderCoursePlayer(){
   if(studentState.quizMode) return renderQuizOrCert();
   var idx = studentState.lessonIndex;
@@ -1073,28 +1293,108 @@ function renderCoursePlayer(){
     return el('<div class="player" style="margin-top:6px;">'+nav+lockedBody+'</div>');
   }
 
-  var isLast = idx === course.lessons.length-1;
-  var noteVal = (course.progress && course.progress.lesson_notes && course.progress.lesson_notes[lesson.id]) || "";
+  var isDoneAlready = doneIds.indexOf(lesson.id)!==-1;
+  var stages = lessonStagesFor(lesson);
+  var stage = stages.indexOf(studentState.lessonStage)!==-1 ? studentState.lessonStage : "intro";
   var isBookmarked = (course.bookmarkedLessonIds||[]).indexOf(lesson.id)!==-1;
+
   var body = '<div class="lesson-body">' +
     '<button class="back-link" data-action="close-course">← К курсу</button>' +
     '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">' +
       '<h3 style="margin:0;">'+escapeHtml(lesson.title)+'</h3>' +
       '<button class="btn btn-sm btn-ghost" style="flex-shrink:0;" data-action="toggle-bookmark" data-id="'+lesson.id+'" data-bookmarked="'+(isBookmarked?"1":"0")+'" title="'+(isBookmarked?"Убрать из моих материалов":"Сохранить в мои материалы")+'">'+(isBookmarked?"★ В моих материалах":"☆ Сохранить")+'</button>' +
     '</div>' +
-    '<div class="meta">Урок '+(idx+1)+' из '+course.lessons.length+' · '+escapeHtml(lesson.duration||"")+'</div>' +
-    '<div class="prose">'+lesson.html+'</div>' +
-    '<div class="lesson-note">' +
-      '<label>Ваша заметка к уроку <span style="font-weight:400;color:var(--muted-2);">(видна только вам)</span></label>' +
-      '<textarea class="input" id="lessonNoteInput" style="height:64px;font-size:13.5px;" placeholder="Например: спросить куратора про дозировки">'+escapeHtml(noteVal)+'</textarea>' +
-      '<button class="btn btn-sm btn-ghost" style="margin-top:8px;" data-action="save-lesson-note" data-id="'+lesson.id+'">Сохранить заметку</button>' +
-    '</div>' +
-    '<div class="lesson-footer">' +
-      '<button class="btn btn-ghost" data-action="prev-lesson"'+(idx===0?' disabled':'')+'>← Предыдущий</button>' +
-      '<button class="btn btn-primary" data-action="next-lesson">'+(isLast?"Перейти к тесту":"Урок пройден, далее →")+'</button>' +
-    '</div></div>';
+    '<div class="meta">Урок '+(idx+1)+' из '+course.lessons.length+' · '+escapeHtml(lesson.duration||"")+'</div>';
 
+  if(stages.length>1){
+    var stageLabels = { intro:"Материал", video:"Видео", quiz:"Тест" };
+    body += '<div class="tabs" style="margin:14px 0 4px;">';
+    stages.forEach(function(sKey){
+      var locked = sKey==="quiz" && !isDoneAlready && stages.indexOf("video")!==-1 && !studentState.videoEnded;
+      body += '<button type="button" class="tab'+(stage===sKey?' active':'')+'"'+(locked?' disabled title="Сначала досмотрите видео"':'')+' data-action="lesson-stage" data-stage="'+sKey+'">'+stageLabels[sKey]+(locked?' '+icon("lock","ic-sm"):'')+'</button>';
+    });
+    body += '</div>';
+  }
+
+  if(stage==="intro"){
+    var noteVal = (course.progress && course.progress.lesson_notes && course.progress.lesson_notes[lesson.id]) || "";
+    body += '<div class="prose">'+lesson.html+'</div>' +
+      '<div class="lesson-note">' +
+        '<label>Ваша заметка к уроку <span style="font-weight:400;color:var(--muted-2);">(видна только вам)</span></label>' +
+        '<textarea class="input" id="lessonNoteInput" style="height:64px;font-size:13.5px;" placeholder="Например: спросить куратора про дозировки">'+escapeHtml(noteVal)+'</textarea>' +
+        '<button class="btn btn-sm btn-ghost" style="margin-top:8px;" data-action="save-lesson-note" data-id="'+lesson.id+'">Сохранить заметку</button>' +
+      '</div>';
+    if(stages.length>1){
+      body += '<div class="lesson-footer"><span></span><button class="btn btn-primary" data-action="lesson-stage" data-stage="'+stages[1]+'">Далее → '+stageLabels[stages[1]]+'</button></div>';
+    } else {
+      var isLast = idx === course.lessons.length-1;
+      body += '<div class="lesson-footer">' +
+        '<button class="btn btn-ghost" data-action="prev-lesson"'+(idx===0?' disabled':'')+'>← Предыдущий</button>' +
+        '<button class="btn btn-primary" data-action="next-lesson">'+(isLast?"Перейти к тесту":"Урок пройден, далее →")+'</button>' +
+      '</div>';
+    }
+  } else if(stage==="video"){
+    body += renderLessonVideoStage(lesson, stages, isDoneAlready);
+  } else if(stage==="quiz"){
+    body += renderLessonQuizStage(lesson);
+  }
+
+  body += '</div>';
   return el('<div class="player" style="margin-top:6px;">'+nav+body+'</div>');
+}
+
+function renderLessonVideoStage(lesson, stages, isDoneAlready){
+  var tcs = lesson.videoTimecodes||[];
+  var html = '<div class="lesson-video-wrap"><video id="lessonVideoPlayer" controls preload="metadata" src="'+escapeHtml(lesson.videoUrl)+'"></video></div>';
+
+  if(tcs.length){
+    html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">';
+    tcs.forEach(function(tc,i){
+      html += '<button type="button" class="chapter-item btn btn-sm btn-ghost" data-action="seek-lesson-video" data-time="'+tc.time+'" data-chapter-id="'+tc.id+'" style="'+(i===0?'':'')+'">'+fmtTimecode(tc.time)+' · '+escapeHtml(tc.title)+'</button>';
+    });
+    html += '</div>';
+    html += '<div id="lessonChapterSummary" class="prose" style="min-height:24px;">'+(tcs[0].summary||'')+'</div>';
+  }
+
+  var hasQuiz = stages.indexOf("quiz")!==-1;
+  var canProceed = isDoneAlready || studentState.videoEnded;
+  html += '<div class="lesson-footer">' +
+    '<button class="btn btn-ghost" data-action="lesson-stage" data-stage="intro">← К материалу</button>';
+  if(hasQuiz){
+    html += '<button class="btn btn-primary" data-action="lesson-stage" data-stage="quiz"'+(canProceed?'':' disabled title="Досмотрите видео до конца"')+'>Пройти тест →</button>';
+  } else {
+    html += '<button class="btn btn-primary" data-action="next-lesson"'+(canProceed?'':' disabled title="Досмотрите видео до конца"')+'>Урок пройден, далее →</button>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderLessonQuizStage(lesson){
+  var result = studentState.lessonQuizResult;
+  var prevScore = course.progress && course.progress.lesson_quiz_scores && course.progress.lesson_quiz_scores[lesson.id];
+  var html = '';
+  if(result){
+    html += '<div class="empty-state" style="padding:40px 10px;">' +
+      '<div class="big">'+icon(result.score>=60?"badge":"star","ic-lg")+'</div>' +
+      '<b style="font-size:20px;display:block;margin-bottom:6px;">'+result.score+'%</b>' +
+      '<p style="color:var(--muted);">правильных ответов — это просто для закрепления материала, на сертификат не влияет.</p>' +
+      '<button class="btn btn-primary" style="margin-top:14px;" data-action="next-lesson">Далее →</button>' +
+    '</div>';
+    return html;
+  }
+  if(typeof prevScore==="number"){
+    html += '<p class="hint" style="margin-bottom:12px;">Прошлый результат: '+prevScore+'%. Можно пройти ещё раз.</p>';
+  }
+  html += '<form id="lessonQuizForm" data-lesson-id="'+lesson.id+'">';
+  lesson.quiz.forEach(function(q,qi){
+    html += '<div class="quiz-q"><p class="qtext">'+(qi+1)+'. '+escapeHtml(q.question)+'</p>';
+    q.options.forEach(function(opt,oi){
+      html += '<label class="opt"><input type="radio" name="'+q.id+'" value="'+oi+'" required> '+escapeHtml(opt)+'</label>';
+    });
+    html += '</div>';
+  });
+  html += '<button class="btn btn-primary btn-block" type="submit">Завершить тест</button></form>';
+  return html;
 }
 
 function renderQuizOrCert(){
@@ -1210,6 +1510,75 @@ function renderPointTiersCta(points){
     html += '<p style="font-size:12.5px;color:var(--muted-2);margin:0;">Наберите '+POINT_TIERS[0].points+' очков, чтобы открыть первую скидку — '+POINT_TIERS[0].discount+'%. Осталось '+(POINT_TIERS[0].points-points)+'.</p>';
   }
   return html;
+}
+
+// «Ваши протоколы» — коллекция, которая пополняется по мере прохождения уроков
+// (каждый пройденный урок может открыть свои протоколы — см. lesson_protocols).
+// Разбивка на «по вашей специализации» / «дополнительные» приходит уже готовой
+// с бэкенда (GET /course/protocols), тут только рендер и переключение гайдов.
+function renderProtocolCard(p, isForYou){
+  var expanded = !!protocolExpanded[p.id];
+  var myIds = [me.specializationId].concat(me.interestIds||[]).filter(Boolean);
+  var defaultGuide = null;
+  if(isForYou){
+    defaultGuide = p.guides.find(function(g){ return g.specializationId===me.specializationId; }) ||
+      p.guides.find(function(g){ return myIds.indexOf(g.specializationId)!==-1; });
+  }
+  var activeSpecId = protocolGuideTab[p.id] || (defaultGuide ? defaultGuide.specializationId : (p.guides[0] ? p.guides[0].specializationId : null));
+  var activeGuide = p.guides.find(function(g){ return g.specializationId===activeSpecId; });
+
+  var html = '<div class="card" style="padding:18px 20px;margin-bottom:12px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;cursor:pointer;" data-action="toggle-protocol" data-id="'+p.id+'">' +
+      '<div><b style="font-size:14.5px;display:block;">'+escapeHtml(p.title)+'</b>' +
+        (p.summary ? '<p style="font-size:13px;color:var(--muted);margin:4px 0 0;">'+escapeHtml(p.summary)+'</p>' : '') +
+      '</div>' +
+      '<button type="button" class="btn btn-sm btn-ghost" style="flex-shrink:0;">'+(expanded?'Свернуть':'Открыть гайд')+'</button>' +
+    '</div>';
+
+  if(expanded){
+    if(!p.guides.length){
+      html += '<p class="hint" style="margin-top:12px;">Гайд применения ещё не добавлен куратором.</p>';
+    } else {
+      if(p.guides.length>1){
+        html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 10px;">';
+        p.guides.forEach(function(g){
+          html += '<button type="button" class="btn btn-sm '+(g.specializationId===activeSpecId?'btn-primary':'btn-ghost')+'" data-action="select-protocol-guide" data-id="'+p.id+'" data-spec="'+g.specializationId+'">'+escapeHtml(g.specializationName)+'</button>';
+        });
+        html += '</div>';
+      } else {
+        html += '<p class="hint" style="margin-top:14px;">Гайд для специализации «'+escapeHtml(p.guides[0].specializationName)+'»</p>';
+      }
+      html += '<div class="prose">'+(activeGuide?activeGuide.guideHtml:'')+'</div>';
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderProtocolsPage(){
+  var html = '<div style="margin-top:6px;max-width:680px;">' +
+    '<div class="card" style="padding:18px 20px;margin-bottom:16px;background:var(--primary-tint);border-color:transparent;">' +
+      '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Ваша коллекция протоколов</b>' +
+      '<p style="font-size:13px;color:var(--muted);margin:0;">После каждого пройденного урока сюда добавляются протоколы, о которых говорил спикер — с готовым гайдом по внедрению именно в рамках вашей специализации.</p>' +
+    '</div>';
+
+  var forYou = studentProtocols.forYou||[], additional = studentProtocols.additional||[];
+  if(!forYou.length && !additional.length){
+    html += '<div class="empty-state" style="padding:40px 10px;">'+icon("doctor","ic-lg")+'<p style="margin-top:10px;">Пока пусто — пройдите первый урок, чтобы начать собирать протоколы.</p></div>';
+    return el(html);
+  }
+
+  if(forYou.length){
+    html += '<b style="font-size:13.5px;display:block;margin:6px 0 10px;">По вашей специализации</b>';
+    forYou.forEach(function(p){ html += renderProtocolCard(p, true); });
+  }
+  if(additional.length){
+    html += '<b style="font-size:13.5px;display:block;margin:18px 0 10px;color:var(--muted);">Дополнительные протоколы</b>' +
+      '<p class="hint" style="margin:-4px 0 10px;">Тоже из пройденных уроков, но не по вашему профилю — можно посмотреть гайд для любой специализации.</p>';
+    additional.forEach(function(p){ html += renderProtocolCard(p, false); });
+  }
+  html += '</div>';
+  return el(html);
 }
 
 function renderMyProgressPage(){
@@ -1386,7 +1755,7 @@ function renderMyProfilePage(){
     '<b style="font-size:14.5px;display:block;margin-bottom:14px;">Основная информация</b>' +
     '<form id="profileEditorForm">' +
       '<div class="field"><label>Имя и фамилия</label><input class="input" name="name" required value="'+escapeHtml(me.name||"")+'"></div>' +
-      (isStudent ? '<div class="field"><label>Специализация</label><input class="input" name="specialization" value="'+escapeHtml(me.specialization||"")+'"></div>' : '') +
+      (isStudent ? renderProfileSpecializationFields() : '') +
       '<div class="field"><label>Телефон</label><input class="input" type="tel" name="phone" value="'+escapeHtml(me.phone||"")+'"></div>' +
       (isStudent ? '<div class="field"><label>Место работы</label><input class="input" name="workplace" value="'+escapeHtml(me.workplace||"")+'"></div>' : '') +
       '<div class="field"><label>Email</label><div class="input" style="background:var(--line-2);color:var(--muted);">'+escapeHtml(me.email||"")+'</div><p class="hint">Email нельзя изменить самостоятельно — обратитесь к куратору.</p></div>' +
@@ -1487,6 +1856,8 @@ function renderStaffShell(){
     content.appendChild(renderMaterialsTab());
   } else if(staffState.mainTab === "dashboard"){
     content.appendChild(renderDashboardTab());
+  } else if(staffState.mainTab === "protocols" && (me.role==="admin"||me.role==="super_admin")){
+    content.appendChild(renderProtocolsAdminTab());
   } else if(staffState.mainTab === "audit" && (me.role==="admin"||me.role==="super_admin")){
     content.appendChild(renderAuditLogTab());
   } else if(staffState.mainTab === "chats"){
@@ -1970,6 +2341,8 @@ function renderMaterialsTab(){
         '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-lesson" data-id="'+l.id+'" data-dir="down"'+(isLast?' disabled':'')+' title="Ниже">↓</button></div>' : '') +
       '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+(i+1)+'. '+escapeHtml(l.title)+(l.has_draft?' '+magnet("attention","черновик"):'')+'</b><span style="font-size:12px;color:var(--muted);">'+(hiddenCount?'Скрыт от '+hiddenCount+' врачей':'Виден всем')+(l.drip_days?' · открывается через '+l.drip_days+' дн. после регистрации':'')+'</span></div>' +
       (canEdit ? '<button class="btn btn-sm btn-ghost" data-action="open-lesson-editor" data-id="'+l.id+'">Редактировать</button>' : '') +
+      (canEdit ? '<button class="btn btn-sm btn-ghost" data-action="open-lesson-video-editor" data-id="'+l.id+'" data-title="'+escapeHtml(l.title)+'">Видео</button>' : '') +
+      (canEdit ? '<button class="btn btn-sm btn-ghost" data-action="open-lesson-quiz-manager" data-id="'+l.id+'" data-title="'+escapeHtml(l.title)+'">Тест урока</button>' : '') +
       '<button class="btn btn-sm btn-ghost" data-action="open-schedule-modal" data-id="'+l.id+'" data-title="'+escapeHtml(l.title)+'">Расписание</button>' +
       '<button class="btn btn-sm '+(hiddenCount?'btn-primary':'btn-ghost')+'" data-action="open-materials-picker" data-id="'+l.id+'" data-title="'+escapeHtml(l.title)+'">Настроить видимость</button>' +
       (canEdit ? '<button class="btn btn-sm btn-ghost" data-action="delete-lesson" data-id="'+l.id+'" data-title="'+escapeHtml(l.title)+'" title="Удалить урок">'+icon("trash","ic-sm")+'</button>' : '') +
@@ -2574,6 +2947,112 @@ function renderRoster(){
   return el(html);
 }
 
+/* ============================= РЕНДЕР: ПРОТОКОЛЫ (АДМИН) ============================= */
+// Специализации — фиксированный справочник (см. schema.sql «Этап 11»): отсюда админ
+// им управляет, отсюда же их читают форма регистрации и профиль врача.
+function renderSpecializationsCard(){
+  var html = '<div class="card" style="padding:18px 20px;margin-bottom:16px;">' +
+    '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Специализации</b>' +
+    '<p style="font-size:12.5px;color:var(--muted);margin:0 0 14px;">Справочник, из которого врач выбирает специализацию при регистрации — на нём же основан подбор протоколов.</p>';
+  specializationsList.forEach(function(s){
+    html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line-2);">' +
+      '<span style="flex:1;font-size:13.5px;">'+escapeHtml(s.name)+'</span>' +
+      '<button class="btn btn-sm btn-ghost" data-action="open-specialization-editor" data-id="'+s.id+'" data-name="'+escapeHtml(s.name)+'">Переименовать</button>' +
+      '<button class="btn btn-sm btn-ghost" data-action="delete-specialization" data-id="'+s.id+'" data-name="'+escapeHtml(s.name)+'" title="Удалить">'+icon("trash","ic-sm")+'</button>' +
+    '</div>';
+  });
+  html += '<form id="specializationCreateForm" style="display:flex;gap:8px;margin-top:14px;">' +
+      '<input class="input" name="name" placeholder="Новая специализация" required style="flex:1;">' +
+      '<button class="btn btn-sm btn-primary" type="submit">Добавить</button>' +
+    '</form>' +
+  '</div>';
+  return html;
+}
+
+function renderProtocolsAdminTab(){
+  var html = renderSpecializationsCard();
+  html += '<div class="card" style="padding:18px 20px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:10px;">' +
+      '<b style="font-size:14.5px;">Протоколы</b>' +
+      '<button class="btn btn-sm btn-primary" data-action="open-protocol-creator">+ Добавить протокол</button>' +
+    '</div>' +
+    '<p style="font-size:12.5px;color:var(--muted);margin:0 0 14px;">Разблокируются врачу после прохождения привязанных уроков — с гайдом применения под его специализацию (см. «Ваши протоколы» у врача).</p>';
+  if(!adminProtocolsState.list.length){
+    html += '<div class="empty-state" style="padding:30px 10px;">Протоколов пока нет.</div>';
+  } else {
+    adminProtocolsState.list.forEach(function(p){
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);">' +
+        '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(p.title)+'</b>' +
+          '<span style="font-size:12px;color:var(--muted);">'+p.guides.length+' гайд(ов) · '+p.lessonIds.length+' урок(ов) открывают</span></div>' +
+        '<button class="btn btn-sm btn-ghost" data-action="open-protocol-editor" data-id="'+p.id+'">Редактировать</button>' +
+        '<button class="btn btn-sm btn-ghost" data-action="delete-protocol" data-id="'+p.id+'" data-title="'+escapeHtml(p.title)+'" title="Удалить">'+icon("trash","ic-sm")+'</button>' +
+      '</div>';
+    });
+  }
+  html += '</div>';
+  return el('<div>'+html+'</div>');
+}
+
+function renderSpecializationEditorModal(){
+  var body = '<div class="drawer-head"><b style="font-size:16px;">Переименовать специализацию</b><button class="btn btn-ghost btn-sm" data-action="close-specialization-editor">Закрыть ✕</button></div>' +
+    '<div class="drawer-body"><form id="specializationEditorForm">' +
+      '<div class="field"><label>Название</label><input class="input" name="name" required value="'+escapeHtml(specializationEditor.name)+'"></div>' +
+      '<div class="err-text" id="specializationEditorError" style="display:none;"></div>' +
+      '<button class="btn btn-primary btn-block" type="submit">Сохранить</button>' +
+    '</form></div>';
+  return el('<div class="overlay" data-action="overlay-close-specialization-editor"><div class="drawer" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
+}
+
+function renderProtocolEditorModal(){
+  var isNew = !protocolEditor.id;
+  var body = '<div class="drawer-head"><b style="font-size:16px;">'+(isNew?"Новый протокол":"Редактирование протокола")+'</b><button class="btn btn-ghost btn-sm" data-action="close-protocol-editor">Закрыть ✕</button></div>' +
+    '<div class="drawer-body"><form id="protocolEditorForm">' +
+      '<div class="field"><label>Название протокола</label><input class="input" name="title" required value="'+escapeHtml(protocolEditor.title)+'"></div>' +
+      '<div class="field"><label>Краткое описание <span style="font-weight:400;color:var(--muted-2);">(видно всем, даже без гайда под их специализацию)</span></label><textarea class="input" name="summary" style="height:64px;">'+escapeHtml(protocolEditor.summary)+'</textarea></div>' +
+      '<div class="err-text" id="protocolEditorError" style="display:none;"></div>' +
+      '<button class="btn btn-primary" type="submit">'+(isNew?"Создать и продолжить":"Сохранить")+'</button>' +
+    '</form>';
+
+  if(!isNew){
+    body += '<div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line-2);">' +
+      '<b style="font-size:13.5px;display:block;margin-bottom:10px;">Гайды по специализациям</b>';
+    protocolEditor.guides.forEach(function(g){
+      body += '<div class="card" style="padding:12px 14px;margin-bottom:8px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><b style="font-size:13px;">'+escapeHtml(g.specializationName)+'</b>' +
+          '<button class="btn btn-sm btn-ghost" data-action="delete-protocol-guide" data-spec="'+g.specializationId+'" title="Удалить гайд">'+icon("trash","ic-sm")+'</button></div>' +
+        '<div class="prose" style="font-size:12.5px;">'+g.guideHtml+'</div>' +
+      '</div>';
+    });
+    var usedSpecs = protocolEditor.guides.map(function(g){ return g.specializationId; });
+    var availableSpecs = specializationsList.filter(function(s){ return usedSpecs.indexOf(s.id)===-1; });
+    if(availableSpecs.length){
+      body += '<div class="card" style="padding:12px 14px;">' +
+        '<div class="field" style="margin-bottom:8px;"><label>Специализация</label><select class="input" id="newGuideSpec">' +
+          availableSpecs.map(function(s){ return '<option value="'+s.id+'">'+escapeHtml(s.name)+'</option>'; }).join('') +
+        '</select></div>' +
+        '<div class="field" style="margin-bottom:8px;"><label>Текст гайда</label><textarea class="input" id="newGuideText" style="height:70px;" placeholder="Как применять этот протокол в рамках этой специализации"></textarea></div>' +
+        '<button type="button" class="btn btn-sm btn-primary" data-action="save-protocol-guide">Добавить гайд</button>' +
+      '</div>';
+    } else {
+      body += '<p class="hint">Гайды добавлены под все специализации из справочника.</p>';
+    }
+
+    body += '</div><div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line-2);">' +
+      '<b style="font-size:13.5px;display:block;margin-bottom:10px;">Какие уроки открывают этот протокол</b>';
+    (staffState.materials||[]).forEach(function(l){
+      var checked = protocolEditor.lessonIds.indexOf(l.id)!==-1;
+      body += '<label style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line-2);cursor:pointer;">' +
+        '<input type="checkbox" data-action="toggle-protocol-lesson" data-id="'+l.id+'"'+(checked?' checked':'')+'>' +
+        '<span style="font-size:13px;">'+escapeHtml(l.title)+'</span></label>';
+    });
+    body += '<button class="btn btn-sm btn-ghost" style="margin-top:12px;" data-action="save-protocol-lessons">Сохранить привязку</button>' +
+    '</div>';
+  }
+
+  body += '</div>';
+  return el('<div class="overlay" data-action="overlay-close-protocol-editor"><div class="drawer" data-stop="1" style="width:min(600px,100%);">'+body+'</div></div>');
+}
+
 function renderTeamTab(){
   var myOptions = assignableRoleOptions(me.role);
   var html = '<div class="grid-2" style="align-items:flex-start;">';
@@ -2698,7 +3177,7 @@ function renderStudentDrawer(){
     var productSelectOpts = Object.keys(PRODUCTS).map(function(k){ return '<option value="'+k+'"'+((s.product||"longevity")===k?' selected':'')+'>'+escapeHtml(PRODUCTS[k])+'</option>'; }).join("");
     var paymentSelectOpts = Object.keys(PAYMENT_LABELS).map(function(k){ return '<option value="'+k+'"'+((s.payment_status||"unpaid")===k?' selected':'')+'>'+escapeHtml(PAYMENT_LABELS[k])+'</option>'; }).join("");
     body += '<div class="field"><label>Имя и фамилия</label><input class="input" id="studentProfileName" value="'+escapeHtml(s.name||"")+'"></div>' +
-      '<div class="field"><label>Специализация</label><input class="input" id="studentProfileSpecialization" value="'+escapeHtml(s.specialization||"")+'"></div>' +
+      '<div class="field"><label>Специализация</label><select class="input" id="studentProfileSpecialization"><option value="">Не указана</option>'+renderSpecializationOptions(s.specialization_id||null)+'</select></div>' +
       '<div class="field"><label>Email</label><div class="input" style="background:var(--line-2);">'+escapeHtml(s.email||"—")+'</div></div>' +
       '<div class="field"><label>Телефон</label><input class="input" id="studentProfilePhone" value="'+escapeHtml(s.phone||"")+'"></div>' +
       '<div class="field"><label>Место работы</label><input class="input" id="studentProfileWorkplace" value="'+escapeHtml(s.workplace||"")+'"></div>' +
@@ -2784,6 +3263,7 @@ async function applyStudentTab(tab, navKey){
     api("/messages/"+me.id+"/mark-read", { method:"POST" }).catch(function(){});
   }
   if(tab==="notifications") await loadNotifications();
+  if(tab==="protocols" && !studentState.protocolsLoaded) await loadProtocols();
   render();
   if(tab==="messages"){
     if(studentState.messagesSubTab==="stream" && me.stream_id) startStreamMessagePolling(me.stream_id,"msgListStream");
@@ -2824,7 +3304,7 @@ function wireEvents(root){
 
     if(action==="go-register"){ view="register"; render(); return; }
     if(action==="go-login"){ view="login"; render(); return; }
-    if(action==="logout"){ stopNotificationPolling(); stopHeartbeat(); sendOfflineBeacon(); await api("/auth/logout", { method:"POST" }); me=null; course=null; view="login"; mySessionsList=[]; mySessionsLoaded=false; render(); return; }
+    if(action==="logout"){ stopNotificationPolling(); stopHeartbeat(); sendOfflineBeacon(); await api("/auth/logout", { method:"POST" }); me=null; course=null; view="login"; mySessionsList=[]; mySessionsLoaded=false; studentProtocols={forYou:[],additional:[]}; protocolExpanded={}; protocolGuideTab={}; render(); return; }
     if(action==="toggle-theme"){ toggleTheme(); render(); return; }
     if(action==="mark-notif-read"){
       var nid=t.getAttribute("data-id");
@@ -2908,7 +3388,7 @@ function wireEvents(root){
     }
     if(action==="open-course"){
       if(course.locked && course.locked.locked){ showToast("Доступ к курсу ограничен — напишите куратору в чате"); return; }
-      studentState.tab="lesson"; studentState.lessonIndex=Math.min((course.progress&&course.progress.completed_lessons||[]).length, course.lessons.length-1); studentState.quizMode=false; studentState.quizSubmitted=false; render(); return;
+      studentState.tab="lesson"; studentState.lessonIndex=Math.min((course.progress&&course.progress.completed_lessons||[]).length, course.lessons.length-1); studentState.quizMode=false; studentState.quizSubmitted=false; resetLessonStageState(); render(); return;
     }
     if(action==="close-course"){ studentState.tab="course"; studentState.quizMode=false; render(); return; }
     if(action==="goto-lesson"){
@@ -2916,7 +3396,15 @@ function wireEvents(root){
       var goLesson=course.lessons[goIdx];
       if(goLesson.hiddenForMe){ showToast("Этот урок временно недоступен"); return; }
       if(goLesson.dripLockedForMe){ showToast("Этот урок откроется "+fmtDate(goLesson.availableAt)); return; }
-      studentState.lessonIndex=goIdx; studentState.quizMode=false; render(); return;
+      studentState.lessonIndex=goIdx; studentState.quizMode=false; resetLessonStageState(); render(); return;
+    }
+    if(action==="lesson-stage"){
+      studentState.lessonStage = t.getAttribute("data-stage"); render(); return;
+    }
+    if(action==="seek-lesson-video"){
+      var v = document.getElementById("lessonVideoPlayer");
+      if(v) v.currentTime = parseFloat(t.getAttribute("data-time"));
+      return;
     }
     if(action==="save-lesson-note"){
       var noteLessonId=t.getAttribute("data-id");
@@ -2941,25 +3429,25 @@ function wireEvents(root){
       return;
     }
     if(action==="goto-lesson-from-materials"){
-      studentState.tab="lesson"; studentState.lessonIndex=parseInt(t.getAttribute("data-idx"),10); studentState.quizMode=false; render(); return;
+      studentState.tab="lesson"; studentState.lessonIndex=parseInt(t.getAttribute("data-idx"),10); studentState.quizMode=false; resetLessonStageState(); render(); return;
     }
     if(action==="goto-quiz"){
       if(course.quizHiddenForMe){ showToast("Тест временно недоступен"); return; }
       studentState.quizMode=true; studentState.quizSubmitted=false; render(); return;
     }
-    if(action==="prev-lesson"){ if(studentState.lessonIndex>0) studentState.lessonIndex--; render(); return; }
+    if(action==="prev-lesson"){ if(studentState.lessonIndex>0) studentState.lessonIndex--; resetLessonStageState(); render(); return; }
     if(action==="next-lesson"){
       var lid = course.lessons[studentState.lessonIndex].id;
-      if(!previewMode){
-        try{ var r = await api("/course/lesson-done", { method:"POST", body: JSON.stringify({lessonId:lid}) }); course.progress.completed_lessons = r.completedLessons; if(r.gamification) course.gamification = Object.assign({}, course.gamification, r.gamification); }catch(err){ showToast(err.message); }
-      } else {
-        course.progress.completed_lessons.push(lid);
+      // Если урок уже засчитан поурочным тестом (lessonQuizResult проставлен
+      // POST /lessons/:id/quiz-submit атомарно), второй раз /lesson-done не дёргаем.
+      if(!studentState.lessonQuizResult){
+        if(!previewMode){
+          try{ var r = await api("/course/lesson-done", { method:"POST", body: JSON.stringify({lessonId:lid}) }); course.progress.completed_lessons = r.completedLessons; if(r.gamification) course.gamification = Object.assign({}, course.gamification, r.gamification); }catch(err){ showToast(err.message); }
+        } else {
+          course.progress.completed_lessons.push(lid);
+        }
       }
-      var nextIdx = -1;
-      for(var i=studentState.lessonIndex+1; i<course.lessons.length; i++){ if(!course.lessons[i].hiddenForMe && !course.lessons[i].dripLockedForMe){ nextIdx=i; break; } }
-      if(nextIdx!==-1){ studentState.lessonIndex=nextIdx; }
-      else if(!course.quizHiddenForMe){ studentState.quizMode=true; studentState.quizSubmitted=false; }
-      else { showToast("Пока больше нечего проходить — куратор скоро откроет остальные материалы"); studentState.tab="course"; studentState.quizMode=false; }
+      advanceAfterLesson();
       render(); return;
     }
     if(action==="request-full"){
@@ -2977,6 +3465,12 @@ function wireEvents(root){
       var sinp=document.getElementById("msgInputStream"); var sval=sinp?sinp.value:"";
       if(sval.trim() && me.stream_id){ if(sinp) sinp.value=""; try{ await api("/stream-messages/"+me.stream_id, { method:"POST", body: JSON.stringify({text:sval}) }); loadStreamMessages(me.stream_id,"msgListStream"); }catch(err){ showToast(err.message); } }
       return;
+    }
+    if(action==="toggle-protocol"){
+      var tpId=t.getAttribute("data-id"); protocolExpanded[tpId]=!protocolExpanded[tpId]; render(); return;
+    }
+    if(action==="select-protocol-guide"){
+      var sgId=t.getAttribute("data-id"); protocolGuideTab[sgId]=t.getAttribute("data-spec"); render(); return;
     }
     if(action==="mark-messages-unread"){
       try{
@@ -3016,7 +3510,8 @@ function wireEvents(root){
       previewMode = true; previewReturnTab = staffState.mainTab;
       try{ course = await api("/staff/course-preview"); }
       catch(err){ showToast(err.message); previewMode=false; return; }
-      studentState = { tab:"course", navKey:"course", lessonIndex:0, quizMode:false, quizSubmitted:false };
+      studentState = { tab:"course", navKey:"course", lessonIndex:0, quizMode:false, quizSubmitted:false,
+        lessonStage:"intro", videoEnded:false, lessonQuizAnswers:{}, lessonQuizResult:null };
       view = "student";
       render(); return;
     }
@@ -3051,16 +3546,26 @@ function wireEvents(root){
       var spId=t.getAttribute("data-id");
       var spPayload={
         name: document.getElementById("studentProfileName").value,
-        specialization: document.getElementById("studentProfileSpecialization").value,
+        specializationId: document.getElementById("studentProfileSpecialization").value,
         phone: document.getElementById("studentProfilePhone").value,
         workplace: document.getElementById("studentProfileWorkplace").value
       };
       t.disabled=true; t.textContent="Сохраняем…";
       try{
         await api("/staff/students/"+spId+"/profile", { method:"PATCH", body: JSON.stringify(spPayload) });
-        staffState.selectedStudent=Object.assign({}, staffState.selectedStudent, spPayload);
+        // specializationId локально мержим как есть, а s.specialization (текстовое
+        // отображаемое имя в ростере/шапке карточки) досчитываем сами — иначе оно
+        // осталось бы старым до следующей перезагрузки списка.
+        var spMerge=Object.assign({}, spPayload);
+        if(spPayload.specializationId){
+          var spMatch=specializationsList.find(function(sp){ return sp.id===spPayload.specializationId; });
+          if(spMatch) spMerge.specialization=spMatch.name;
+        } else {
+          delete spMerge.specializationId;
+        }
+        staffState.selectedStudent=Object.assign({}, staffState.selectedStudent, spMerge);
         var spIdx=staffState.students.findIndex(function(x){ return x.id===spId; });
-        if(spIdx!==-1) staffState.students[spIdx]=Object.assign({}, staffState.students[spIdx], spPayload);
+        if(spIdx!==-1) staffState.students[spIdx]=Object.assign({}, staffState.students[spIdx], spMerge);
         showToast("Данные сохранены");
       }catch(err){ showToast(err.message); }
       t.disabled=false; t.textContent="Сохранить данные"; render(); return;
@@ -3226,19 +3731,29 @@ function wireEvents(root){
     if(action==="open-quiz-editor"){
       var q=staffState.quizAdmin.find(function(x){ return x.id===t.getAttribute("data-id"); });
       if(!q) return;
-      quizEditor = { open:true, isNew:false, id:q.id, question:q.question, options:q.options.slice(), correct:q.correct };
+      quizEditor = { open:true, isNew:false, id:q.id, question:q.question, options:q.options.slice(), correct:q.correct, lessonId:null };
       render(); return;
     }
     if(action==="open-quiz-creator"){
-      quizEditor = { open:true, isNew:true, id:null, question:"", options:["",""], correct:0 };
+      quizEditor = { open:true, isNew:true, id:null, question:"", options:["",""], correct:0, lessonId:null };
       render(); return;
     }
     if(action==="close-quiz-editor"){ quizEditor.open=false; render(); return; }
     if(action==="overlay-close-quiz-editor" && !e.target.closest("[data-stop]")){ quizEditor.open=false; render(); return; }
+    // Общий обработчик и для вопроса итогового теста, и для поурочного —
+    // после удаления обновляем тот список, который сейчас реально открыт.
     if(action==="delete-quiz-question"){
       if(!confirm("Удалить этот вопрос теста? Действие можно откатить в журнале.")) return;
-      try{ await api("/course/quiz-admin/"+t.getAttribute("data-id"), { method:"DELETE" }); showToast("Вопрос удалён"); await loadStaffData(); }
-      catch(err){ showToast(err.message); }
+      try{
+        await api("/course/quiz-admin/"+t.getAttribute("data-id"), { method:"DELETE" });
+        showToast("Вопрос удалён");
+        if(lessonQuizManager.open){
+          var lqd=await api("/course/lessons/"+lessonQuizManager.lessonId+"/quiz-admin");
+          lessonQuizManager.questions=lqd.quiz;
+        } else {
+          await loadStaffData();
+        }
+      }catch(err){ showToast(err.message); }
       render(); return;
     }
     if(action==="move-quiz-question"){
@@ -3250,6 +3765,140 @@ function wireEvents(root){
       var tmpq=mqIds[mqIdx]; mqIds[mqIdx]=mqIds[mqSwap]; mqIds[mqSwap]=tmpq;
       try{ await api("/course/quiz-admin/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: mqIds }) }); await loadStaffData(); }
       catch(err){ showToast(err.message); }
+      render(); return;
+    }
+
+    /* ---------- Видео урока ---------- */
+    if(action==="open-lesson-video-editor"){
+      videoEditor = { open:true, lessonId:t.getAttribute("data-id"), lessonTitle:t.getAttribute("data-title"), videoUrl:"", timecodes:[] };
+      render();
+      try{
+        var lv=await api("/course/lessons/"+videoEditor.lessonId);
+        videoEditor.videoUrl = lv.lesson.video_url || "";
+        videoEditor.timecodes = lv.lesson.video_timecodes || [];
+      }catch(err){ showToast(err.message); }
+      render(); return;
+    }
+    if(action==="close-video-editor"){ videoEditor.open=false; render(); return; }
+    if(action==="overlay-close-video-editor" && !e.target.closest("[data-stop]")){ videoEditor.open=false; render(); return; }
+    if(action==="add-video-timecode"){
+      syncVideoEditorFromDom();
+      videoEditor.timecodes.push({ id:null, time:0, title:"", summary:"" });
+      render(); return;
+    }
+    if(action==="remove-video-timecode"){
+      syncVideoEditorFromDom();
+      videoEditor.timecodes.splice(parseInt(t.getAttribute("data-idx"),10), 1);
+      render(); return;
+    }
+
+    /* ---------- Поурочный тест ---------- */
+    if(action==="open-lesson-quiz-manager"){
+      lessonQuizManager = { open:true, lessonId:t.getAttribute("data-id"), lessonTitle:t.getAttribute("data-title"), questions:[] };
+      render();
+      try{ var lqm=await api("/course/lessons/"+lessonQuizManager.lessonId+"/quiz-admin"); lessonQuizManager.questions=lqm.quiz; }
+      catch(err){ showToast(err.message); }
+      render(); return;
+    }
+    if(action==="close-lesson-quiz-manager"){ lessonQuizManager.open=false; render(); return; }
+    if(action==="overlay-close-lesson-quiz-manager" && !e.target.closest("[data-stop]")){ lessonQuizManager.open=false; render(); return; }
+    if(action==="open-lesson-quiz-creator"){
+      quizEditor = { open:true, isNew:true, id:null, question:"", options:["",""], correct:0, lessonId:lessonQuizManager.lessonId };
+      render(); return;
+    }
+    if(action==="open-lesson-quiz-editor"){
+      var lq=lessonQuizManager.questions.find(function(x){ return x.id===t.getAttribute("data-id"); });
+      if(!lq) return;
+      quizEditor = { open:true, isNew:false, id:lq.id, question:lq.question, options:lq.options.slice(), correct:lq.correct, lessonId:lessonQuizManager.lessonId };
+      render(); return;
+    }
+    if(action==="move-lesson-quiz-question"){
+      var lmIdx=parseInt(t.getAttribute("data-idx"),10); var lmDir=t.getAttribute("data-dir");
+      var lmIds=lessonQuizManager.questions.map(function(x){ return x.id; });
+      var lmSwap = lmDir==="up" ? lmIdx-1 : lmIdx+1;
+      if(lmSwap<0 || lmSwap>=lmIds.length) return;
+      var tmpl=lmIds[lmIdx]; lmIds[lmIdx]=lmIds[lmSwap]; lmIds[lmSwap]=tmpl;
+      try{
+        await api("/course/lessons/"+lessonQuizManager.lessonId+"/quiz-admin/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: lmIds }) });
+        var lmd=await api("/course/lessons/"+lessonQuizManager.lessonId+"/quiz-admin"); lessonQuizManager.questions=lmd.quiz;
+      }catch(err){ showToast(err.message); }
+      render(); return;
+    }
+
+    /* ---------- Протоколы ---------- */
+    if(action==="open-protocol-creator"){
+      protocolEditor = { open:true, id:null, title:"", summary:"", guides:[], lessonIds:[] };
+      render(); return;
+    }
+    if(action==="open-protocol-editor"){
+      var pe=adminProtocolsState.list.find(function(x){ return x.id===t.getAttribute("data-id"); });
+      if(!pe) return;
+      protocolEditor = { open:true, id:pe.id, title:pe.title, summary:pe.summary||"", guides:pe.guides.slice(), lessonIds:pe.lessonIds.slice() };
+      render(); return;
+    }
+    if(action==="close-protocol-editor"){ protocolEditor.open=false; render(); return; }
+    if(action==="overlay-close-protocol-editor" && !e.target.closest("[data-stop]")){ protocolEditor.open=false; render(); return; }
+    if(action==="delete-protocol"){
+      if(!confirm('Удалить протокол «'+t.getAttribute("data-title")+'»? Вместе с ним удалятся все его гайды и привязки к урокам.')) return;
+      try{ await api("/protocols/"+t.getAttribute("data-id"), { method:"DELETE" }); adminProtocolsState.list=adminProtocolsState.list.filter(function(p){ return p.id!==t.getAttribute("data-id"); }); showToast("Протокол удалён"); }
+      catch(err){ showToast(err.message); }
+      render(); return;
+    }
+    if(action==="save-protocol-guide"){
+      var gSpec=document.getElementById("newGuideSpec"); var gText=document.getElementById("newGuideText");
+      if(!gSpec || !gText || !gText.value.trim()){ showToast("Заполните текст гайда"); return; }
+      try{
+        await api("/protocols/"+protocolEditor.id+"/guides/"+gSpec.value, { method:"PUT", body: JSON.stringify({ guideHtml: gText.value }) });
+        var specMatch=specializationsList.find(function(s){ return s.id===gSpec.value; });
+        protocolEditor.guides.push({ specializationId:gSpec.value, specializationName:specMatch?specMatch.name:gSpec.value, guideHtml:gText.value });
+        var adminIdx=adminProtocolsState.list.findIndex(function(p){ return p.id===protocolEditor.id; });
+        if(adminIdx!==-1) adminProtocolsState.list[adminIdx].guides = protocolEditor.guides.slice();
+        showToast("Гайд добавлен");
+      }catch(err){ showToast(err.message); }
+      render(); return;
+    }
+    if(action==="delete-protocol-guide"){
+      var dgSpec=t.getAttribute("data-spec");
+      try{
+        await api("/protocols/"+protocolEditor.id+"/guides/"+dgSpec, { method:"DELETE" });
+        protocolEditor.guides = protocolEditor.guides.filter(function(g){ return g.specializationId!==dgSpec; });
+        var adminIdx2=adminProtocolsState.list.findIndex(function(p){ return p.id===protocolEditor.id; });
+        if(adminIdx2!==-1) adminProtocolsState.list[adminIdx2].guides = protocolEditor.guides.slice();
+        showToast("Гайд удалён");
+      }catch(err){ showToast(err.message); }
+      render(); return;
+    }
+    if(action==="toggle-protocol-lesson"){
+      var tlId=t.getAttribute("data-id"); var tlIdx=protocolEditor.lessonIds.indexOf(tlId);
+      if(t.checked && tlIdx===-1) protocolEditor.lessonIds.push(tlId);
+      if(!t.checked && tlIdx!==-1) protocolEditor.lessonIds.splice(tlIdx,1);
+      return;
+    }
+    if(action==="save-protocol-lessons"){
+      try{
+        var slr=await api("/protocols/"+protocolEditor.id+"/lessons", { method:"PUT", body: JSON.stringify({ lessonIds: protocolEditor.lessonIds }) });
+        protocolEditor.lessonIds = slr.lessonIds;
+        var adminIdx3=adminProtocolsState.list.findIndex(function(p){ return p.id===protocolEditor.id; });
+        if(adminIdx3!==-1) adminProtocolsState.list[adminIdx3].lessonIds = slr.lessonIds;
+        showToast("Привязка к урокам сохранена");
+      }catch(err){ showToast(err.message); }
+      render(); return;
+    }
+
+    /* ---------- Специализации ---------- */
+    if(action==="open-specialization-editor"){
+      specializationEditor = { open:true, id:t.getAttribute("data-id"), name:t.getAttribute("data-name") };
+      render(); return;
+    }
+    if(action==="close-specialization-editor"){ specializationEditor.open=false; render(); return; }
+    if(action==="overlay-close-specialization-editor" && !e.target.closest("[data-stop]")){ specializationEditor.open=false; render(); return; }
+    if(action==="delete-specialization"){
+      if(!confirm('Удалить специализацию «'+t.getAttribute("data-name")+'»?')) return;
+      try{
+        await api("/specializations/"+t.getAttribute("data-id"), { method:"DELETE" });
+        specializationsList = specializationsList.filter(function(s){ return s.id!==t.getAttribute("data-id"); });
+        showToast("Специализация удалена");
+      }catch(err){ showToast(err.message); }
       render(); return;
     }
     if(action==="add-quiz-option" || action==="remove-quiz-option"){
@@ -3511,8 +4160,9 @@ function wireEvents(root){
       var btn2=e.target.querySelector("button[type=submit]"); btn2.disabled=true; btn2.textContent="Регистрируем…";
       try{
         var d2=await api("/auth/register", { method:"POST", body: JSON.stringify({
-          name:fd2.get("name"), specialization:fd2.get("specialization"), email:fd2.get("email"),
-          phone:fd2.get("phone"), workplace:fd2.get("workplace"), password:fd2.get("password")
+          name:fd2.get("name"), specializationId:fd2.get("specializationId"), email:fd2.get("email"),
+          phone:fd2.get("phone"), workplace:fd2.get("workplace"), password:fd2.get("password"),
+          interestIds: fd2.getAll("interestIds")
         }) });
         me=d2.user; await routeAfterLogin();
       }catch(err){ errBox2.textContent=err.message; errBox2.style.display="block"; btn2.disabled=false; btn2.textContent="Начать курс"; }
@@ -3562,9 +4212,11 @@ function wireEvents(root){
       var btnQe=e.target.querySelector("button[type=submit]"); btnQe.disabled=true; btnQe.textContent="Сохраняем…";
       var opts=quizEditor.options.map(function(_,i){ return fdqe.get("opt"+i); });
       var correctVal=parseInt(fdqe.get("correct"),10);
+      var isLessonQuiz = !!quizEditor.lessonId;
       try{
         if(quizEditor.isNew){
-          await api("/course/quiz-admin", { method:"POST", body: JSON.stringify({ question:fdqe.get("question"), options:opts, correct:correctVal }) });
+          var createUrl = isLessonQuiz ? "/course/lessons/"+quizEditor.lessonId+"/quiz-admin" : "/course/quiz-admin";
+          await api(createUrl, { method:"POST", body: JSON.stringify({ question:fdqe.get("question"), options:opts, correct:correctVal }) });
           quizEditor.open=false; showToast("Вопрос добавлен");
         } else {
           await api("/course/quiz-admin/"+quizEditor.id, { method:"PUT", body: JSON.stringify({ question:fdqe.get("question"), options:opts, correct:correctVal }) });
@@ -3572,9 +4224,71 @@ function wireEvents(root){
           if(qi){ qi.question=fdqe.get("question"); qi.options=opts; qi.correct=correctVal; }
           quizEditor.open=false; showToast("Вопрос сохранён");
         }
-        await loadStaffData();
+        if(isLessonQuiz){
+          var lqRefresh=await api("/course/lessons/"+quizEditor.lessonId+"/quiz-admin"); lessonQuizManager.questions=lqRefresh.quiz;
+        } else {
+          await loadStaffData();
+        }
       }catch(err){ errQe.textContent=err.message; errQe.style.display="block"; btnQe.disabled=false; btnQe.textContent="Сохранить вопрос"; }
       render(); return;
+    }
+    if(e.target.id==="videoEditorForm"){
+      e.preventDefault();
+      syncVideoEditorFromDom();
+      var errVe=document.getElementById("videoEditorError"); errVe.style.display="none";
+      var btnVe=e.target.querySelector("button[type=submit]"); btnVe.disabled=true; btnVe.textContent="Сохраняем…";
+      try{
+        await api("/course/lessons/"+videoEditor.lessonId+"/video", { method:"PUT", body: JSON.stringify({
+          videoUrl: videoEditor.videoUrl, timecodes: videoEditor.timecodes
+        }) });
+        videoEditor.open=false; showToast("Видео сохранено");
+      }catch(err){ errVe.textContent=err.message; errVe.style.display="block"; btnVe.disabled=false; btnVe.textContent="Сохранить видео"; return; }
+      render(); return;
+    }
+    if(e.target.id==="protocolEditorForm"){
+      e.preventDefault();
+      var fdpr=new FormData(e.target);
+      var errPr=document.getElementById("protocolEditorError"); errPr.style.display="none";
+      var btnPr=e.target.querySelector("button[type=submit]"); btnPr.disabled=true; btnPr.textContent="Сохраняем…";
+      try{
+        if(!protocolEditor.id){
+          var crPr=await api("/protocols", { method:"POST", body: JSON.stringify({ title:fdpr.get("title"), summary:fdpr.get("summary") }) });
+          protocolEditor.id=crPr.id; protocolEditor.title=crPr.title; protocolEditor.summary=crPr.summary;
+          adminProtocolsState.list.unshift({ id:crPr.id, title:crPr.title, summary:crPr.summary, guides:[], lessonIds:[] });
+          showToast("Протокол создан — теперь добавьте гайды и уроки");
+        } else {
+          await api("/protocols/"+protocolEditor.id, { method:"PUT", body: JSON.stringify({ title:fdpr.get("title"), summary:fdpr.get("summary") }) });
+          protocolEditor.title=fdpr.get("title"); protocolEditor.summary=fdpr.get("summary");
+          var adminIdxP=adminProtocolsState.list.findIndex(function(p){ return p.id===protocolEditor.id; });
+          if(adminIdxP!==-1){ adminProtocolsState.list[adminIdxP].title=protocolEditor.title; adminProtocolsState.list[adminIdxP].summary=protocolEditor.summary; }
+          showToast("Протокол сохранён");
+        }
+      }catch(err){ errPr.textContent=err.message; errPr.style.display="block"; btnPr.disabled=false; btnPr.textContent=protocolEditor.id?"Сохранить":"Создать и продолжить"; return; }
+      render(); return;
+    }
+    if(e.target.id==="specializationEditorForm"){
+      e.preventDefault();
+      var fdse=new FormData(e.target);
+      var errSe=document.getElementById("specializationEditorError"); errSe.style.display="none";
+      var btnSe=e.target.querySelector("button[type=submit]"); btnSe.disabled=true; btnSe.textContent="Сохраняем…";
+      try{
+        await api("/specializations/"+specializationEditor.id, { method:"PUT", body: JSON.stringify({ name:fdse.get("name") }) });
+        var specI=specializationsList.findIndex(function(s){ return s.id===specializationEditor.id; });
+        if(specI!==-1) specializationsList[specI].name=fdse.get("name");
+        specializationEditor.open=false; showToast("Специализация переименована");
+      }catch(err){ errSe.textContent=err.message; errSe.style.display="block"; btnSe.disabled=false; btnSe.textContent="Сохранить"; return; }
+      render(); return;
+    }
+    if(e.target.id==="specializationCreateForm"){
+      e.preventDefault();
+      var fdsc=new FormData(e.target);
+      var btnSc=e.target.querySelector("button[type=submit]"); btnSc.disabled=true;
+      try{
+        var crSc=await api("/specializations", { method:"POST", body: JSON.stringify({ name:fdsc.get("name") }) });
+        specializationsList.push({ id:crSc.id, name:crSc.name });
+        showToast("Специализация добавлена");
+      }catch(err){ showToast(err.message); }
+      btnSc.disabled=false; render(); return;
     }
     if(e.target.id==="changePasswordForm"){
       e.preventDefault();
@@ -3593,7 +4307,11 @@ function wireEvents(root){
       var errPe=document.getElementById("profileEditorError"); errPe.style.display="none";
       var btnPe=e.target.querySelector("button[type=submit]"); btnPe.disabled=true; btnPe.textContent="Сохраняем…";
       var payloadPe={ name:fdpe.get("name"), phone:fdpe.get("phone")||"" };
-      if(me.role==="student"){ payloadPe.specialization=fdpe.get("specialization")||""; payloadPe.workplace=fdpe.get("workplace")||""; }
+      if(me.role==="student"){
+        payloadPe.workplace=fdpe.get("workplace")||"";
+        if(fdpe.get("specializationId")) payloadPe.specializationId=fdpe.get("specializationId");
+        payloadPe.interestIds=fdpe.getAll("interestIds");
+      }
       try{
         var rPe=await api("/auth/me", { method:"PATCH", body: JSON.stringify(payloadPe) });
         me = rPe.user;
@@ -3639,6 +4357,28 @@ function wireEvents(root){
         await loadCourse(); // очки/стрик пересчитываются на сервере из всего прогресса разом — проще перезагрузить, чем дублировать формулу на клиенте
         studentState.quizSubmitted=true;
       }catch(err){ showToast(err.message); }
+      render(); return;
+    }
+    if(e.target.id==="lessonQuizForm"){
+      e.preventDefault();
+      var lqLessonId = e.target.getAttribute("data-lesson-id");
+      var lqLesson = course.lessons.find(function(l){ return l.id===lqLessonId; });
+      var fdlq=new FormData(e.target); var lqAnswers={};
+      (lqLesson.quiz||[]).forEach(function(q){ lqAnswers[q.id]=parseInt(fdlq.get(q.id),10); });
+      var btnlq=e.target.querySelector("button[type=submit]"); btnlq.disabled=true; btnlq.textContent="Считаем результат…";
+      if(previewMode){
+        studentState.lessonQuizResult={ score:100 };
+        if(course.progress.completed_lessons.indexOf(lqLessonId)===-1) course.progress.completed_lessons.push(lqLessonId);
+        render(); return;
+      }
+      try{
+        var rlq = await api("/course/lessons/"+lqLessonId+"/quiz-submit", { method:"POST", body: JSON.stringify({ answers: lqAnswers }) });
+        course.progress.completed_lessons = rlq.completedLessons;
+        if(rlq.gamification) course.gamification = Object.assign({}, course.gamification, rlq.gamification);
+        if(!course.progress.lesson_quiz_scores) course.progress.lesson_quiz_scores={};
+        course.progress.lesson_quiz_scores[lqLessonId]=rlq.score;
+        studentState.lessonQuizResult = { score: rlq.score };
+      }catch(err){ showToast(err.message); btnlq.disabled=false; btnlq.textContent="Завершить тест"; return; }
       render(); return;
     }
     if(e.target.id==="inviteStudentForm"){

@@ -40,7 +40,7 @@ function signToken(user) {
 }
 
 router.post("/register", authLimiter, async (req, res) => {
-  const { email: rawEmail, password, name, specialization, workplace, phone, ref } = req.body || {};
+  const { email: rawEmail, password, name, specializationId, workplace, phone, ref, interestIds } = req.body || {};
   const email = normEmail(rawEmail);
 
   if (!email || !email.includes("@") || !password || password.length < 6 || !name || !name.trim()) {
@@ -55,8 +55,14 @@ router.post("/register", authLimiter, async (req, res) => {
   const invite = await pool.query("SELECT role, invited_by FROM invites WHERE email=$1", [email]);
   const role = invite.rowCount ? invite.rows[0].role : "student";
 
-  if (role === "student" && !specialization) {
-    return res.status(400).json({ error: "invalid_input", message: "Укажите специализацию" });
+  // Специализация — из справочника (фиксированный список), а не свободный текст:
+  // от неё зависит, какие протоколы потом попадут врачу в «Ваши протоколы».
+  let specializationRow = null;
+  if (role === "student") {
+    if (!specializationId) return res.status(400).json({ error: "invalid_input", message: "Укажите специализацию" });
+    const spec = await pool.query("SELECT id, name FROM specializations WHERE id=$1", [specializationId]);
+    if (!spec.rowCount) return res.status(400).json({ error: "invalid_input", message: "Неизвестная специализация" });
+    specializationRow = spec.rows[0];
   }
 
   let referredBy = null;
@@ -70,10 +76,25 @@ router.post("/register", authLimiter, async (req, res) => {
   const referralCode = generateReferralCode();
 
   await pool.query(
-    `INSERT INTO users (id, email, password_hash, name, role, specialization, workplace, phone, referral_code, referred_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-    [id, email, hash, name.trim(), role, specialization || null, workplace || null, phone || null, referralCode, referredBy]
+    `INSERT INTO users (id, email, password_hash, name, role, specialization, specialization_id, workplace, phone, referral_code, referred_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    [id, email, hash, name.trim(), role, specializationRow ? specializationRow.name : null,
+      specializationRow ? specializationRow.id : null, workplace || null, phone || null, referralCode, referredBy]
   );
+
+  // «Хочу развиваться в...» — необязательные, невалидные/чужие id просто отбрасываем,
+  // а не роняем всю регистрацию из-за одного плохого значения в необязательном поле.
+  let interestRows = [];
+  if (role === "student" && Array.isArray(interestIds) && interestIds.length) {
+    const valid = await pool.query("SELECT id, name FROM specializations WHERE id = ANY($1::text[])", [interestIds]);
+    interestRows = valid.rows;
+    for (const row of interestRows) {
+      await pool.query(
+        "INSERT INTO user_specialization_interests (user_id, specialization_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+        [id, row.id]
+      );
+    }
+  }
 
   if (invite.rowCount) {
     await pool.query("DELETE FROM invites WHERE email=$1", [email]);
@@ -96,7 +117,10 @@ router.post("/register", authLimiter, async (req, res) => {
   // специализация/место работы/телефон выглядели бы пустыми на экране до перезахода.
   const profileOut = {
     id, email, name: name.trim(), role,
-    specialization: specialization || null, workplace: workplace || null, phone: phone || null,
+    specialization: specializationRow ? specializationRow.name : null,
+    specializationId: specializationRow ? specializationRow.id : null,
+    interestIds: interestRows.map((r) => r.id),
+    workplace: workplace || null, phone: phone || null,
     referral_code: referralCode, product: "longevity", payment_status: "unpaid"
   };
   res.json({ user: profileOut, invitedBy: invite.rowCount ? invite.rows[0].invited_by : null });
@@ -129,10 +153,15 @@ router.post("/login", authLimiter, async (req, res) => {
   ).catch(() => {});
   // Профиль целиком, а не только поля из JWT — иначе специализация/место работы/телефон
   // выглядели бы пустыми в модалке профиля сразу после входа, до первого GET /auth/me.
+  const interests = await pool.query(
+    "SELECT specialization_id FROM user_specialization_interests WHERE user_id=$1", [row.id]
+  );
   res.json({
     user: {
       id: row.id, email: row.email, name: row.name, role: row.role,
-      specialization: row.specialization, workplace: row.workplace, phone: row.phone,
+      specialization: row.specialization, specializationId: row.specialization_id,
+      interestIds: interests.rows.map((r) => r.specialization_id),
+      workplace: row.workplace, phone: row.phone,
       stream_id: row.stream_id, referral_code: row.referral_code, created_at: row.created_at,
       product: row.product, payment_status: row.payment_status
     }
@@ -154,11 +183,14 @@ router.post("/logout-everywhere", authRequired, async (req, res) => {
 
 router.get("/me", authRequired, async (req, res) => {
   const result = await pool.query(
-    "SELECT id, email, name, role, specialization, workplace, phone, stream_id, referral_code, created_at, product, payment_status FROM users WHERE id=$1",
+    "SELECT id, email, name, role, specialization, specialization_id, workplace, phone, stream_id, referral_code, created_at, product, payment_status FROM users WHERE id=$1",
     [req.user.id]
   );
   if (!result.rowCount) return res.status(404).json({ error: "not_found" });
-  res.json({ user: result.rows[0] });
+  const interests = await pool.query(
+    "SELECT specialization_id FROM user_specialization_interests WHERE user_id=$1", [req.user.id]
+  );
+  res.json({ user: Object.assign({}, result.rows[0], { interestIds: interests.rows.map((r) => r.specialization_id) }) });
 });
 
 // «Мой профиль» → «Текущие сеансы»: с какого устройства, откуда (IP) и когда входили.
@@ -177,7 +209,7 @@ router.get("/sessions", authRequired, async (req, res) => {
 // Самостоятельное редактирование своих же контактных данных — имя, телефон, место
 // работы, а для врача ещё и специализация. Email и роль отсюда не меняются намеренно.
 router.patch("/me", authRequired, async (req, res) => {
-  const { name, phone, workplace, specialization } = req.body || {};
+  const { name, phone, workplace, specializationId, interestIds } = req.body || {};
   const sets = [];
   const values = [];
   if (typeof name === "string") {
@@ -186,24 +218,53 @@ router.patch("/me", authRequired, async (req, res) => {
   }
   if (typeof phone === "string") { sets.push(`phone=$${sets.length + 1}`); values.push(phone.trim() || null); }
   if (typeof workplace === "string") { sets.push(`workplace=$${sets.length + 1}`); values.push(workplace.trim() || null); }
-  if (typeof specialization === "string" && req.user.role === "student") {
-    sets.push(`specialization=$${sets.length + 1}`); values.push(specialization.trim() || null);
+  if (typeof specializationId === "string" && req.user.role === "student") {
+    const spec = await pool.query("SELECT id, name FROM specializations WHERE id=$1", [specializationId]);
+    if (!spec.rowCount) return res.status(400).json({ error: "invalid_input", message: "Неизвестная специализация" });
+    sets.push(`specialization_id=$${sets.length + 1}`); values.push(spec.rows[0].id);
+    sets.push(`specialization=$${sets.length + 1}`); values.push(spec.rows[0].name);
   }
-  if (!sets.length) return res.status(400).json({ error: "invalid_input" });
+  if (!sets.length && !Array.isArray(interestIds)) return res.status(400).json({ error: "invalid_input" });
 
-  values.push(req.user.id);
-  await pool.query(`UPDATE users SET ${sets.join(", ")} WHERE id=$${values.length}`, values);
+  if (sets.length) {
+    values.push(req.user.id);
+    await pool.query(`UPDATE users SET ${sets.join(", ")} WHERE id=$${values.length}`, values);
+  }
+
+  // Список интересов заменяется целиком — это то же самое, что переотметить
+  // чекбоксы в форме «хочу развиваться в...» заново, а не точечно добавлять/убирать.
+  if (Array.isArray(interestIds) && req.user.role === "student") {
+    await pool.query("DELETE FROM user_specialization_interests WHERE user_id=$1", [req.user.id]);
+    if (interestIds.length) {
+      const valid = await pool.query("SELECT id FROM specializations WHERE id = ANY($1::text[])", [interestIds]);
+      for (const row of valid.rows) {
+        await pool.query(
+          "INSERT INTO user_specialization_interests (user_id, specialization_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+          [req.user.id, row.id]
+        );
+      }
+    }
+  }
 
   const result = await pool.query(
-    "SELECT id, email, name, role, specialization, workplace, phone, stream_id, referral_code, token_version, created_at, product, payment_status FROM users WHERE id=$1",
+    "SELECT id, email, name, role, specialization, specialization_id, workplace, phone, stream_id, referral_code, token_version, created_at, product, payment_status FROM users WHERE id=$1",
     [req.user.id]
   );
   const row = result.rows[0];
+  const interests = await pool.query(
+    "SELECT specialization_id FROM user_specialization_interests WHERE user_id=$1", [req.user.id]
+  );
   // Имя могло поменяться — перевыпускаем токен, чтобы во всех последующих действиях
   // (например, в журнале аудита) снова фигурировало актуальное имя, а не старое из JWT.
   const user = { id: row.id, email: row.email, name: row.name, role: row.role, tokenVersion: row.token_version };
   res.cookie("token", signToken(user), COOKIE_OPTS);
-  res.json({ user: { id: row.id, email: row.email, name: row.name, role: row.role, specialization: row.specialization, workplace: row.workplace, phone: row.phone, stream_id: row.stream_id, referral_code: row.referral_code, created_at: row.created_at, product: row.product, payment_status: row.payment_status } });
+  res.json({ user: {
+    id: row.id, email: row.email, name: row.name, role: row.role,
+    specialization: row.specialization, specializationId: row.specialization_id,
+    interestIds: interests.rows.map((r) => r.specialization_id),
+    workplace: row.workplace, phone: row.phone, stream_id: row.stream_id, referral_code: row.referral_code,
+    created_at: row.created_at, product: row.product, payment_status: row.payment_status
+  } });
 });
 
 router.post("/change-password", authRequired, async (req, res) => {

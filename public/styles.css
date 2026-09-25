@@ -161,6 +161,16 @@ button{font-family:var(--sans);cursor:pointer;}
 .btn-ghost{border-color:transparent;background:transparent;}
 .btn-ghost:hover{background:var(--surface-2);}
 .btn-sm{padding:7px 13px;font-size:13px;}
+
+/* Чекбокс-«чип»: специализации в форме регистрации/профиля («хочу развиваться в...») */
+.chip-check{cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;border:1px solid var(--line);font-size:12.5px;user-select:none;}
+.chip-check input{accent-color:var(--primary);margin:0;}
+.chip-check:has(input:checked){background:var(--primary-tint);border-color:var(--primary);}
+
+/* Видео урока с главами по таймкодам */
+.lesson-video-wrap{width:100%;aspect-ratio:16/9;margin:14px 0;border-radius:var(--radius-m);overflow:hidden;background:#000;box-shadow:var(--shadow);}
+.lesson-video-wrap video{width:100%;height:100%;display:block;}
+.chapter-item.active{background:var(--primary-tint);border-color:var(--primary);color:var(--ink);}
 .btn:disabled{opacity:.4;cursor:not-allowed;}
 .btn-block{width:100%;justify-content:center;}
 

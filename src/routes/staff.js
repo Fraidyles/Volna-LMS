@@ -23,7 +23,7 @@ function canAssignRole(actingRole, targetRole) {
 // без ключа правильных ответов (доступен только admin/super_admin) ничего
 // не раскрывают, так что отдаём их куратору наравне с остальным списком.
 const STUDENT_FIELDS = `
-  u.id, u.name, u.email, u.phone, u.specialization, u.workplace, u.created_at, u.stream_id,
+  u.id, u.name, u.email, u.phone, u.specialization, u.specialization_id, u.workplace, u.created_at, u.stream_id,
   u.product, u.payment_status, u.assigned_curator_id, u.referral_code,
   p.completed_lessons, p.quiz_score, p.completed, p.certificate_status,
   p.certificate_issued_at, p.certificate_issued_by, p.requested_full_access,
@@ -227,7 +227,7 @@ router.patch("/students/:id/curator", authRequired, requireRole("curator", "admi
 // Персонал правит контактные данные врача (например, тот сам не может/не успел
 // это сделать) — имя, телефон, место работы, специализация.
 router.patch("/students/:id/profile", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
-  const { name, phone, workplace, specialization } = req.body || {};
+  const { name, phone, workplace, specializationId } = req.body || {};
   const sets = [];
   const values = [];
   if (typeof name === "string") {
@@ -236,10 +236,15 @@ router.patch("/students/:id/profile", authRequired, requireRole("curator", "admi
   }
   if (typeof phone === "string") { sets.push(`phone=$${sets.length + 1}`); values.push(phone.trim() || null); }
   if (typeof workplace === "string") { sets.push(`workplace=$${sets.length + 1}`); values.push(workplace.trim() || null); }
-  if (typeof specialization === "string") { sets.push(`specialization=$${sets.length + 1}`); values.push(specialization.trim() || null); }
+  if (specializationId) {
+    const spec = await pool.query("SELECT id, name FROM specializations WHERE id=$1", [specializationId]);
+    if (!spec.rowCount) return res.status(400).json({ error: "invalid_input", message: "Неизвестная специализация" });
+    sets.push(`specialization_id=$${sets.length + 1}`); values.push(spec.rows[0].id);
+    sets.push(`specialization=$${sets.length + 1}`); values.push(spec.rows[0].name);
+  }
   if (!sets.length) return res.status(400).json({ error: "invalid_input" });
 
-  const before = await pool.query("SELECT name, phone, workplace, specialization FROM users WHERE id=$1 AND role='student'", [req.params.id]);
+  const before = await pool.query("SELECT name, phone, workplace, specialization, specialization_id FROM users WHERE id=$1 AND role='student'", [req.params.id]);
   if (!before.rowCount) return res.status(404).json({ error: "not_found" });
 
   values.push(req.params.id);
@@ -390,19 +395,33 @@ router.get("/course-preview", authRequired, requireRole("curator", "admin", "sup
   const course = await pool.query("SELECT id, title FROM courses LIMIT 1");
   if (!course.rowCount) return res.status(404).json({ error: "no_course" });
   const lessons = await pool.query(
-    "SELECT id, idx, title, duration, html FROM lessons WHERE course_id=$1 ORDER BY idx",
+    "SELECT id, idx, title, duration, html, video_url, video_timecodes FROM lessons WHERE course_id=$1 ORDER BY idx",
     [course.rows[0].id]
   );
   const quiz = await pool.query(
-    "SELECT id, idx, question, options FROM quiz_questions WHERE course_id=$1 ORDER BY idx",
+    "SELECT id, idx, question, options FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL ORDER BY idx",
     [course.rows[0].id]
   );
+  const lessonQuizRows = await pool.query(
+    "SELECT id, lesson_id, question, options FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NOT NULL ORDER BY idx",
+    [course.rows[0].id]
+  );
+  const lessonQuizzes = {};
+  lessonQuizRows.rows.forEach((q) => {
+    if (!lessonQuizzes[q.lesson_id]) lessonQuizzes[q.lesson_id] = [];
+    lessonQuizzes[q.lesson_id].push({ id: q.id, question: q.question, options: q.options });
+  });
   res.json({
     course: course.rows[0],
-    lessons: lessons.rows.map((l) => Object.assign({}, l, { hiddenForMe: false })),
+    lessons: lessons.rows.map((l) => Object.assign({}, l, {
+      hiddenForMe: false, videoUrl: l.video_url, videoTimecodes: l.video_timecodes || [], quiz: lessonQuizzes[l.id] || []
+    })),
     quiz: quiz.rows.map((q) => ({ id: q.id, question: q.question, options: q.options })),
     quizHiddenForMe: false,
-    progress: { completed_lessons: [], quiz_score: null, completed: false, certificate_status: "none", requested_full_access: false },
+    progress: {
+      completed_lessons: [], quiz_score: null, completed: false, certificate_status: "none",
+      requested_full_access: false, lesson_quiz_scores: {}
+    },
     locked: { locked: false, reason: null }
   });
 });

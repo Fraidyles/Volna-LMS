@@ -304,3 +304,81 @@ CREATE TABLE IF NOT EXISTS chat_templates (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ---------- Этап 11: протоколы, разблокируемые по мере прохождения уроков ----------
+-- Справочник специализаций — фиксированный список (не свободный текст), чтобы протоколы
+-- можно было надёжно сопоставлять врачу по id, а не по нечёткому совпадению строк.
+-- users.specialization (текст) при этом не трогаем — он остаётся денормализованным
+-- кэшем названия для всех существующих мест (дашборд, ростер, CSV), которые читают
+-- его как обычную строку; при сохранении specialization_id сервер синхронизирует оба поля.
+CREATE TABLE IF NOT EXISTS specializations (
+  id      TEXT PRIMARY KEY,
+  name    TEXT NOT NULL UNIQUE
+);
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS specialization_id TEXT REFERENCES specializations(id);
+
+-- «Хочу развиваться в...» — отдельно от основной специализации, влияет только на то,
+-- какие протоколы попадают в «по вашей специализации» на странице «Ваши протоколы».
+CREATE TABLE IF NOT EXISTS user_specialization_interests (
+  user_id            TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  specialization_id  TEXT NOT NULL REFERENCES specializations(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, specialization_id)
+);
+
+-- Видео урока — отдельно от html (текстовое интро с картинками, как было и раньше).
+-- video_timecodes: [{ id, time (сек), title, summary (html) }, ...] — главы видео;
+-- summary конкретной главы показывается под плеером, пока идёт воспроизведение этой главы.
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS video_url TEXT;
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS video_timecodes JSONB NOT NULL DEFAULT '[]';
+
+-- Поурочный тест — отдельно от единого итогового теста курса (quiz_questions с
+-- lesson_id IS NULL — это он и есть, поведение не меняется). lesson_id IS NOT NULL —
+-- «развлекательный» тест конкретного урока на запоминание материала.
+ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS lesson_id TEXT REFERENCES lessons(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_quiz_lesson ON quiz_questions(lesson_id);
+
+ALTER TABLE progress ADD COLUMN IF NOT EXISTS lesson_quiz_scores JSONB NOT NULL DEFAULT '{}';
+
+-- Протокол: общее summary + отдельный гайд применения под каждую специализацию
+-- (для кардиолога и дерматолога один и тот же протокол работает по-разному).
+CREATE TABLE IF NOT EXISTS protocols (
+  id            TEXT PRIMARY KEY,
+  title         TEXT NOT NULL,
+  summary       TEXT NOT NULL DEFAULT '',
+  created_by    TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS protocol_guides (
+  id                 TEXT PRIMARY KEY,
+  protocol_id        TEXT NOT NULL REFERENCES protocols(id) ON DELETE CASCADE,
+  specialization_id  TEXT NOT NULL REFERENCES specializations(id) ON DELETE CASCADE,
+  guide_html         TEXT NOT NULL,
+  UNIQUE (protocol_id, specialization_id)
+);
+
+-- Какие протоколы разблокирует конкретный урок — множество (один протокол может
+-- упоминаться в нескольких уроках, один урок может открывать несколько протоколов).
+CREATE TABLE IF NOT EXISTS lesson_protocols (
+  lesson_id     TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+  protocol_id   TEXT NOT NULL REFERENCES protocols(id) ON DELETE CASCADE,
+  PRIMARY KEY (lesson_id, protocol_id)
+);
+CREATE INDEX IF NOT EXISTS idx_lesson_protocols_protocol ON lesson_protocols(protocol_id);
+
+-- Стартовый справочник специализаций под профиль платформы (anti-age/регенеративная
+-- медицина) — админ может расширить список через админку (см. routes/specializations.js).
+INSERT INTO specializations (id, name) VALUES
+  ('therapist', 'Терапевт'),
+  ('endocrinologist', 'Эндокринолог'),
+  ('dermatocosmetologist', 'Дерматокосметолог'),
+  ('gynecologist', 'Гинеколог'),
+  ('nutritionist', 'Нутрициолог / диетолог'),
+  ('cardiologist', 'Кардиолог'),
+  ('gastroenterologist', 'Гастроэнтеролог'),
+  ('neurologist', 'Невролог'),
+  ('sports_medicine', 'Спортивная медицина и реабилитация'),
+  ('family_doctor', 'Семейный врач'),
+  ('anti_age', 'Anti-age и регенеративная медицина')
+ON CONFLICT (id) DO NOTHING;
+
