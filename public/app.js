@@ -121,6 +121,11 @@ function buildStreamOptions(selectedId, emptyLabel){
 function $(sel, root){ return (root||document).querySelector(sel); }
 function el(html){ var d=document.createElement("div"); d.innerHTML=html.trim(); return d.firstChild; }
 function escapeHtml(s){ return (s==null?"":String(s)).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+// Для полей, которые вводятся обычной textarea (не WYSIWYG) — гайды протоколов,
+// сводка по главе видео — но потом выводятся как HTML: экранируем спецсимволы
+// (чтобы случайный "<" в тексте не ломал вёрстку) и превращаем переносы строк
+// в <br>, раз это именно ПЛОСКИЙ текст, а не размеченный.
+function renderPlainToProse(s){ return escapeHtml(s).replace(/\n/g, "<br>"); }
 function initials(name){ var p=(name||"?").trim().split(/\s+/); return ((p[0]||"?")[0]+(p[1]?p[1][0]:"")).toUpperCase(); }
 
 /* ============================= ИКОНКИ (авторский SVG-набор) ============================= */
@@ -418,6 +423,15 @@ function applyGlow(){
 
 function render(){
   var app = document.getElementById("app");
+  // render() полностью пересобирает DOM (app.innerHTML="") и вызывается очень часто
+  // по совершенно не связанным с уроком причинам — например, поллинг уведомлений
+  // каждые 30с (см. startNotificationPolling). Без этого видео на шаге "Видео"
+  // перезапускалось бы с нуля при каждом таком фоновом обновлении, пока врач его
+  // смотрит. Запоминаем позицию/состояние воспроизведения ДО пересборки и
+  // восстанавливаем её в wireLessonVideo — но только если это тот же самый источник
+  // (иначе при переходе на видео другого урока получили бы случайную перемотку).
+  var prevVideo = document.getElementById("lessonVideoPlayer");
+  var savedVideoState = prevVideo ? { src: prevVideo.currentSrc, time: prevVideo.currentTime, playing: !prevVideo.paused && !prevVideo.ended } : null;
   var node;
   applyGlow();
   if(view === "loading") node = el('<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;color:#8A968F;">Загрузка…</div>');
@@ -459,7 +473,7 @@ function render(){
   }
   wireEvents(app);
   if(view==="student" && studentState.tab==="lesson" && !studentState.quizMode && studentState.lessonStage==="video"){
-    setTimeout(wireLessonVideo, 0);
+    setTimeout(function(){ wireLessonVideo(savedVideoState); }, 0);
   }
 }
 
@@ -467,11 +481,15 @@ function render(){
 // render() на каждый тик (десятки раз в секунду) — иначе моргало бы видео и
 // сбивался прогресс воспроизведения. render() дёргаем только на реальных
 // переходах состояния (глава сменилась, видео закончилось).
-function wireLessonVideo(){
+function wireLessonVideo(savedVideoState){
   var v = document.getElementById("lessonVideoPlayer");
   if(!v || !course) return;
   var lesson = course.lessons[studentState.lessonIndex];
   if(!lesson) return;
+  if(savedVideoState && savedVideoState.src && v.currentSrc===savedVideoState.src){
+    if(savedVideoState.time>0) v.currentTime = savedVideoState.time;
+    if(savedVideoState.playing) v.play().catch(function(){});
+  }
   var tcs = lesson.videoTimecodes||[];
   var lastChapterId = null;
   function updateChapter(){
@@ -481,7 +499,7 @@ function wireLessonVideo(){
     if(current && current.id===lastChapterId) return;
     lastChapterId = current ? current.id : null;
     var panel = document.getElementById("lessonChapterSummary");
-    if(panel) panel.innerHTML = current ? (current.summary||'') : '';
+    if(panel) panel.innerHTML = current ? renderPlainToProse(current.summary||'') : '';
     document.querySelectorAll(".chapter-item").forEach(function(el){
       el.classList.toggle("active", !!current && el.getAttribute("data-chapter-id")===current.id);
     });
@@ -1353,7 +1371,7 @@ function renderLessonVideoStage(lesson, stages, isDoneAlready){
       html += '<button type="button" class="chapter-item btn btn-sm btn-ghost" data-action="seek-lesson-video" data-time="'+tc.time+'" data-chapter-id="'+tc.id+'" style="'+(i===0?'':'')+'">'+fmtTimecode(tc.time)+' · '+escapeHtml(tc.title)+'</button>';
     });
     html += '</div>';
-    html += '<div id="lessonChapterSummary" class="prose" style="min-height:24px;">'+(tcs[0].summary||'')+'</div>';
+    html += '<div id="lessonChapterSummary" class="prose" style="min-height:24px;">'+renderPlainToProse(tcs[0].summary||'')+'</div>';
   }
 
   var hasQuiz = stages.indexOf("quiz")!==-1;
@@ -1530,7 +1548,7 @@ function renderProtocolCard(p, isForYou){
   var html = '<div class="card" style="padding:18px 20px;margin-bottom:12px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;cursor:pointer;" data-action="toggle-protocol" data-id="'+p.id+'">' +
       '<div><b style="font-size:14.5px;display:block;">'+escapeHtml(p.title)+'</b>' +
-        (p.summary ? '<p style="font-size:13px;color:var(--muted);margin:4px 0 0;">'+escapeHtml(p.summary)+'</p>' : '') +
+        (p.summary ? '<p style="font-size:13px;color:var(--muted);margin:4px 0 0;">'+renderPlainToProse(p.summary)+'</p>' : '') +
       '</div>' +
       '<button type="button" class="btn btn-sm btn-ghost" style="flex-shrink:0;">'+(expanded?'Свернуть':'Открыть гайд')+'</button>' +
     '</div>';
@@ -1548,7 +1566,7 @@ function renderProtocolCard(p, isForYou){
       } else {
         html += '<p class="hint" style="margin-top:14px;">Гайд для специализации «'+escapeHtml(p.guides[0].specializationName)+'»</p>';
       }
-      html += '<div class="prose">'+(activeGuide?activeGuide.guideHtml:'')+'</div>';
+      html += '<div class="prose">'+(activeGuide?renderPlainToProse(activeGuide.guideHtml):'')+'</div>';
     }
   }
   html += '</div>';
@@ -3020,7 +3038,7 @@ function renderProtocolEditorModal(){
       body += '<div class="card" style="padding:12px 14px;margin-bottom:8px;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><b style="font-size:13px;">'+escapeHtml(g.specializationName)+'</b>' +
           '<button class="btn btn-sm btn-ghost" data-action="delete-protocol-guide" data-spec="'+g.specializationId+'" title="Удалить гайд">'+icon("trash","ic-sm")+'</button></div>' +
-        '<div class="prose" style="font-size:12.5px;">'+g.guideHtml+'</div>' +
+        '<div class="prose" style="font-size:12.5px;">'+renderPlainToProse(g.guideHtml)+'</div>' +
       '</div>';
     });
     var usedSpecs = protocolEditor.guides.map(function(g){ return g.specializationId; });

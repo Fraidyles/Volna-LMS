@@ -45,6 +45,27 @@ describe("Протоколы", () => {
     expect(afterDelete.body.protocols.find((p) => p.id === id).guides.length).toBe(1);
   });
 
+  test("гайд/summary хранятся как плоский текст — переносы строк и символы < > сохраняются как есть", async () => {
+    const admin = await createUser({ role: "admin" });
+    const cookie = await loginAs(admin);
+    const multiline = "Шаг 1: дозировка < 10 мг\nШаг 2: контроль через 2 недели";
+
+    const createRes = await request(app).post("/api/protocols").set("Cookie", cookie)
+      .send({ title: "Протокол с переносами", summary: multiline });
+    expect(createRes.status).toBe(200);
+    expect(createRes.body.summary).toBe(multiline);
+
+    const guideRes = await request(app).put(`/api/protocols/${createRes.body.id}/guides/therapist`).set("Cookie", cookie)
+      .send({ guideHtml: multiline });
+    expect(guideRes.status).toBe(200);
+    expect(guideRes.body.guideHtml).toBe(multiline);
+
+    const listRes = await request(app).get("/api/protocols").set("Cookie", cookie);
+    const proto = listRes.body.protocols.find((p) => p.id === createRes.body.id);
+    expect(proto.summary).toBe(multiline);
+    expect(proto.guides[0].guideHtml).toBe(multiline);
+  });
+
   test("пустое название протокола отклоняется (400)", async () => {
     const admin = await createUser({ role: "admin" });
     const cookie = await loginAs(admin);

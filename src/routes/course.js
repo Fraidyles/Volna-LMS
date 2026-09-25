@@ -857,12 +857,15 @@ router.put("/lessons/:id/video", authRequired, requireRole("admin", "super_admin
       return res.status(400).json({ error: "invalid_input", message: "У каждой главы должны быть время (сек) и название" });
     }
   }
+  // summary — из обычной textarea (не WYSIWYG), поэтому хранится как плоский текст,
+  // а не HTML; переносы строк/спецсимволы безопасно превращаются в разметку на
+  // выводе (см. renderPlainToProse на фронтенде), а не здесь при сохранении.
   const clean = list
     .map((tc) => ({
       id: tc.id || crypto.randomUUID(),
       time: Math.round(tc.time),
       title: String(tc.title).trim(),
-      summary: sanitizeLessonHtml(tc.summary || "")
+      summary: String(tc.summary || "").trim()
     }))
     .sort((a, b) => a.time - b.time);
 

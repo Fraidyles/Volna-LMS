@@ -623,6 +623,18 @@ describe("Курс врача", () => {
       expect(res.status).toBe(400);
     });
 
+    test("сводка главы хранится как плоский текст — переносы строк и символы < > сохраняются как есть", async () => {
+      const admin = await createUser({ role: "admin" });
+      const adminCookie = await loginAs(admin);
+      const lessonId = await makeLesson();
+      const multiline = "Норма < 5 ммоль/л\nПри отклонении — повторный анализ";
+      const res = await request(app).put(`/api/course/lessons/${lessonId}/video`).set("Cookie", adminCookie).send({
+        timecodes: [{ time: 5, title: "Норма", summary: multiline }]
+      });
+      expect(res.status).toBe(200);
+      expect(res.body.timecodes[0].summary).toBe(multiline);
+    });
+
     test("админ создаёт поурочный тест, он не попадает в итоговый тест курса", async () => {
       const admin = await createUser({ role: "admin" });
       const adminCookie = await loginAs(admin);
@@ -689,6 +701,58 @@ describe("Курс врача", () => {
       const res = await request(app).delete(`/api/course/quiz-admin/${q1.body.id}`).set("Cookie", adminCookie);
       expect(res.status).toBe(400);
       expect(res.body.error).toBe("last_question");
+    });
+
+    test("удалённый вопрос поурочного теста восстанавливается через откат ИМЕННО в свой урок, а не в итоговый тест курса", async () => {
+      // Откат доступен только super_admin (см. requireRole на /audit-log/:id/revert).
+      const admin = await createUser({ role: "super_admin" });
+      const adminCookie = await loginAs(admin);
+      const lessonId = await makeLesson();
+      // Два вопроса — иначе сработает защита "последний вопрос нельзя удалить".
+      await request(app).post(`/api/course/lessons/${lessonId}/quiz-admin`).set("Cookie", adminCookie)
+        .send({ question: "Останется", options: ["a", "b"], correct: 0 });
+      const toDelete = await request(app).post(`/api/course/lessons/${lessonId}/quiz-admin`).set("Cookie", adminCookie)
+        .send({ question: "Удалим и откатим", options: ["a", "b"], correct: 1 });
+
+      const deleteRes = await request(app).delete(`/api/course/quiz-admin/${toDelete.body.id}`).set("Cookie", adminCookie);
+      expect(deleteRes.status).toBe(200);
+
+      const logRow = await pool.query(
+        "SELECT id FROM audit_log WHERE action='content.quiz_deleted' AND target_id=$1 ORDER BY created_at DESC LIMIT 1",
+        [toDelete.body.id]
+      );
+      expect(logRow.rowCount).toBe(1);
+
+      const revertRes = await request(app).post(`/api/staff/audit-log/${logRow.rows[0].id}/revert`).set("Cookie", adminCookie);
+      expect(revertRes.status).toBe(200);
+
+      const restored = await pool.query("SELECT lesson_id, question FROM quiz_questions WHERE id=$1", [toDelete.body.id]);
+      expect(restored.rowCount).toBe(1);
+      expect(restored.rows[0].lesson_id).toBe(lessonId);
+
+      // И не "утёк" в итоговый тест курса.
+      const finalQuizRes = await request(app).get("/api/course/quiz-admin").set("Cookie", adminCookie);
+      expect(finalQuizRes.body.quiz.some((q) => q.id === toDelete.body.id)).toBe(false);
+    });
+
+    test("удалённый через POST вопрос поурочного теста откатывается (content.lesson_quiz_created)", async () => {
+      const admin = await createUser({ role: "super_admin" });
+      const adminCookie = await loginAs(admin);
+      const lessonId = await makeLesson();
+      const createRes = await request(app).post(`/api/course/lessons/${lessonId}/quiz-admin`).set("Cookie", adminCookie)
+        .send({ question: "Вопрос для отката создания", options: ["a", "b"], correct: 0 });
+
+      const logRow = await pool.query(
+        "SELECT id FROM audit_log WHERE action='content.lesson_quiz_created' AND target_id=$1 ORDER BY created_at DESC LIMIT 1",
+        [createRes.body.id]
+      );
+      expect(logRow.rowCount).toBe(1);
+
+      const revertRes = await request(app).post(`/api/staff/audit-log/${logRow.rows[0].id}/revert`).set("Cookie", adminCookie);
+      expect(revertRes.status).toBe(200);
+
+      const check = await pool.query("SELECT id FROM quiz_questions WHERE id=$1", [createRes.body.id]);
+      expect(check.rowCount).toBe(0);
     });
   });
 });

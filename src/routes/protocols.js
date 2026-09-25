@@ -3,7 +3,6 @@ const crypto = require("crypto");
 const pool = require("../db");
 const { authRequired, requireRole } = require("../middleware/auth");
 const { logAction } = require("../audit");
-const { sanitizeLessonHtml } = require("../sanitize");
 
 const router = express.Router();
 
@@ -50,12 +49,13 @@ router.post("/", authRequired, requireRole("admin", "super_admin"), async (req, 
     return res.status(400).json({ error: "invalid_input", message: "Укажите название протокола" });
   }
   const id = crypto.randomUUID();
+  const cleanSummary = (summary || "").trim();
   await pool.query(
     "INSERT INTO protocols (id, title, summary, created_by) VALUES ($1,$2,$3,$4)",
-    [id, title.trim(), sanitizeLessonHtml(summary || ""), req.user.name]
+    [id, title.trim(), cleanSummary, req.user.name]
   );
   await logAction(req.user, "protocol.create", "protocol", id, title.trim(), {});
-  res.json({ id, title: title.trim(), summary: sanitizeLessonHtml(summary || "") });
+  res.json({ id, title: title.trim(), summary: cleanSummary });
 });
 
 router.put("/:id", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
@@ -65,7 +65,7 @@ router.put("/:id", authRequired, requireRole("admin", "super_admin"), async (req
   }
   const result = await pool.query(
     "UPDATE protocols SET title=$1, summary=$2 WHERE id=$3 RETURNING id",
-    [title.trim(), sanitizeLessonHtml(summary || ""), req.params.id]
+    [title.trim(), (summary || "").trim(), req.params.id]
   );
   if (!result.rowCount) return res.status(404).json({ error: "not_found" });
   await logAction(req.user, "protocol.update", "protocol", req.params.id, title.trim(), {});
@@ -92,7 +92,10 @@ router.put("/:id/guides/:specializationId", authRequired, requireRole("admin", "
   const spec = await pool.query("SELECT id FROM specializations WHERE id=$1", [req.params.specializationId]);
   if (!spec.rowCount) return res.status(404).json({ error: "not_found", message: "Неизвестная специализация" });
 
-  const clean = sanitizeLessonHtml(guideHtml);
+  // Поле ввода на фронтенде — обычная textarea (не WYSIWYG), поэтому текст здесь
+  // именно ПЛОСКИЙ (не HTML): хранится как есть, а переносы строк/HTML-спецсимволы
+  // безопасно превращаются в разметку уже на выводе (см. renderPlainToProse на фронтенде).
+  const clean = guideHtml.trim();
   await pool.query(
     `INSERT INTO protocol_guides (id, protocol_id, specialization_id, guide_html) VALUES ($1,$2,$3,$4)
      ON CONFLICT (protocol_id, specialization_id) DO UPDATE SET guide_html=$4`,
