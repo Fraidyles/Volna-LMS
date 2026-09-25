@@ -10,6 +10,8 @@ const { sanitizeLessonHtml } = require("../sanitize");
 const { notify, notifyAllStudents } = require("../notifications");
 const { requireStudentScope, filterToScope } = require("../access");
 const { isChatMuted } = require("../chatMutes");
+const { generateCertificateNumber } = require("../util");
+const { generateCertificatePdf } = require("../certificate");
 
 const router = express.Router();
 
@@ -424,14 +426,17 @@ router.post(
   requireStudentScope("studentId"),
   async (req, res) => {
     const before = await pool.query(
-      "SELECT certificate_status, certificate_issued_at, certificate_issued_by FROM progress WHERE user_id=$1",
+      "SELECT certificate_status, certificate_issued_at, certificate_issued_by, certificate_number FROM progress WHERE user_id=$1",
       [req.params.studentId]
     );
     if (!before.rowCount) return res.status(404).json({ error: "not_found" });
+    // COALESCE — номер выпускается один раз и переживает повторную выдачу (например,
+    // после отката и повторного issue тем же куратором): если он уже есть, оставляем как есть.
     const result = await pool.query(
-      `UPDATE progress SET certificate_status='issued', certificate_issued_at=now(), certificate_issued_by=$1
+      `UPDATE progress SET certificate_status='issued', certificate_issued_at=now(), certificate_issued_by=$1,
+       certificate_number=COALESCE(certificate_number, $3)
        WHERE user_id=$2 RETURNING user_id`,
-      [req.user.name, req.params.studentId]
+      [req.user.name, req.params.studentId, generateCertificateNumber()]
     );
     if (!result.rowCount) return res.status(404).json({ error: "not_found" });
     const u = await pool.query("SELECT name FROM users WHERE id=$1", [req.params.studentId]);
@@ -457,14 +462,15 @@ router.post("/certificate/bulk-issue", authRequired, requireRole("curator", "adm
   let issued = 0;
   for (const studentId of scopedIds) {
     const before = await pool.query(
-      "SELECT certificate_status, certificate_issued_at, certificate_issued_by FROM progress WHERE user_id=$1",
+      "SELECT certificate_status, certificate_issued_at, certificate_issued_by, certificate_number FROM progress WHERE user_id=$1",
       [studentId]
     );
     if (!before.rowCount) continue;
     const result = await pool.query(
-      `UPDATE progress SET certificate_status='issued', certificate_issued_at=now(), certificate_issued_by=$1
+      `UPDATE progress SET certificate_status='issued', certificate_issued_at=now(), certificate_issued_by=$1,
+       certificate_number=COALESCE(certificate_number, $3)
        WHERE user_id=$2 RETURNING user_id`,
-      [req.user.name, studentId]
+      [req.user.name, studentId, generateCertificateNumber()]
     );
     if (!result.rowCount) continue;
     const u = await pool.query("SELECT name FROM users WHERE id=$1", [studentId]);
@@ -479,6 +485,30 @@ router.post("/certificate/bulk-issue", authRequired, requireRole("curator", "adm
     issued++;
   }
   res.json({ ok: true, issued });
+});
+
+// PDF рендерится на лету при каждом скачивании (см. src/certificate.js) — файл нигде
+// не хранится на диске, только certificate_number/certificate_issued_at в progress.
+router.get("/certificate/download", authRequired, requireRole("student"), async (req, res) => {
+  const result = await pool.query(
+    `SELECT p.certificate_status, p.certificate_number, p.certificate_issued_at, u.name AS student_name, c.title AS course_title
+     FROM progress p JOIN users u ON u.id = p.user_id JOIN courses c ON c.id = p.course_id
+     WHERE p.user_id = $1`,
+    [req.user.id]
+  );
+  if (!result.rowCount || result.rows[0].certificate_status !== "issued") {
+    return res.status(403).json({ error: "certificate_not_issued", message: "Сертификат ещё не выдан" });
+  }
+  const row = result.rows[0];
+  const pdf = await generateCertificatePdf({
+    studentName: row.student_name,
+    courseTitle: row.course_title,
+    certificateNumber: row.certificate_number,
+    issuedAt: row.certificate_issued_at
+  });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename="certificate-${row.certificate_number}.pdf"`);
+  res.send(pdf);
 });
 
 /* ---------- Видимость материалов по врачам ---------- */

@@ -4,6 +4,17 @@ function generateReferralCode() {
   return crypto.randomBytes(4).toString("hex"); // 8 символов, например "a1b2c3d4"
 }
 
+// Без похожих на письме/экране символов (0/O, 1/I) — номер могут диктовать/переписывать
+// вручную для проверки подлинности (см. src/certificate.js).
+const CERT_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function generateCertificateNumber() {
+  const year = new Date().getFullYear();
+  const bytes = crypto.randomBytes(6);
+  let suffix = "";
+  for (let i = 0; i < 6; i++) suffix += CERT_ALPHABET[bytes[i] % CERT_ALPHABET.length];
+  return "MD-" + year + "-" + suffix;
+}
+
 function generateTempPassword() {
   // Отсекаем небуквенно-цифровые символы base64 (+/=) — иногда их выпадает
   // столько, что после этого остаётся меньше 10 символов; докручиваем, пока
@@ -35,4 +46,4 @@ function describeUserAgent(ua) {
   return os + " · " + browser;
 }
 
-module.exports = { generateReferralCode, generateTempPassword, describeUserAgent };
+module.exports = { generateReferralCode, generateTempPassword, describeUserAgent, generateCertificateNumber };

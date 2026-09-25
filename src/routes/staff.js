@@ -10,6 +10,7 @@ const { notify } = require("../notifications");
 const { canManageStudent, requireStudentScope, filterToScope } = require("../access");
 const { buildDailyDigest } = require("../dailyDigest");
 const { getStaffInviteCode, TTL_MS } = require("../staffInviteCode");
+const { generateCertificatePdf } = require("../certificate");
 
 const router = express.Router();
 
@@ -299,6 +300,30 @@ router.post("/students/bulk-field", authRequired, requireRole("curator", "admin"
     return res.status(400).json({ error: "invalid_field" });
   }
   res.json({ ok: true, updated: scopedIds.length });
+});
+
+// Куратор/админ может скачать сертификат врача сам — например, чтобы сверить номер
+// при запросе на подтверждение подлинности, не прося врача переслать файл.
+router.get("/students/:id/certificate/download", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
+  const result = await pool.query(
+    `SELECT p.certificate_status, p.certificate_number, p.certificate_issued_at, u.name AS student_name, c.title AS course_title
+     FROM progress p JOIN users u ON u.id = p.user_id JOIN courses c ON c.id = p.course_id
+     WHERE p.user_id = $1`,
+    [req.params.id]
+  );
+  if (!result.rowCount || result.rows[0].certificate_status !== "issued") {
+    return res.status(403).json({ error: "certificate_not_issued", message: "Сертификат ещё не выдан" });
+  }
+  const row = result.rows[0];
+  const pdf = await generateCertificatePdf({
+    studentName: row.student_name,
+    courseTitle: row.course_title,
+    certificateNumber: row.certificate_number,
+    issuedAt: row.certificate_issued_at
+  });
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `inline; filename="certificate-${row.certificate_number}.pdf"`);
+  res.send(pdf);
 });
 
 /* ---------- Приватные заметки персонала о враче (врач их никогда не видит) ---------- */

@@ -514,3 +514,9 @@ INSERT INTO specializations (id, name) VALUES
   ('bariatric_surgeon', 'Бариатрический хирург')
 ON CONFLICT (id) DO NOTHING;
 
+-- ---------- Этап 18: настоящий PDF-файл сертификата, а не только статус в базе ----------
+-- Номер генерируется один раз при выдаче (issue/bulk-issue) и переиспользуется при
+-- каждом скачивании — PDF рендерится на лету из certificate_number + данных студента/
+-- курса, а не хранится файлом на диске (тут нечего инвалидировать при повторной генерации).
+ALTER TABLE progress ADD COLUMN IF NOT EXISTS certificate_number TEXT;
+

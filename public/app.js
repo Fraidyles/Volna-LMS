@@ -186,7 +186,8 @@ var ICONS = {
   message: '<path d="M4 5.5A2 2 0 0 1 6 3.5h12a2 2 0 0 1 2 2V15a2 2 0 0 1-2 2H9l-4.5 4V5.5Z"/>',
   gear: '<circle cx="12" cy="12" r="3.2"/><path d="M12 4v2.4M12 17.6V20M4 12h2.4M17.6 12H20M6.3 6.3l1.7 1.7M16 16l1.7 1.7M17.7 6.3 16 8M8 16l-1.7 1.7"/>',
   logout: '<path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M15 16l4-4-4-4M19 12H9"/>',
-  list: '<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="18" r="1.2"/>'
+  list: '<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="18" r="1.2"/>',
+  download: '<path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/><path d="M8 11l4 4 4-4"/><path d="M12 14.5V4"/>'
 };
 function icon(name, cls){ return '<svg class="ic'+(cls?' '+cls:'')+'" viewBox="0 0 24 24">'+(ICONS[name]||'')+'</svg>'; }
 function brandMark(style){ return '<span class="mark"'+(style?' style="'+style+'"':'')+'>'+icon("doctor")+'</span>'; }
@@ -1719,7 +1720,10 @@ function renderCertificate(){
   } else {
     html += '<p style="font-size:12.5px;color:var(--muted);margin:0 0 24px;">Выдан '+fmtDate(pr.certificate_issued_at)+(pr.certificate_issued_by?(' · '+escapeHtml(pr.certificate_issued_by)):'')+'</p>';
   }
-  html += '<button class="btn btn-primary" data-action="close-course">Вернуться к курсу</button></div></div>';
+  if(issued){
+    html += '<a class="btn btn-primary" href="/api/course/certificate/download" target="_blank" rel="noopener" style="margin-right:8px;">'+icon("download")+' Скачать сертификат (PDF)</a>';
+  }
+  html += '<button class="btn'+(issued?'':' btn-primary')+'" data-action="close-course">Вернуться к курсу</button></div></div>';
   return el(html);
 }
 
@@ -3563,7 +3567,9 @@ function renderStudentDrawer(){
     if(s.completed){
       body += '<div class="card" style="padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;">' +
         '<b style="font-size:13.5px;">Сертификат: '+(s.certificate_status==="issued"?"выдан":"ожидает выдачи")+'</b>' +
-        (s.certificate_status!=="issued" ? '<button class="btn btn-sm btn-primary" data-action="issue-certificate" data-id="'+s.id+'">Выдать сертификат</button>' : '') +
+        (s.certificate_status==="issued"
+          ? '<a class="btn btn-sm btn-ghost" href="/api/staff/students/'+s.id+'/certificate/download" target="_blank" rel="noopener">'+icon("download","ic-sm")+' Скачать PDF</a>'
+          : '<button class="btn btn-sm btn-primary" data-action="issue-certificate" data-id="'+s.id+'">Выдать сертификат</button>') +
       '</div>';
     }
     if(s.requested_full_access){

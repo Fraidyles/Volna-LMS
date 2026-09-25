@@ -445,6 +445,39 @@ describe("Курс врача", () => {
     expect(check.rows[0].certificate_status).toBe("issued");
   });
 
+  test("сертификат: скачивание недоступно до выдачи, доступно и стабильно после", async () => {
+    const student = await createUser({ role: "student", courseId: course.courseId });
+    const studentCookie = await loginAs(student);
+
+    const before = await request(app).get("/api/course/certificate/download").set("Cookie", studentCookie);
+    expect(before.status).toBe(403);
+
+    const admin = await createUser({ role: "super_admin" });
+    const adminCookie = await loginAs(admin);
+    const issueRes = await request(app).post(`/api/course/certificate/${student.id}/issue`).set("Cookie", adminCookie);
+    expect(issueRes.status).toBe(200);
+
+    const dl = await request(app).get("/api/course/certificate/download").set("Cookie", studentCookie);
+    expect(dl.status).toBe(200);
+    expect(dl.headers["content-type"]).toBe("application/pdf");
+    expect(dl.body.length).toBeGreaterThan(1000); // непустой PDF, а не заглушка
+
+    const numRow = await pool.query("SELECT certificate_number FROM progress WHERE user_id=$1", [student.id]);
+    const number = numRow.rows[0].certificate_number;
+    expect(number).toMatch(/^MD-\d{4}-[A-Z0-9]{6}$/);
+
+    // Повторная выдача (например, второй клик куратора) не должна перевыпускать номер —
+    // иначе старый скачанный файл разошёлся бы с тем, что хранится в базе.
+    await request(app).post(`/api/course/certificate/${student.id}/issue`).set("Cookie", adminCookie);
+    const numRow2 = await pool.query("SELECT certificate_number FROM progress WHERE user_id=$1", [student.id]);
+    expect(numRow2.rows[0].certificate_number).toBe(number);
+
+    // Куратор/админ тоже может скачать тот же файл через свою ручку.
+    const staffDl = await request(app).get(`/api/staff/students/${student.id}/certificate/download`).set("Cookie", adminCookie);
+    expect(staffDl.status).toBe(200);
+    expect(staffDl.headers["content-type"]).toBe("application/pdf");
+  });
+
   // Ниже — конструктор курса. Роуты резолвят "курс" через `SELECT id FROM courses LIMIT 1`
   // (в проде курс всегда один, так и останется), поэтому тесты сами один раз узнают,
   // на какой courses.id это разрешится в этом прогоне, и дальше работают только с ним —
