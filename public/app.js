@@ -2041,7 +2041,11 @@ function renderStaffHome(container){
 
   var streamsHtml = '<b style="font-size:14.5px;display:block;margin-bottom:10px;">Ваши потоки</b>';
   if(!streamKeys.length){
-    streamsHtml += '<div class="card empty-state" style="padding:24px 20px;">В вашей зоне ответственности пока нет врачей.</div>';
+    streamsHtml += '<div class="card empty-state" style="padding:32px 20px;">' +
+      '<div class="tile-icon" style="background:var(--primary-tint);color:var(--primary);margin:0 auto 12px;">'+icon("users")+'</div>' +
+      '<b style="font-size:13.5px;display:block;color:var(--ink);">Врачей пока нет</b>' +
+      '<p style="font-size:12.5px;margin:4px 0 0;">Как только куратор добавит первого врача в поток, здесь появится карточка с его прогрессом.</p>' +
+    '</div>';
   } else {
     streamsHtml += '<div class="board-strip">';
     streamKeys.forEach(function(key){
@@ -2077,7 +2081,13 @@ function renderStaffHome(container){
     '</div>'
   ));
   if(totalTasks) container.appendChild(renderInboxCard());
-  else container.appendChild(el('<div class="card empty-state" style="padding:24px 20px;">На сегодня задач нет.</div>'));
+  else container.appendChild(el(
+    '<div class="card empty-state" style="padding:32px 20px;">' +
+      '<div class="tile-icon" style="background:var(--status-active-tint);color:var(--status-active);margin:0 auto 12px;">'+icon("check")+'</div>' +
+      '<b style="font-size:13.5px;display:block;color:var(--ink);">Всё разобрано</b>' +
+      '<p style="font-size:12.5px;margin:4px 0 0;">Никто не ждёт ответа и не завис без активности — новые задачи появятся здесь сами.</p>' +
+    '</div>'
+  ));
 
   var reminders = upcomingEventReminders();
   var unmutedUnanswered = inbox.unanswered.filter(function(r){ return !isChatMutedLocal("curator", r.id); });
@@ -2088,7 +2098,7 @@ function renderStaffHome(container){
       '<b style="font-size:14px;">Уведомления</b>' +
     '</div>';
   if(!reminders.length){
-    gridHtml += '<p style="font-size:13px;color:var(--muted);margin:0;">У вас нет новых уведомлений.</p>';
+    gridHtml += '<div style="display:flex;align-items:center;gap:8px;color:var(--status-active);">'+icon("check","ic-sm")+'<p style="font-size:13px;color:var(--muted);margin:0;">Ближайших эфиров и дедлайнов не запланировано — тут спокойно.</p></div>';
   } else {
     reminders.slice(0,3).forEach(function(n){
       gridHtml += '<div style="padding:8px 0;border-bottom:1px solid var(--line-2);"><b style="font-size:12.5px;display:block;">'+escapeHtml(n.title)+'</b></div>';
@@ -2105,7 +2115,7 @@ function renderStaffHome(container){
       (unmutedUnanswered.length ? '<button class="btn btn-sm btn-ghost" data-action="sidebar-nav" data-key="chats">Все →</button>' : '') +
     '</div>';
   if(!unmutedUnanswered.length){
-    gridHtml += '<p style="font-size:13px;color:var(--muted);margin:0;">У вас нет новых сообщений.</p>';
+    gridHtml += '<div style="display:flex;align-items:center;gap:8px;color:var(--status-active);">'+icon("check","ic-sm")+'<p style="font-size:13px;color:var(--muted);margin:0;">Все обращения закрыты — никто не ждёт ответа.</p></div>';
   } else {
     gridHtml += '<p style="font-size:13px;margin:0;">Ждут ответа: '+unmutedUnanswered.length+'.</p>';
   }
@@ -2119,7 +2129,7 @@ function renderStaffHome(container){
       '<b style="font-size:14px;">ИИ-ассистент — отчёт за вчера</b>' +
     '</div>';
   if(!d){
-    digestHtml += '<p style="font-size:13px;color:var(--muted);margin:0;">Формируется каждый день в 9:00 по МСК.</p>';
+    digestHtml += '<div style="display:flex;align-items:center;gap:8px;color:var(--muted-2);">'+icon("clock","ic-sm")+'<p style="font-size:13px;color:var(--muted);margin:0;">Ещё не готов — соберёт итоги дня и появится здесь к 9:00 по МСК.</p></div>';
   } else {
     digestHtml += '<p style="font-size:13.5px;margin:0;line-height:1.5;">'+escapeHtml(d.summary)+'</p>';
   }
