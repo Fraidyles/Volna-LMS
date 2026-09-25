@@ -1410,20 +1410,18 @@ function findPendingModuleGate(){
       given.indexOf(m.id)===-1;
   }) || null;
 }
-// «Ваши протоколы» реально появляется врачу, когда: в курсе есть модули — после
-// того как закрыт (тест+отзыв) самый первый модуль курса (тогда и открывается
-// хотя бы один протокол, привязанный к его урокам); модулей нет вовсе — как раньше,
-// после самого первого пройденного урока. Используется и для видимости пункта
-// сайдбара, и для того, чтобы поймать момент перехода false→true и показать
-// unlockCelebration (см. maybeCelebrateProtocolsUnlock) — иначе рассинхронились бы
-// момент появления пункта меню и момент, когда мы про это радостно сообщаем.
+// «Ваши протоколы» реально появляется врачу после прохождения третьего урока
+// курса — именно с этого урока в текущей программе начинают привязываться
+// первые протоколы (см. lesson_protocols), до этого коллекции нечему появиться.
+// Используется и для видимости пункта сайдбара, и для того, чтобы поймать
+// момент перехода false→true и показать unlockCelebration (см.
+// maybeCelebrateProtocolsUnlock) — иначе рассинхронились бы момент появления
+// пункта меню и момент, когда мы про это радостно сообщаем. В курсе короче
+// трёх уроков ждать нечего — доступно сразу после первого пройденного.
 function protocolsSectionAvailable(){
-  var mods = course.modules || [];
-  if(mods.length){
-    var given = course.moduleFeedbackGiven || [];
-    return given.indexOf(mods[0].id)!==-1;
-  }
   var doneIds = (course.progress && course.progress.completed_lessons) || [];
+  var thirdLesson = course.lessons && course.lessons[2];
+  if(thirdLesson) return doneIds.indexOf(thirdLesson.id)!==-1;
   return doneIds.length>0;
 }
 function maybeCelebrateProtocolsUnlock(wasAvailable){
@@ -3356,7 +3354,7 @@ function renderUnlockCelebrationModal(){
       '</svg>' +
     '</div>' +
     '<h3>Новая функция разблокирована!</h3>' +
-    '<p>Вы прошли первый модуль курса — теперь вам доступны «Ваши протоколы»: готовые гайды по применению того, о чём говорили спикеры, подобранные под вашу специализацию.</p>' +
+    '<p>Вам стали доступны «Ваши протоколы» — готовые гайды по применению того, о чём говорили спикеры, подобранные под вашу специализацию.</p>' +
     '<div class="unlock-actions">' +
       '<button class="btn btn-primary btn-block" data-action="goto-protocols-from-celebration">Смотреть протоколы</button>' +
       '<button class="btn btn-ghost btn-block" data-action="close-unlock-celebration">Продолжить обучение</button>' +
@@ -3868,10 +3866,8 @@ function wireEvents(root){
           }) });
         }catch(err){ showToast(err.message); return; }
       }
-      var wasProtoAvail = protocolsSectionAvailable();
       if(!course.moduleFeedbackGiven) course.moduleFeedbackGiven=[];
       if(course.moduleFeedbackGiven.indexOf(mfModuleId)===-1) course.moduleFeedbackGiven.push(mfModuleId);
-      maybeCelebrateProtocolsUnlock(wasProtoAvail);
       resetModuleGateState();
       // lessonIndex/quizMode уже стоят на следующем шаге — их выставил
       // advanceAfterLesson() ДО того, как renderCoursePlayer показал этот гейт
