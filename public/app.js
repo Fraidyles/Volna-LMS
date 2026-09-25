@@ -21,11 +21,17 @@ var me = null;                 // текущий пользователь {id,em
 var view = "loading";
 var specializationsList = [];  // справочник специализаций — грузится один раз при старте (нужен и до входа, на форме регистрации)
 var course = null;             // {course, lessons, quiz, progress} — для врача
+// Врач может быть записан сразу на несколько курсов — enrollments — лёгкий список
+// всех его записей, activeCourseId — какой из них сейчас открыт (переключатель
+// показывается только когда записей больше одной — иначе интерфейс не меняется).
+var studentEnrollments = [];
+var activeCourseId = null;
 var studentState = { tab:"course", navKey:"course", lessonIndex:0, quizMode:false, quizSubmitted:false, materialsSearch:"", materialsFilter:"all", materialsAutoFocus:false,
   lessonStage:"intro", videoEnded:false, lessonQuizAnswers:{}, lessonQuizResult:null, protocolsLoaded:false,
   // Гейт после последнего урока модуля: null | "quiz" | "feedback".
   moduleGateStage:null, moduleGateId:null, moduleQuizResult:null, moduleFeedbackRating:0, moduleFeedbackComment:"" };
-var staffState = { mainTab:"home", navKey:"home", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, drawerTab:"progress", selectedIds:[], materials:[], certificatesEnabled:false, quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],pendingCertificates:[]}, digest:null, inviteCode:null, editSpecializationIds:[], editName:"", editPhone:"", editWorkplace:"" };
+var staffState = { mainTab:"home", navKey:"home", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, selectedStudentEnrollments:[], drawerTab:"progress", selectedIds:[], materials:[], certificatesEnabled:false, quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],pendingCertificates:[]}, digest:null, inviteCode:null, editSpecializationIds:[], editName:"", editPhone:"", editWorkplace:"",
+  coursesList:[], activeCourseId:null, courseEditorId:null, courseEditorTitle:"", courseEditorCertsEnabled:false, courseDeleteConfirmId:null, courseDeleteConfirmText:"", newCourseTitle:"", enrollCourseId:"" };
 var profileEditor = { open:false, name:"", phone:"", workplace:"", specializationIds:[], interestIds:[] };
 // Черновик специализаций для формы регистрации — до входа в систему нет ни
 // me, ни staffState, поэтому отдельное состояние; сбрасывается заново при
@@ -334,7 +340,7 @@ async function loadNotifications(){
 // каждом входе (в отличие от чатов/уведомлений, тут нет бейджа, который нужно
 // держать актуальным постоянно).
 async function loadProtocols(){
-  try{ var d = await api("/course/protocols"); studentProtocols = { forYou:d.forYou, additional:d.additional }; }
+  try{ var d = await api("/course/protocols?courseId="+encodeURIComponent(activeCourseId)); studentProtocols = { forYou:d.forYou, additional:d.additional }; }
   catch(e){ studentProtocols = { forYou:[], additional:[] }; }
   studentState.protocolsLoaded = true;
 }
@@ -362,7 +368,12 @@ function stopNotificationPolling(){ if(notifPollTimer){ clearInterval(notifPollT
 
 async function loadCourse(){
   try{
-    course = await api("/course");
+    var en = await api("/course/enrollments");
+    studentEnrollments = en.enrollments;
+    if(!activeCourseId || !studentEnrollments.some(function(x){ return x.courseId===activeCourseId; })){
+      activeCourseId = studentEnrollments.length ? studentEnrollments[0].courseId : null;
+    }
+    course = activeCourseId ? await api("/course/content/"+activeCourseId) : null;
   }catch(e){
     showToast(e.message);
   }
@@ -373,9 +384,25 @@ async function loadCalendarData(){
   try{ var ev = await api("/events"); calendarState.events = ev.events; }catch(e){}
 }
 
-async function loadStaffData(){
+// Курсов может быть несколько — грузим список первым и определяем, какой из них
+// сейчас "активный" (переключается вручную, см. renderStaffCourseSwitcher), прежде
+// чем тянуть всё, что зависит от конкретного курса (ученики, инбокс, конструктор).
+async function loadCoursesList(){
   try{
-    var s = await api("/staff/students");
+    var r = await api("/courses");
+    staffState.coursesList = r.courses;
+    if(!staffState.activeCourseId || !staffState.coursesList.some(function(c){ return c.id===staffState.activeCourseId; })){
+      staffState.activeCourseId = staffState.coursesList.length ? staffState.coursesList[0].id : null;
+    }
+  }catch(e){}
+}
+
+async function loadStaffData(){
+  await loadCoursesList();
+  var cid = staffState.activeCourseId;
+  var cq = cid ? "?courseId="+encodeURIComponent(cid) : "";
+  try{
+    var s = await api("/staff/students"+cq);
     staffState.students = s.students;
   }catch(e){ showToast(e.message); }
   try{
@@ -392,12 +419,12 @@ async function loadStaffData(){
     }catch(e){}
   }
   try{
-    var mat = await api("/course/materials");
+    var mat = await api("/course/materials"+cq);
     staffState.materials = mat.lessons;
     staffState.certificatesEnabled = !!mat.certificatesEnabled;
   }catch(e){}
   try{
-    var vis = await api("/course/visibility");
+    var vis = await api("/course/visibility"+cq);
     courseVisibility = vis.hiddenFor || {};
   }catch(e){}
   try{
@@ -405,7 +432,7 @@ async function loadStaffData(){
     directory = dir.staff;
   }catch(e){}
   try{
-    var ibx = await api("/staff/inbox");
+    var ibx = await api("/staff/inbox"+cq);
     staffState.inbox = ibx;
   }catch(e){}
   try{
@@ -417,11 +444,11 @@ async function loadStaffData(){
   }catch(e){}
   if(me.role==="admin" || me.role==="super_admin"){
     try{
-      var qa = await api("/course/quiz-admin");
+      var qa = await api("/course/quiz-admin"+cq);
       staffState.quizAdmin = qa.quiz;
     }catch(e){}
     try{
-      var mods = await api("/course/modules");
+      var mods = await api("/course/modules"+cq);
       moduleManagerState.modules = mods.modules;
       moduleManagerState.allLessons = mods.allLessons;
     }catch(e){}
@@ -450,8 +477,10 @@ async function loadAuditLog(){
 async function refreshSelectedStudent(){
   if(!staffState.selectedStudentId) return;
   try{
-    var d = await api("/staff/students/"+staffState.selectedStudentId);
+    var cq = staffState.activeCourseId ? "?courseId="+encodeURIComponent(staffState.activeCourseId) : "";
+    var d = await api("/staff/students/"+staffState.selectedStudentId+cq);
     staffState.selectedStudent = d.student;
+    staffState.selectedStudentEnrollments = d.enrollments || [];
     var idx = staffState.students.findIndex(function(x){ return x.id===d.student.id; });
     if(idx!==-1) staffState.students[idx] = Object.assign({}, staffState.students[idx], d.student);
   }catch(e){ showToast(e.message); }
@@ -1067,6 +1096,7 @@ function renderSidebar(){
     items += sidebarItem("dashboard","chartbar","Аналитика", snavKey==="dashboard");
     items += sidebarItem("protocols","doctor","Протоколы", snavKey==="protocols");
     if(isAdmin){
+      items += sidebarItem("courses","folder","Курсы", snavKey==="courses");
       items += sidebarItem("team","users","Команда", snavKey==="team");
       items += sidebarItem("modules","clipboard","Модули", snavKey==="modules");
       items += sidebarItem("audit","list","Журнал", snavKey==="audit");
@@ -1124,6 +1154,10 @@ function renderStudentShell(){
     return wrap;
   }
 
+  if(studentEnrollments.length > 1){
+    content.appendChild(renderCourseSwitcher());
+  }
+
   if(studentState.tab === "lesson"){
     content.appendChild(renderCoursePlayer());
   } else if(studentState.tab === "schedule"){
@@ -1144,6 +1178,17 @@ function renderStudentShell(){
     content.appendChild(renderStudentHome());
   }
   return wrap;
+}
+
+// Показывается только когда врач записан больше чем на один курс — переключает
+// activeCourseId и перезагружает GET /course/content/:courseId целиком.
+function renderCourseSwitcher(){
+  var html = '<div class="tabs" style="margin-bottom:14px;">';
+  studentEnrollments.forEach(function(en){
+    html += '<button type="button" class="tab'+(en.courseId===activeCourseId?' active':'')+'" data-action="switch-course" data-course-id="'+en.courseId+'">'+escapeHtml(en.title)+'</button>';
+  });
+  html += '</div>';
+  return el(html);
 }
 
 function renderStudentSchedule(){
@@ -1765,7 +1810,7 @@ function renderCertificate(){
     html += '<p style="font-size:12.5px;color:var(--muted);margin:0 0 24px;">Выдан '+fmtDate(pr.certificate_issued_at)+(pr.certificate_issued_by?(' · '+escapeHtml(pr.certificate_issued_by)):'')+'</p>';
   }
   if(issued){
-    html += '<a class="btn btn-primary" href="/api/course/certificate/download" target="_blank" rel="noopener" style="margin-right:8px;">'+icon("download")+' Скачать сертификат (PDF)</a>';
+    html += '<a class="btn btn-primary" href="/api/course/certificate/download?courseId='+encodeURIComponent(activeCourseId)+'" target="_blank" rel="noopener" style="margin-right:8px;">'+icon("download")+' Скачать сертификат (PDF)</a>';
   }
   html += '<button class="btn'+(issued?'':' btn-primary')+'" data-action="close-course">Вернуться к курсу</button></div></div>';
   return el(html);
@@ -2104,9 +2149,12 @@ function renderStaffShell(){
   var shell = el('<div class="shell"><div class="wrap" id="staffContent"></div></div>');
   main.appendChild(shell);
   var content = shell.querySelector("#staffContent");
-  content.appendChild(el('<h1 class="section-title">'+escapeHtml(roleLabel(me.role))+'</h1><p class="section-sub" style="margin-top:-2px;">Демо-курс «Медицина Долголетия»</p>'));
+  content.appendChild(el('<h1 class="section-title">'+escapeHtml(roleLabel(me.role))+'</h1>'));
+  content.appendChild(renderStaffCourseSwitcher());
 
-  if(staffState.mainTab === "team" && (me.role==="admin"||me.role==="super_admin")){
+  if(staffState.mainTab === "courses" && (me.role==="admin"||me.role==="super_admin")){
+    content.appendChild(renderCoursesTab());
+  } else if(staffState.mainTab === "team" && (me.role==="admin"||me.role==="super_admin")){
     content.appendChild(renderTeamTab());
   } else if(staffState.mainTab === "calendar"){
     content.appendChild(renderCalendarTab());
@@ -3339,6 +3387,71 @@ function renderProtocolEditorModal(){
   return el('<div class="overlay" data-action="overlay-close-protocol-editor"><div class="drawer" data-stop="1" style="width:min(600px,100%);">'+body+'</div></div>');
 }
 
+// Полоска переключения курса — видна на всех страницах персонала (не только там,
+// где courseId реально используется) просто чтобы всегда было понятно, какой
+// курс сейчас "активен". Один курс — полоска всё равно рисуется (без вариантов
+// выбора она безобидна и заодно показывает название курса).
+function renderStaffCourseSwitcher(){
+  if(!staffState.coursesList.length){
+    return el('<p class="section-sub" style="margin-top:-2px;">Курсов пока нет — создайте первый на странице «Курсы».</p>');
+  }
+  var html = '<div class="tabs" style="margin:2px 0 14px;flex-wrap:wrap;">';
+  staffState.coursesList.forEach(function(c){
+    html += '<button type="button" class="tab'+(c.id===staffState.activeCourseId?' active':'')+'" data-action="switch-staff-course" data-course-id="'+c.id+'">'+escapeHtml(c.title)+'</button>';
+  });
+  html += '</div>';
+  return el(html);
+}
+
+function renderCoursesTab(){
+  var html = '<div class="grid-2" style="align-items:flex-start;">';
+
+  html += '<div class="card" style="padding:18px 20px;">' +
+    '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Курсы</b>';
+  if(!staffState.coursesList.length){
+    html += '<div class="empty-state" style="padding:30px 10px;">Курсов пока нет.</div>';
+  }
+  staffState.coursesList.forEach(function(c){
+    var isEditing = staffState.courseEditorId === c.id;
+    var isDeleting = staffState.courseDeleteConfirmId === c.id;
+    html += '<div style="padding:12px 0;border-bottom:1px solid var(--line-2);">';
+    if(isEditing){
+      html += '<div class="field"><label>Название</label><input class="input" id="courseEditTitleInput" value="'+escapeHtml(staffState.courseEditorTitle)+'"></div>' +
+        '<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:8px 0;">' +
+          '<input type="checkbox" id="courseEditCertsInput"'+(staffState.courseEditorCertsEnabled?' checked':'')+'> Выдавать сертификаты по этому курсу</label>' +
+        '<div style="display:flex;gap:8px;">' +
+          '<button class="btn btn-sm btn-primary" data-action="save-course">Сохранить</button>' +
+          '<button class="btn btn-sm btn-ghost" data-action="cancel-edit-course">Отмена</button>' +
+        '</div>';
+    } else if(isDeleting){
+      html += '<p style="font-size:13px;margin:0 0 8px;">Удалить курс «'+escapeHtml(c.title)+'» безвозвратно вместе со всеми уроками, тестами и прогрессом '+c.enrolledCount+' врачей? Наберите название курса, чтобы подтвердить.</p>' +
+        '<input class="input" id="courseDeleteConfirmInput" placeholder="'+escapeHtml(c.title)+'" style="margin-bottom:8px;">' +
+        '<div style="display:flex;gap:8px;">' +
+          '<button class="btn btn-sm btn-ghost" style="color:var(--status-critical, #d64545);" data-action="confirm-delete-course" data-id="'+c.id+'">Удалить курс</button>' +
+          '<button class="btn btn-sm btn-ghost" data-action="cancel-delete-course">Отмена</button>' +
+        '</div>';
+    } else {
+      html += '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
+        '<div style="flex:1;min-width:160px;"><b style="font-size:13.8px;display:block;">'+escapeHtml(c.title)+'</b>' +
+          '<span style="font-size:12px;color:var(--muted);">'+c.enrolledCount+' '+ruPluralClient(c.enrolledCount,"врач","врача","врачей")+' · сертификаты: '+(c.certificatesEnabled?"включены":"выключены")+'</span></div>' +
+        '<button class="btn btn-sm btn-ghost" data-action="edit-course-open" data-id="'+c.id+'">Изменить</button>' +
+        '<button class="btn btn-sm btn-ghost" data-action="delete-course-open" data-id="'+c.id+'">Удалить</button>' +
+      '</div>';
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+
+  html += '<div class="card" style="padding:18px 20px;">' +
+    '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Новый курс</b>' +
+    '<form id="createCourseForm">' +
+      '<div class="field"><label>Название</label><input class="input" name="title" required></div>' +
+      '<button class="btn btn-primary btn-block" type="submit">Создать</button>' +
+    '</form>' +
+  '</div></div>';
+  return el(html);
+}
+
 function renderTeamTab(){
   var myOptions = assignableRoleOptions(me.role);
   var html = '<div class="grid-2" style="align-items:flex-start;">';
@@ -3409,13 +3522,28 @@ function renderStudentDrawer(){
     '<button class="tab'+(staffState.drawerTab==="notes"?' active':'')+'" data-action="drawer-tab" data-tab="notes">Заметки</button></div>';
 
   if(staffState.drawerTab === "progress"){
+    var enrolledIds = staffState.selectedStudentEnrollments.map(function(e){ return e.courseId; });
+    var notEnrolled = staffState.coursesList.filter(function(c){ return enrolledIds.indexOf(c.id)===-1; });
+    body += '<div class="field"><label>Записан на курсы</label>' +
+      (staffState.selectedStudentEnrollments.length
+        ? '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+staffState.selectedStudentEnrollments.map(function(e){ return magnet("neutral", e.title); }).join("")+'</div>'
+        : '<p class="hint" style="margin:0;">Ни на один курс не записан.</p>') +
+      (notEnrolled.length
+        ? '<div style="display:flex;gap:8px;margin-top:8px;">' +
+            '<select class="input" id="enrollCourseSelect" style="flex:1;">' +
+              notEnrolled.map(function(c){ return '<option value="'+c.id+'">'+escapeHtml(c.title)+'</option>'; }).join("") +
+            '</select>' +
+            '<button class="btn btn-sm btn-ghost" data-action="enroll-student" data-id="'+s.id+'">Записать</button>' +
+          '</div>'
+        : '') +
+    '</div>';
     body += '<div class="progress-label">'+done+' из 5 уроков'+(typeof s.quiz_score==="number"?' · тест: '+s.quiz_score+'%':'')+'</div>';
     if(s.completed){
       if(staffState.certificatesEnabled){
         body += '<div class="card" style="padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;">' +
           '<b style="font-size:13.5px;">Сертификат: '+(s.certificate_status==="issued"?"выдан":"ожидает выдачи")+'</b>' +
           (s.certificate_status==="issued"
-            ? '<a class="btn btn-sm btn-ghost" href="/api/staff/students/'+s.id+'/certificate/download" target="_blank" rel="noopener">'+icon("download","ic-sm")+' Скачать PDF</a>'
+            ? '<a class="btn btn-sm btn-ghost" href="/api/staff/students/'+s.id+'/certificate/download?courseId='+encodeURIComponent(staffState.activeCourseId||"")+'" target="_blank" rel="noopener">'+icon("download","ic-sm")+' Скачать PDF</a>'
             : '<button class="btn btn-sm btn-primary" data-action="issue-certificate" data-id="'+s.id+'">Выдать сертификат</button>') +
         '</div>';
       } else {
@@ -3620,6 +3748,17 @@ function wireEvents(root){
       studentState.tab="lesson"; studentState.lessonIndex=Math.min((course.progress&&course.progress.completed_lessons||[]).length, course.lessons.length-1); studentState.quizMode=false; studentState.quizSubmitted=false; resetLessonStageState(); render(); return;
     }
     if(action==="close-course"){ studentState.tab="course"; studentState.quizMode=false; render(); return; }
+    if(action==="switch-course"){
+      var newCourseId=t.getAttribute("data-course-id");
+      if(newCourseId!==activeCourseId){
+        activeCourseId=newCourseId;
+        studentState.tab="course"; studentState.lessonIndex=0; studentState.quizMode=false; studentState.protocolsLoaded=false;
+        resetLessonStageState();
+        await loadCourse();
+        render();
+      }
+      return;
+    }
     if(action==="goto-lesson"){
       var goIdx=parseInt(t.getAttribute("data-idx"),10);
       var goLesson=course.lessons[goIdx];
@@ -3710,7 +3849,7 @@ function wireEvents(root){
     if(action==="request-full"){
       if(previewMode){ showToast("Режим просмотра — заявки не отправляются"); return; }
       t.disabled=true;
-      try{ await api("/course/request-full-access", { method:"POST" }); course.progress.requested_full_access=true; showToast("Заявка отправлена куратору"); }catch(err){ showToast(err.message); }
+      try{ await api("/course/request-full-access", { method:"POST", body: JSON.stringify({ courseId: activeCourseId }) }); course.progress.requested_full_access=true; showToast("Заявка отправлена куратору"); }catch(err){ showToast(err.message); }
       render(); return;
     }
     if(action==="toggle-protocol"){
@@ -3734,7 +3873,7 @@ function wireEvents(root){
     if(action==="invite-mode"){ staffState.inviteMode=t.getAttribute("data-mode"); render(); return; }
     if(action==="open-course-preview"){
       previewMode = true; previewReturnTab = staffState.mainTab;
-      try{ course = await api("/staff/course-preview"); }
+      try{ course = await api("/staff/course-preview"+(staffState.activeCourseId?"?courseId="+encodeURIComponent(staffState.activeCourseId):"")); }
       catch(err){ showToast(err.message); previewMode=false; return; }
       studentState = { tab:"course", navKey:"course", lessonIndex:0, quizMode:false, quizSubmitted:false,
         lessonStage:"intro", videoEnded:false, lessonQuizAnswers:{}, lessonQuizResult:null };
@@ -3750,8 +3889,10 @@ function wireEvents(root){
     if(action==="open-student"){
       staffState.selectedStudentId=t.getAttribute("data-id"); staffState.drawerTab="progress"; staffState.selectedStudent=null; staffState.notes=[]; render();
       try{
-        var d=await api("/staff/students/"+staffState.selectedStudentId);
+        var cqOpen=staffState.activeCourseId?"?courseId="+encodeURIComponent(staffState.activeCourseId):"";
+        var d=await api("/staff/students/"+staffState.selectedStudentId+cqOpen);
         staffState.selectedStudent=d.student;
+        staffState.selectedStudentEnrollments=d.enrollments||[];
         staffState.editSpecializationIds=(d.student.specialization_ids||[]).slice();
         staffState.editName=d.student.name||""; staffState.editPhone=d.student.phone||""; staffState.editWorkplace=d.student.workplace||"";
         render();
@@ -3807,7 +3948,11 @@ function wireEvents(root){
     }
     if(action==="issue-certificate"){
       t.disabled=true; t.textContent="Выдаём…";
-      try{ await api("/course/certificate/"+t.getAttribute("data-id")+"/issue", { method:"POST" }); showToast("Сертификат выдан"); await loadStaffData(); if(staffState.selectedStudentId){ var dd=await api("/staff/students/"+staffState.selectedStudentId); staffState.selectedStudent=dd.student; } }
+      try{
+        await api("/course/certificate/"+t.getAttribute("data-id")+"/issue", { method:"POST", body: JSON.stringify({ courseId: staffState.activeCourseId }) });
+        showToast("Сертификат выдан"); await loadStaffData();
+        if(staffState.selectedStudentId) await refreshSelectedStudent();
+      }
       catch(err){ showToast(err.message); }
       render(); return;
     }
@@ -3833,6 +3978,17 @@ function wireEvents(root){
       catch(err){ showToast(err.message); }
       render(); return;
     }
+    if(action==="enroll-student"){
+      var enrSelect=document.getElementById("enrollCourseSelect");
+      var enrCourseId=enrSelect?enrSelect.value:"";
+      if(!enrCourseId) return;
+      try{
+        await api("/staff/students/"+t.getAttribute("data-id")+"/enroll", { method:"POST", body: JSON.stringify({ courseId: enrCourseId }) });
+        showToast("Врач записан на курс");
+        await refreshSelectedStudent();
+      }catch(err){ showToast(err.message); }
+      render(); return;
+    }
     if(action==="remove-staff"){
       if(!confirm("Отозвать доступ у этого человека?")) return;
       try{ await api("/staff/team/"+t.getAttribute("data-id"), { method:"DELETE" }); await loadStaffData(); showToast("Доступ отозван"); }catch(err){ showToast(err.message); }
@@ -3851,6 +4007,56 @@ function wireEvents(root){
       render(); return;
     }
     if(action==="close-temp-password"){ tempPasswordResult=null; render(); return; }
+
+    if(action==="switch-staff-course"){
+      var newSCourseId=t.getAttribute("data-course-id");
+      if(newSCourseId!==staffState.activeCourseId){
+        staffState.activeCourseId=newSCourseId;
+        staffState.selectedStudentId=null; staffState.selectedStudent=null;
+        await loadStaffData();
+        render();
+      }
+      return;
+    }
+    if(action==="edit-course-open"){
+      var ecId=t.getAttribute("data-id");
+      var ecCourse=staffState.coursesList.find(function(c){return c.id===ecId;});
+      if(!ecCourse) return;
+      staffState.courseEditorId=ecId; staffState.courseEditorTitle=ecCourse.title; staffState.courseEditorCertsEnabled=ecCourse.certificatesEnabled;
+      staffState.courseDeleteConfirmId=null;
+      render(); return;
+    }
+    if(action==="cancel-edit-course"){ staffState.courseEditorId=null; render(); return; }
+    if(action==="save-course"){
+      var titleInp=document.getElementById("courseEditTitleInput");
+      var certsInp=document.getElementById("courseEditCertsInput");
+      var newTitle=titleInp?titleInp.value.trim():"";
+      if(!newTitle){ showToast("Укажите название курса"); return; }
+      try{
+        await api("/courses/"+staffState.courseEditorId, { method:"PUT", body: JSON.stringify({ title:newTitle, certificatesEnabled: certsInp?certsInp.checked:false }) });
+        staffState.courseEditorId=null;
+        await loadStaffData();
+        showToast("Курс обновлён");
+      }catch(err){ showToast(err.message); }
+      render(); return;
+    }
+    if(action==="delete-course-open"){
+      staffState.courseDeleteConfirmId=t.getAttribute("data-id");
+      staffState.courseEditorId=null;
+      render(); return;
+    }
+    if(action==="cancel-delete-course"){ staffState.courseDeleteConfirmId=null; render(); return; }
+    if(action==="confirm-delete-course"){
+      var confirmInp=document.getElementById("courseDeleteConfirmInput");
+      try{
+        await api("/courses/"+t.getAttribute("data-id"), { method:"DELETE", body: JSON.stringify({ confirmTitle: confirmInp?confirmInp.value:"" }) });
+        staffState.courseDeleteConfirmId=null;
+        if(staffState.activeCourseId===t.getAttribute("data-id")) staffState.activeCourseId=null;
+        await loadStaffData();
+        showToast("Курс удалён");
+      }catch(err){ showToast(err.message); }
+      render(); return;
+    }
 
     if(action==="open-lesson-editor"){
       lessonEditor = { open:true, isNew:false, id:t.getAttribute("data-id"), title:"", duration:"", html:"", dripDays:null, hasDraft:false, publishedTitle:"", publishedDuration:"", publishedHtml:"", history:[], showHistory:false, showPreview:false };
@@ -4344,7 +4550,7 @@ function wireEvents(root){
       if(!certIds.length) return;
       t.disabled=true; t.textContent="Выдаём…";
       try{
-        await api("/course/certificate/bulk-issue", { method:"POST", body: JSON.stringify({ studentIds: certIds }) });
+        await api("/course/certificate/bulk-issue", { method:"POST", body: JSON.stringify({ studentIds: certIds, courseId: staffState.activeCourseId }) });
         showToast("Сертификаты выданы: "+certIds.length);
         staffState.certSelectedIds=[];
         await loadStaffData();
@@ -4400,7 +4606,7 @@ function wireEvents(root){
     if(action==="apply-materials-picker"){
       t.disabled=true; t.textContent="Сохраняем…";
       try{
-        await api("/course/visibility/"+materialsPicker.targetId, { method:"PUT", body: JSON.stringify({ ids: materialsPicker.selectedIds }) });
+        await api("/course/visibility/"+materialsPicker.targetId, { method:"PUT", body: JSON.stringify({ ids: materialsPicker.selectedIds, courseId: staffState.activeCourseId }) });
         courseVisibility[materialsPicker.targetId] = materialsPicker.selectedIds.slice();
         materialsPicker.open=false;
         showToast(materialsPicker.selectedIds.length ? "Видимость обновлена — скрыто от "+materialsPicker.selectedIds.length : "Материал снова виден всем");
@@ -4512,7 +4718,7 @@ function wireEvents(root){
       var payload = { title:fdle.get("title"), duration:fdle.get("duration"), html:fdle.get("html") };
       try{
         if(submitMode==="create"){
-          await api("/course/lessons", { method:"POST", body: JSON.stringify(payload) });
+          await api("/course/lessons", { method:"POST", body: JSON.stringify(Object.assign({ courseId: staffState.activeCourseId }, payload)) });
           lessonEditor.open=false;
           showToast("Урок добавлен");
         } else {
@@ -4554,7 +4760,9 @@ function wireEvents(root){
           var createUrl = isLessonQuiz ? "/course/lessons/"+quizEditor.lessonId+"/quiz-admin"
             : isModuleQuiz ? "/course/modules/"+quizEditor.moduleId+"/quiz-admin"
             : "/course/quiz-admin";
-          await api(createUrl, { method:"POST", body: JSON.stringify({ question:fdqe.get("question"), options:opts, correct:correctVal }) });
+          var qBody = { question:fdqe.get("question"), options:opts, correct:correctVal };
+          if(!isLessonQuiz && !isModuleQuiz) qBody.courseId = staffState.activeCourseId;
+          await api(createUrl, { method:"POST", body: JSON.stringify(qBody) });
           quizEditor.open=false; showToast("Вопрос добавлен");
         } else {
           await api("/course/quiz-admin/"+quizEditor.id, { method:"PUT", body: JSON.stringify({ question:fdqe.get("question"), options:opts, correct:correctVal }) });
@@ -4636,7 +4844,7 @@ function wireEvents(root){
       var fdmc=new FormData(e.target);
       var btnMc=e.target.querySelector("button[type=submit]"); btnMc.disabled=true;
       try{
-        await api("/course/modules", { method:"POST", body: JSON.stringify({ title:fdmc.get("title") }) });
+        await api("/course/modules", { method:"POST", body: JSON.stringify({ title:fdmc.get("title"), courseId: staffState.activeCourseId }) });
         await loadStaffData();
         showToast("Модуль добавлен");
       }catch(err){ showToast(err.message); }
@@ -4681,7 +4889,7 @@ function wireEvents(root){
         render(); return;
       }
       try{
-        var r3=await api("/course/quiz-submit", { method:"POST", body: JSON.stringify({answers:answers}) });
+        var r3=await api("/course/quiz-submit", { method:"POST", body: JSON.stringify({answers:answers, courseId:activeCourseId}) });
         course.progress.quiz_score=r3.score; course.progress.completed=r3.completed; course.progress.certificate_status=r3.certificateStatus;
         await loadCourse(); // очки/стрик пересчитываются на сервере из всего прогресса разом — проще перезагрузить, чем дублировать формулу на клиенте
         studentState.quizSubmitted=true;
@@ -4760,6 +4968,18 @@ function wireEvents(root){
       try{ await api("/invites", { method:"POST", body: JSON.stringify({ email:fd5.get("email"), role:fd5.get("role") }) }); showToast("Приглашение отправлено"); e.target.reset(); }
       catch(err){ showToast(err.message); btn5.disabled=false; btn5.textContent="Отправить приглашение"; }
       return;
+    }
+    if(e.target.id==="createCourseForm"){
+      e.preventDefault();
+      var fdcc=new FormData(e.target); var btncc=e.target.querySelector("button[type=submit]"); btncc.disabled=true; btncc.textContent="Создаём…";
+      try{
+        var newC=await api("/courses", { method:"POST", body: JSON.stringify({ title:fdcc.get("title") }) });
+        staffState.activeCourseId=newC.id;
+        await loadStaffData();
+        showToast("Курс создан — теперь добавьте уроки на странице «Учебные материалы»");
+      }
+      catch(err){ showToast(err.message); btncc.disabled=false; btncc.textContent="Создать"; }
+      render(); return;
     }
     if(e.target.id==="streamForm"){
       e.preventDefault();
