@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
+const contentDisposition = require("content-disposition");
 const pool = require("../db");
 const { authRequired, requireRole } = require("../middleware/auth");
 const { logAction } = require("../audit");
@@ -231,8 +232,11 @@ router.post(
   }
 );
 
-// Скачивание — доступно любому вошедшему пользователю (как и сам текст гайда,
-// вложение не фильтруется по специализации врача, см. GET /course/protocols).
+// Ссылка на файл — одна и та же и для просмотра, и для скачивания: отдаём
+// inline (не attachment), поэтому PDF/картинка открываются прямо во вкладке
+// браузера, а сохранить их себе — штатная кнопка «Скачать» в его просмотрщике.
+// Доступно любому вошедшему пользователю (как и сам текст гайда — вложение
+// не фильтруется по специализации врача, см. GET /course/protocols).
 router.get("/:id/guides/:specializationId/files/:fileId/download", authRequired, async (req, res) => {
   const result = await pool.query(
     `SELECT f.filename, f.original_name, f.mime_type FROM protocol_guide_files f
@@ -244,7 +248,9 @@ router.get("/:id/guides/:specializationId/files/:fileId/download", authRequired,
   const f = result.rows[0];
   const filePath = path.join(UPLOAD_DIR, f.filename);
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: "not_found" });
-  res.download(filePath, f.original_name);
+  res.setHeader("Content-Disposition", contentDisposition(f.original_name, { type: "inline" }));
+  if (f.mime_type) res.setHeader("Content-Type", f.mime_type);
+  res.sendFile(filePath);
 });
 
 router.delete("/:id/guides/:specializationId/files/:fileId", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {

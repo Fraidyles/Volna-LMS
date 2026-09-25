@@ -1587,9 +1587,9 @@ function renderProtocolCard(p, isForYou){
       }
       html += '<div class="prose">'+(activeGuide&&activeGuide.guideHtml?renderPlainToProse(activeGuide.guideHtml):'')+'</div>';
       if(activeGuide && activeGuide.files && activeGuide.files.length){
-        html += '<div style="margin-top:10px;">';
+        html += '<div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;">';
         activeGuide.files.forEach(function(f){
-          html += '<a href="'+f.url+'" target="_blank" rel="noopener" class="card" style="display:flex;align-items:center;gap:8px;padding:9px 12px;margin-bottom:6px;font-size:12.5px;">'+icon("folder","ic-sm")+'<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escapeHtml(f.originalName)+'</span><span style="color:var(--muted);flex-shrink:0;">'+formatFileSize(f.sizeBytes)+'</span></a>';
+          html += '<a href="'+f.url+'" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--primary);text-decoration:underline;width:fit-content;">'+icon("folder","ic-sm")+'<span>'+escapeHtml(f.originalName)+'</span></a>';
         });
         html += '</div>';
       }
@@ -3070,18 +3070,11 @@ function renderSpecializationEditorModal(){
   return el('<div class="overlay" data-action="overlay-close-specialization-editor"><div class="drawer" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
 }
 
-function formatFileSize(bytes){
-  if(!bytes) return "0 КБ";
-  if(bytes < 1024*1024) return Math.max(1, Math.round(bytes/1024)) + " КБ";
-  return (bytes/(1024*1024)).toFixed(1) + " МБ";
-}
-
 function renderProtocolGuideFiles(g){
   var html = '<div style="margin-top:10px;">';
   (g.files||[]).forEach(function(f){
     html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line-2);">' +
-      '<a href="'+f.url+'" target="_blank" rel="noopener" style="flex:1;font-size:12.5px;display:flex;align-items:center;gap:6px;min-width:0;">'+icon("folder","ic-sm")+'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escapeHtml(f.originalName)+'</span></a>' +
-      '<span style="font-size:11.5px;color:var(--muted);flex-shrink:0;">'+formatFileSize(f.sizeBytes)+'</span>' +
+      '<a href="'+f.url+'" target="_blank" rel="noopener" style="flex:1;font-size:12.5px;display:flex;align-items:center;gap:6px;min-width:0;color:var(--primary);text-decoration:underline;">'+icon("folder","ic-sm")+'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escapeHtml(f.originalName)+'</span></a>' +
       '<button type="button" class="btn btn-sm btn-ghost" data-action="delete-protocol-guide-file" data-spec="'+g.specializationId+'" data-file-id="'+f.id+'" data-name="'+escapeHtml(f.originalName)+'" title="Удалить файл">'+icon("trash","ic-sm")+'</button>' +
     '</div>';
   });
