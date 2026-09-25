@@ -31,7 +31,8 @@ var studentState = { tab:"course", navKey:"course", lessonIndex:0, quizMode:fals
   // Гейт после последнего урока модуля: null | "quiz" | "feedback".
   moduleGateStage:null, moduleGateId:null, moduleQuizResult:null, moduleFeedbackRating:0, moduleFeedbackComment:"" };
 var staffState = { mainTab:"home", navKey:"home", students:[], staff:[], invites:[], search:"", selectedStudentId:null, selectedStudent:null, selectedStudentEnrollments:[], drawerTab:"progress", selectedIds:[], materials:[], certificatesEnabled:false, quizAdmin:[], auditLog:[], inviteMode:"single", certSelectedIds:[], notes:[], noteDraft:"", inbox:{inactive:[],pendingCertificates:[]}, digest:null, inviteCode:null, editSpecializationIds:[], editName:"", editPhone:"", editWorkplace:"",
-  coursesList:[], activeCourseId:null, courseEditorId:null, courseEditorTitle:"", courseEditorCertsEnabled:false, courseDeleteConfirmId:null, courseDeleteConfirmText:"", newCourseTitle:"", enrollCourseId:"" };
+  coursesList:[], activeCourseId:null, courseEditorId:null, courseEditorTitle:"", courseEditorCertsEnabled:false, courseDeleteConfirmId:null, courseDeleteConfirmText:"", newCourseTitle:"", enrollCourseId:"",
+  showImportStudents:false, importResult:null };
 var profileEditor = { open:false, name:"", phone:"", workplace:"", specializationIds:[], interestIds:[] };
 // Черновик специализаций для формы регистрации — до входа в систему нет ни
 // me, ни staffState, поэтому отдельное состояние; сбрасывается заново при
@@ -2467,6 +2468,7 @@ var AUDIT_ACTION_LABELS = {
   "course.update": "Изменён курс",
   "course.delete": "Удалён курс",
   "course.enroll": "Врач записан на курс",
+  "student.bulk_import": "Массовый импорт врачей",
   "content.visibility_change": "Изменена видимость материала",
   "content.lesson_draft_saved": "Сохранён черновик урока",
   "content.lesson_published": "Опубликован урок",
@@ -2508,10 +2510,24 @@ function auditActorOptions(){
   return opts;
 }
 
+function auditExportUrl(){
+  var params = new URLSearchParams();
+  if(auditFilters.q) params.set("q", auditFilters.q);
+  if(auditFilters.action) params.set("action", auditFilters.action);
+  if(auditFilters.actorId) params.set("actorId", auditFilters.actorId);
+  if(auditFilters.dateFrom) params.set("dateFrom", auditFilters.dateFrom);
+  if(auditFilters.dateTo) params.set("dateTo", auditFilters.dateTo);
+  var qs = params.toString();
+  return "/api/staff/audit-log/export.csv"+(qs?"?"+qs:"");
+}
+
 function renderAuditLogTab(){
   var html = '<div class="card" style="padding:18px 20px;margin-top:6px;">' +
-    '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Журнал действий персонала</b>' +
-    '<p style="font-size:12.5px;color:var(--muted);margin:0 0 16px;">Последние 100 действий (с учётом фильтров ниже). '+(me.role==="super_admin"?'Обратимые действия можно откатить — это вернёт состояние к тому, что было до изменения.':'')+'</p>';
+    '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
+      '<b style="font-size:14.5px;">Журнал действий персонала</b>' +
+      '<a class="btn btn-sm btn-ghost" href="'+auditExportUrl()+'" target="_blank" rel="noopener">'+icon("download","ic-sm")+' Экспорт CSV</a>' +
+    '</div>' +
+    '<p style="font-size:12.5px;color:var(--muted);margin:4px 0 16px;">Последние 100 действий (с учётом фильтров ниже) — экспорт выгружает те же фильтры, до 5000 строк. '+(me.role==="super_admin"?'Обратимые действия можно откатить — это вернёт состояние к тому, что было до изменения.':'')+'</p>';
 
   var actorOpts = auditActorOptions();
   html += '<div class="dash-filters-grid" style="margin-bottom:16px;">' +
@@ -3111,7 +3127,35 @@ function renderRoster(){
   var html = '<div class="card" style="padding:18px 18px 6px;">' +
     '<div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;"><input class="input" id="rosterSearch" placeholder="Поиск по имени, специализации, email или телефону" value="'+escapeHtml(staffState.search)+'" style="max-width:320px;">' +
     '<button class="btn btn-sm btn-ghost" data-action="toggle-invite-student">'+(staffState.showInviteStudent?'Скрыть':'+ Пригласить врача')+'</button>' +
+    '<button class="btn btn-sm btn-ghost" data-action="toggle-import-students">'+(staffState.showImportStudents?'Скрыть импорт':'Импорт из CSV')+'</button>' +
+    '<a class="btn btn-sm btn-ghost" href="/api/staff/students/export.csv?courseId='+encodeURIComponent(staffState.activeCourseId||"")+'" target="_blank" rel="noopener">'+icon("download","ic-sm")+' Экспорт CSV</a>' +
+    '<a class="btn btn-sm btn-ghost" href="/api/staff/leads/export.csv?courseId='+encodeURIComponent(staffState.activeCourseId||"")+'" target="_blank" rel="noopener">'+icon("download","ic-sm")+' Экспорт заявок</a>' +
     '<button class="btn btn-sm btn-ghost" data-action="open-course-preview">'+icon("eye","ic-sm")+' Просмотреть как врач</button></div>';
+
+  if(staffState.showImportStudents){
+    html += '<div class="card" style="padding:14px 16px;margin-bottom:16px;background:var(--surface-2);">' +
+      '<b style="font-size:13.5px;display:block;margin-bottom:6px;">Массовый импорт врачей</b>' +
+      '<p style="font-size:12.5px;color:var(--muted);margin:0 0 10px;">CSV с заголовком: Имя, Email, Телефон, Место работы, Специализация, Поток (последние три необязательны). Записывает сразу на курс «'+escapeHtml((staffState.coursesList.find(function(c){return c.id===staffState.activeCourseId;})||{}).title||"")+'» — переключите курс сверху, если нужен другой.</p>' +
+      '<form id="importStudentsForm" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
+        '<input class="input" type="file" name="file" accept=".csv,.txt" required style="max-width:280px;">' +
+        '<button class="btn btn-sm btn-primary" type="submit">Загрузить</button>' +
+      '</form>';
+    if(staffState.importResult){
+      var ir = staffState.importResult;
+      html += '<div style="margin-top:12px;font-size:13px;"><b>Создано: '+ir.created.length+'</b>'+(ir.skipped.length?' · <b>Пропущено: '+ir.skipped.length+'</b>':'')+'</div>';
+      if(ir.created.length){
+        html += '<div style="overflow-x:auto;margin-top:8px;"><table class="roster"><thead><tr><th>Имя</th><th>Email</th><th>Временный пароль</th></tr></thead><tbody>';
+        ir.created.forEach(function(c){
+          html += '<tr><td>'+escapeHtml(c.name)+'</td><td>'+escapeHtml(c.email)+'</td><td style="font-family:monospace;">'+escapeHtml(c.tempPassword)+'</td></tr>';
+        });
+        html += '</tbody></table></div><p class="hint">Сохраните пароли сейчас — повторно они не показываются, только через «Сбросить пароль».</p>';
+      }
+      if(ir.skipped.length){
+        html += '<div style="margin-top:8px;">'+ir.skipped.map(function(s){ return '<div style="font-size:12.5px;color:var(--muted);">Строка '+s.row+' ('+escapeHtml(s.email||"—")+'): '+escapeHtml(s.reason)+'</div>'; }).join("")+'</div>';
+      }
+    }
+    html += '</div>';
+  }
 
   if(staffState.showInviteStudent){
     html += '<div class="tabs" style="margin-bottom:14px;">' +
@@ -3870,6 +3914,7 @@ function wireEvents(root){
     }
 
     if(action==="toggle-invite-student"){ staffState.showInviteStudent=!staffState.showInviteStudent; render(); return; }
+    if(action==="toggle-import-students"){ staffState.showImportStudents=!staffState.showImportStudents; staffState.importResult=null; render(); return; }
     if(action==="invite-mode"){ staffState.inviteMode=t.getAttribute("data-mode"); render(); return; }
     if(action==="open-course-preview"){
       previewMode = true; previewReturnTab = staffState.mainTab;
@@ -4968,6 +5013,19 @@ function wireEvents(root){
       try{ await api("/invites", { method:"POST", body: JSON.stringify({ email:fd5.get("email"), role:fd5.get("role") }) }); showToast("Приглашение отправлено"); e.target.reset(); }
       catch(err){ showToast(err.message); btn5.disabled=false; btn5.textContent="Отправить приглашение"; }
       return;
+    }
+    if(e.target.id==="importStudentsForm"){
+      e.preventDefault();
+      var fdis=new FormData(e.target);
+      fdis.append("courseId", staffState.activeCourseId||"");
+      var btnis=e.target.querySelector("button[type=submit]"); btnis.disabled=true; btnis.textContent="Загружаем…";
+      try{
+        var irRes=await apiUpload("/staff/students/import", fdis);
+        staffState.importResult={ created: irRes.created, skipped: irRes.skipped };
+        await loadStaffData();
+        showToast("Создано аккаунтов: "+irRes.created.length);
+      }catch(err){ showToast(err.message); }
+      render(); return;
     }
     if(e.target.id==="createCourseForm"){
       e.preventDefault();

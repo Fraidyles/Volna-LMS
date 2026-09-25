@@ -1,18 +1,24 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
+const multer = require("multer");
 const pool = require("../db");
 const { authRequired, requireRole } = require("../middleware/auth");
 const { logAction } = require("../audit");
 const { revertLogEntry } = require("../revert");
-const { generateTempPassword } = require("../util");
+const { generateTempPassword, generateReferralCode } = require("../util");
 const { notify } = require("../notifications");
 const { canManageStudent, requireStudentScope, filterToScope } = require("../access");
 const { buildDailyDigest } = require("../dailyDigest");
 const { getStaffInviteCode, TTL_MS } = require("../staffInviteCode");
 const { generateCertificatePdf } = require("../certificate");
+const { toCsv, parseCsvToObjects } = require("../csv");
 
 const router = express.Router();
+
+// Импорт — только сам CSV-текст в памяти (файлы обычно на несколько сотен КБ,
+// не видео), на диск не сохраняем вообще.
+const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
 
 // Курсов теперь может быть несколько — большинство ручек ниже (список врачей,
 // инбокс, предпросмотр курса) требуют явный courseId, но продолжают работать без
@@ -131,6 +137,138 @@ router.get("/students", authRequired, requireRole("curator", "admin", "super_adm
     params
   );
   res.json({ students: result.rows.map(withOnlineStatus), courseId });
+});
+
+// Массовое создание аккаунтов врачей из CSV — в отличие от /invites (которые лишь
+// резервируют email за ролью, а сам врач потом регистрируется сам), здесь сразу
+// создаётся полноценный аккаунт с временным паролем — так же, как это делает
+// куратор вручную через "Сбросить пароль", просто пачкой. Ожидаемые колонки CSV
+// (по названию заголовка, не по позиции): Имя, Email, Телефон, Место работы,
+// Специализация, Поток — специализация/поток не обязательны и подбираются по
+// точному совпадению названия (без совпадения — просто не назначаются).
+router.post(
+  "/students/import",
+  authRequired,
+  requireRole("curator", "admin", "super_admin"),
+  (req, res, next) => {
+    csvUpload.single("file")(req, res, (err) => {
+      if (err instanceof multer.MulterError) {
+        if (err.code === "LIMIT_FILE_SIZE") return res.status(400).json({ error: "file_too_large", message: "Файл больше 2 МБ" });
+        return res.status(400).json({ error: "upload_failed", message: err.message });
+      }
+      if (err) return res.status(400).json({ error: "upload_failed", message: err.message });
+      next();
+    });
+  },
+  async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "invalid_input", message: "Файл не передан" });
+  const courseId = await resolveCourseId(req.body && req.body.courseId);
+  if (!courseId) return res.status(400).json({ error: "no_course", message: "Сначала создайте хотя бы один курс" });
+
+  let text;
+  try { text = req.file.buffer.toString("utf8"); }
+  catch (e) { return res.status(400).json({ error: "invalid_input", message: "Не удалось прочитать файл как текст" }); }
+
+  const rows = parseCsvToObjects(text);
+  if (!rows.length) return res.status(400).json({ error: "invalid_input", message: "Файл пуст или без строк данных" });
+  if (rows.length > 500) return res.status(400).json({ error: "invalid_input", message: "Не больше 500 строк за раз" });
+
+  function findCol(row, ...names) {
+    const keys = Object.keys(row);
+    for (const name of names) {
+      const key = keys.find((k) => k.trim().toLowerCase() === name);
+      if (key) return row[key];
+    }
+    return "";
+  }
+
+  const specRows = await pool.query("SELECT id, name FROM specializations");
+  const streamRows = await pool.query("SELECT id, name FROM streams");
+  const specByName = {}; specRows.rows.forEach((s) => { specByName[s.name.trim().toLowerCase()] = s.id; });
+  const streamByName = {}; streamRows.rows.forEach((s) => { streamByName[s.name.trim().toLowerCase()] = s.id; });
+
+  const created = [];
+  const skipped = [];
+  const seenEmails = new Set();
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowNum = i + 2; // +1 за заголовок, +1 за 1-индексацию — как в Excel
+    const name = findCol(row, "имя", "имя и фамилия", "name").trim();
+    const email = findCol(row, "email", "почта").trim().toLowerCase();
+    const phone = findCol(row, "телефон", "phone").trim();
+    const workplace = findCol(row, "место работы", "workplace").trim();
+    const specName = findCol(row, "специализация", "specialization").trim().toLowerCase();
+    const streamName = findCol(row, "поток", "stream").trim().toLowerCase();
+
+    if (!name) { skipped.push({ row: rowNum, email, reason: "не указано имя" }); continue; }
+    if (!email || !email.includes("@")) { skipped.push({ row: rowNum, email, reason: "некорректный email" }); continue; }
+    if (seenEmails.has(email)) { skipped.push({ row: rowNum, email, reason: "повторяется в этом же файле" }); continue; }
+    const existing = await pool.query("SELECT id FROM users WHERE email=$1", [email]);
+    if (existing.rowCount) { skipped.push({ row: rowNum, email, reason: "уже зарегистрирован" }); continue; }
+    seenEmails.add(email);
+
+    const id = crypto.randomUUID();
+    const tempPassword = generateTempPassword();
+    const hash = await bcrypt.hash(tempPassword, 10);
+    const referralCode = generateReferralCode();
+    const streamId = streamName ? (streamByName[streamName] || null) : null;
+    await pool.query(
+      `INSERT INTO users (id, email, password_hash, name, role, phone, workplace, stream_id, referral_code)
+       VALUES ($1,$2,$3,$4,'student',$5,$6,$7,$8)`,
+      [id, email, hash, name, phone || null, workplace || null, streamId, referralCode]
+    );
+    const specId = specName ? (specByName[specName] || null) : null;
+    if (specId) {
+      await pool.query("INSERT INTO user_specializations (user_id, specialization_id) VALUES ($1,$2)", [id, specId]);
+    }
+    await pool.query("INSERT INTO progress (user_id, course_id) VALUES ($1,$2)", [id, courseId]);
+
+    created.push({
+      row: rowNum, email, name, tempPassword,
+      specializationMatched: !!specId, streamMatched: !!streamId
+    });
+  }
+
+  await logAction(req.user, "student.bulk_import", "user", null, null,
+    { count: created.length, skipped: skipped.length, courseId }, created.length > 0);
+  res.json({ ok: true, created, skipped });
+});
+
+// Тот же скоуп/срез по курсу, что и у GET /students — просто CSV вместо JSON.
+// Должен быть объявлен РАНЬШЕ "/students/:id" — иначе Express матчит его туда
+// первым (id="export.csv") и запрос сюда никогда не доходит.
+router.get("/students/export.csv", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+  const courseId = await resolveCourseId(req.query.courseId);
+  const scopeClause = req.user.role === "curator" ? "AND (u.assigned_curator_id = $2 OR u.assigned_curator_id IS NULL)" : "";
+  const params = req.user.role === "curator" ? [courseId, req.user.id] : [courseId];
+  const result = await pool.query(
+    `SELECT ${STUDENT_FIELDS} FROM users u LEFT JOIN progress p ON p.user_id = u.id AND p.course_id = $1
+     WHERE u.role = 'student' ${scopeClause} ORDER BY u.created_at DESC`,
+    params
+  );
+  const rows = result.rows.map(withOnlineStatus).map((s) => ({
+    name: s.name, email: s.email, phone: s.phone || "", workplace: s.workplace || "",
+    specializations: (s.specializations || []).join("; "),
+    product: PRODUCT_VALUES.indexOf(s.product) !== -1 ? s.product : s.product,
+    payment_status: s.payment_status,
+    completed_lessons: (s.completed_lessons || []).length,
+    quiz_score: typeof s.quiz_score === "number" ? s.quiz_score : "",
+    certificate_status: s.certificate_status || "",
+    access_blocked: s.access_blocked ? "да" : "нет",
+    requested_full_access: s.requested_full_access ? "да" : "нет",
+    created_at: s.created_at ? new Date(s.created_at).toISOString().slice(0, 10) : ""
+  }));
+  const csv = toCsv(rows, [
+    { key: "name", label: "Имя" }, { key: "email", label: "Email" }, { key: "phone", label: "Телефон" },
+    { key: "workplace", label: "Место работы" }, { key: "specializations", label: "Специализации" },
+    { key: "product", label: "Продукт" }, { key: "payment_status", label: "Статус оплаты" },
+    { key: "completed_lessons", label: "Пройдено уроков" }, { key: "quiz_score", label: "Балл теста" },
+    { key: "certificate_status", label: "Сертификат" }, { key: "access_blocked", label: "Заблокирован" },
+    { key: "requested_full_access", label: "Заявка на полный курс" }, { key: "created_at", label: "Дата регистрации" }
+  ]);
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="students.csv"`);
+  res.send(csv);
 });
 
 router.get("/students/:id", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
@@ -441,31 +579,25 @@ router.get("/audit-log/actions", authRequired, requireRole("admin", "super_admin
   res.json({ actions: result.rows.map((r) => r.action) });
 });
 
-router.get("/audit-log", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit, 10) || 100, 300);
+// Общие фильтры для GET /audit-log и GET /audit-log/export.csv — чтобы выгрузка
+// всегда отражала ровно то, что куратор/админ отфильтровал на экране.
+function buildAuditLogFilter(query) {
   const where = [];
   const params = [];
-  if (req.query.action) {
-    params.push(req.query.action);
-    where.push(`action = $${params.length}`);
-  }
-  if (req.query.actorId) {
-    params.push(req.query.actorId);
-    where.push(`actor_id = $${params.length}`);
-  }
-  if (req.query.dateFrom) {
-    params.push(req.query.dateFrom);
-    where.push(`created_at >= $${params.length}::date`);
-  }
-  if (req.query.dateTo) {
-    params.push(req.query.dateTo);
-    where.push(`created_at < ($${params.length}::date + interval '1 day')`);
-  }
-  if (req.query.q) {
-    params.push(`%${req.query.q}%`);
+  if (query.action) { params.push(query.action); where.push(`action = $${params.length}`); }
+  if (query.actorId) { params.push(query.actorId); where.push(`actor_id = $${params.length}`); }
+  if (query.dateFrom) { params.push(query.dateFrom); where.push(`created_at >= $${params.length}::date`); }
+  if (query.dateTo) { params.push(query.dateTo); where.push(`created_at < ($${params.length}::date + interval '1 day')`); }
+  if (query.q) {
+    params.push(`%${query.q}%`);
     where.push(`(actor_name ILIKE $${params.length} OR target_name ILIKE $${params.length})`);
   }
-  const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  return { whereClause: where.length ? `WHERE ${where.join(" AND ")}` : "", params };
+}
+
+router.get("/audit-log", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit, 10) || 100, 300);
+  const { whereClause, params } = buildAuditLogFilter(req.query);
   params.push(limit);
   const result = await pool.query(
     `SELECT id, actor_id, actor_name, actor_role, action, target_type, target_id, target_name, details, revertible, reverted_at, reverted_by, created_at
@@ -473,6 +605,32 @@ router.get("/audit-log", authRequired, requireRole("admin", "super_admin"), asyn
     params
   );
   res.json({ log: result.rows });
+});
+
+// Тот же набор фильтров, что и у GET /audit-log, но без интерфейсного лимита
+// в 300 строк — до 5000 за раз, чтобы выгрузка не превращалась в отдельный DOS-вектор.
+router.get("/audit-log/export.csv", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
+  const { whereClause, params } = buildAuditLogFilter(req.query);
+  params.push(5000);
+  const result = await pool.query(
+    `SELECT actor_name, actor_role, action, target_type, target_name, revertible, reverted_at, created_at
+     FROM audit_log ${whereClause} ORDER BY created_at DESC LIMIT $${params.length}`,
+    params
+  );
+  const rows = result.rows.map((r) => ({
+    created_at: new Date(r.created_at).toISOString().slice(0, 19).replace("T", " "),
+    actor_name: r.actor_name || "", actor_role: r.actor_role || "", action: r.action,
+    target_type: r.target_type || "", target_name: r.target_name || "",
+    revertible: r.revertible ? "да" : "нет", reverted_at: r.reverted_at ? new Date(r.reverted_at).toISOString().slice(0, 19).replace("T", " ") : ""
+  }));
+  const csv = toCsv(rows, [
+    { key: "created_at", label: "Дата и время" }, { key: "actor_name", label: "Кто" }, { key: "actor_role", label: "Роль" },
+    { key: "action", label: "Действие" }, { key: "target_type", label: "Тип объекта" }, { key: "target_name", label: "Объект" },
+    { key: "revertible", label: "Можно откатить" }, { key: "reverted_at", label: "Откачено" }
+  ]);
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="audit-log.csv"`);
+  res.send(csv);
 });
 
 // Откат конкретного действия — доступно только главному администратору.
@@ -577,6 +735,33 @@ router.get("/inbox", authRequired, requireRole("curator", "admin", "super_admin"
     pendingCertificates: pendingCert.rows,
     courseId
   });
+});
+
+// Заявки на полный курс (progress.requested_full_access) — контакты и дата,
+// для работы отдела продаж вне платформы. По конкретному курсу (?courseId=),
+// как и остальные ручки в разрезе курса.
+router.get("/leads/export.csv", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
+  const courseId = await resolveCourseId(req.query.courseId);
+  const scopeClause = req.user.role === "curator" ? "AND (u.assigned_curator_id = $2 OR u.assigned_curator_id IS NULL)" : "";
+  const scopeParams = req.user.role === "curator" ? [courseId, req.user.id] : [courseId];
+  const result = await pool.query(
+    `SELECT u.name, u.email, u.phone, u.workplace, c.title AS course_title, p.requested_full_access_at
+     FROM users u JOIN progress p ON p.user_id = u.id AND p.course_id = $1 JOIN courses c ON c.id = p.course_id
+     WHERE u.role='student' AND p.requested_full_access=true ${scopeClause}
+     ORDER BY p.requested_full_access_at DESC NULLS LAST`,
+    scopeParams
+  );
+  const rows = result.rows.map((r) => ({
+    name: r.name, email: r.email, phone: r.phone || "", workplace: r.workplace || "", course_title: r.course_title,
+    requested_at: r.requested_full_access_at ? new Date(r.requested_full_access_at).toISOString().slice(0, 19).replace("T", " ") : ""
+  }));
+  const csv = toCsv(rows, [
+    { key: "name", label: "Имя" }, { key: "email", label: "Email" }, { key: "phone", label: "Телефон" },
+    { key: "workplace", label: "Место работы" }, { key: "course_title", label: "Курс" }, { key: "requested_at", label: "Дата заявки" }
+  ]);
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="leads.csv"`);
+  res.send(csv);
 });
 
 // Дайджест «что произошло вчера» — детерминированный (не LLM), считается по

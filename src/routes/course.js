@@ -450,7 +450,7 @@ router.post("/request-full-access", authRequired, requireRole("student"), async 
   const courseId = req.body && req.body.courseId;
   if (!courseId) return res.status(400).json({ error: "invalid_input" });
   const result = await pool.query(
-    "UPDATE progress SET requested_full_access=true WHERE user_id=$1 AND course_id=$2 RETURNING user_id",
+    "UPDATE progress SET requested_full_access=true, requested_full_access_at=now() WHERE user_id=$1 AND course_id=$2 RETURNING user_id",
     [req.user.id, courseId]
   );
   if (!result.rowCount) return res.status(404).json({ error: "no_progress" });

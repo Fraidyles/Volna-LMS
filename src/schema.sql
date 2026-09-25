@@ -504,3 +504,8 @@ ALTER TABLE progress ADD PRIMARY KEY (user_id, course_id);
 
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
+-- ---------- Этап 22: экспорт/импорт данных персоналом ----------
+-- Дата заявки нужна для выгрузки лидов (кто и когда попросил полный курс) —
+-- раньше был только булев флаг без времени.
+ALTER TABLE progress ADD COLUMN IF NOT EXISTS requested_full_access_at TIMESTAMPTZ;
+
