@@ -92,6 +92,10 @@ var moduleFeedbackViewer = { open:false, moduleId:null, moduleTitle:"", feedback
 var adminProtocolsState = { list:[] };
 var protocolEditor = { open:false, id:null, title:"", summary:"", guides:[], lessonIds:[] };
 var specializationEditor = { open:false, id:null, name:"" }; // редактирование названия специализации (создание — отдельной мини-формой на странице)
+// Разовая анимация «разблокировали функцию» поверх экрана — показывается один
+// раз, в момент когда «Ваши протоколы» реально становится доступно (см.
+// protocolsSectionAvailable), не при каждом заходе на дашборд.
+var unlockCelebration = { open:false };
 
 function pad2(n){ return (n<10?"0":"")+n; }
 function isoDate(d){ return d.getFullYear()+"-"+pad2(d.getMonth()+1)+"-"+pad2(d.getDate()); }
@@ -530,6 +534,9 @@ function render(){
   // чтобы его оверлей всегда оказывался сверху и не перекрывался открывшей его модалкой.
   if(quizEditor.open && view==="staff"){
     app.appendChild(renderQuizEditorModal());
+  }
+  if(unlockCelebration.open && view==="student"){
+    app.appendChild(renderUnlockCelebrationModal());
   }
   wireEvents(app);
   if(view==="student" && studentState.tab==="lesson" && !studentState.quizMode && studentState.lessonStage==="video"){
@@ -982,8 +989,8 @@ function renderSidebar(){
       items += sidebarItem("schedule","calendar","Расписание", navKey==="schedule");
       items += sidebarItem("materials","folder","Материалы обучения", navKey==="materials");
       items += sidebarItem("progress","chartbar","Мой прогресс", navKey==="progress");
-      // Разблокируется после первого пройденного урока — до этого в коллекции нечему появиться.
-      if((course && course.progress && (course.progress.completed_lessons||[]).length>0)){
+      // См. protocolsSectionAvailable — до этого момента в коллекции нечему появиться.
+      if(course && protocolsSectionAvailable()){
         items += sidebarItem("protocols","doctor","Ваши протоколы", navKey==="protocols");
       }
       items += sidebarItem("messages","message","Чаты", navKey==="messages", msgBadge);
@@ -1402,6 +1409,25 @@ function findPendingModuleGate(){
       m.lessonIds.every(function(id){ return doneIds.indexOf(id)!==-1; }) &&
       given.indexOf(m.id)===-1;
   }) || null;
+}
+// «Ваши протоколы» реально появляется врачу, когда: в курсе есть модули — после
+// того как закрыт (тест+отзыв) самый первый модуль курса (тогда и открывается
+// хотя бы один протокол, привязанный к его урокам); модулей нет вовсе — как раньше,
+// после самого первого пройденного урока. Используется и для видимости пункта
+// сайдбара, и для того, чтобы поймать момент перехода false→true и показать
+// unlockCelebration (см. maybeCelebrateProtocolsUnlock) — иначе рассинхронились бы
+// момент появления пункта меню и момент, когда мы про это радостно сообщаем.
+function protocolsSectionAvailable(){
+  var mods = course.modules || [];
+  if(mods.length){
+    var given = course.moduleFeedbackGiven || [];
+    return given.indexOf(mods[0].id)!==-1;
+  }
+  var doneIds = (course.progress && course.progress.completed_lessons) || [];
+  return doneIds.length>0;
+}
+function maybeCelebrateProtocolsUnlock(wasAvailable){
+  if(!wasAvailable && protocolsSectionAvailable()) unlockCelebration.open = true;
 }
 function resetModuleGateState(){
   studentState.moduleGateStage = null;
@@ -3315,6 +3341,29 @@ function renderProtocolsAdminTab(){
   return el('<div>'+html+'</div>');
 }
 
+// Разовая анимация «разблокировали функцию» — центрированная модалка (не боковой
+// drawer, как остальные оверлеи) с раскрывающимся замком. Показывается один раз,
+// в момент, когда protocolsSectionAvailable() впервые становится true — см.
+// maybeCelebrateProtocolsUnlock. Закрывается кликом по фону, кнопкой «Понятно»
+// или переходом сразу в «Ваши протоколы».
+function renderUnlockCelebrationModal(){
+  var body =
+    '<div class="unlock-lock-wrap">' +
+      '<div class="unlock-burst"></div>' +
+      '<svg class="unlock-lock-svg" viewBox="0 0 24 24">' +
+        '<rect x="5" y="10.5" width="14" height="10" rx="1.5"/>' +
+        '<path class="unlock-lock-shackle" d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/>' +
+      '</svg>' +
+    '</div>' +
+    '<h3>Новая функция разблокирована!</h3>' +
+    '<p>Вы прошли первый модуль курса — теперь вам доступны «Ваши протоколы»: готовые гайды по применению того, о чём говорили спикеры, подобранные под вашу специализацию.</p>' +
+    '<div class="unlock-actions">' +
+      '<button class="btn btn-primary btn-block" data-action="goto-protocols-from-celebration">Смотреть протоколы</button>' +
+      '<button class="btn btn-ghost btn-block" data-action="close-unlock-celebration">Продолжить обучение</button>' +
+    '</div>';
+  return el('<div class="overlay overlay-center" data-action="overlay-close-unlock-celebration"><div class="unlock-card" data-stop="1">'+body+'</div></div>');
+}
+
 function renderSpecializationEditorModal(){
   var body = '<div class="drawer-head"><b style="font-size:16px;">Переименовать специализацию</b><button class="btn btn-ghost btn-sm" data-action="close-specialization-editor">Закрыть ✕</button></div>' +
     '<div class="drawer-body"><form id="specializationEditorForm">' +
@@ -3787,6 +3836,7 @@ function wireEvents(root){
     if(action==="prev-lesson"){ if(studentState.lessonIndex>0) studentState.lessonIndex--; resetLessonStageState(); render(); return; }
     if(action==="next-lesson"){
       var lid = course.lessons[studentState.lessonIndex].id;
+      var wasProtoAvailNL = protocolsSectionAvailable();
       // Если урок уже засчитан поурочным тестом (lessonQuizResult проставлен
       // POST /lessons/:id/quiz-submit атомарно), второй раз /lesson-done не дёргаем.
       if(!studentState.lessonQuizResult){
@@ -3796,6 +3846,7 @@ function wireEvents(root){
           course.progress.completed_lessons.push(lid);
         }
       }
+      maybeCelebrateProtocolsUnlock(wasProtoAvailNL);
       advanceAfterLesson();
       render(); return;
     }
@@ -3817,8 +3868,10 @@ function wireEvents(root){
           }) });
         }catch(err){ showToast(err.message); return; }
       }
+      var wasProtoAvail = protocolsSectionAvailable();
       if(!course.moduleFeedbackGiven) course.moduleFeedbackGiven=[];
       if(course.moduleFeedbackGiven.indexOf(mfModuleId)===-1) course.moduleFeedbackGiven.push(mfModuleId);
+      maybeCelebrateProtocolsUnlock(wasProtoAvail);
       resetModuleGateState();
       // lessonIndex/quizMode уже стоят на следующем шаге — их выставил
       // advanceAfterLesson() ДО того, как renderCoursePlayer показал этот гейт
@@ -4396,6 +4449,13 @@ function wireEvents(root){
     }
     if(action==="close-specialization-editor"){ specializationEditor.open=false; render(); return; }
     if(action==="overlay-close-specialization-editor" && !e.target.closest("[data-stop]")){ specializationEditor.open=false; render(); return; }
+    if(action==="close-unlock-celebration"){ unlockCelebration.open=false; render(); return; }
+    if(action==="overlay-close-unlock-celebration" && !e.target.closest("[data-stop]")){ unlockCelebration.open=false; render(); return; }
+    if(action==="goto-protocols-from-celebration"){
+      unlockCelebration.open=false;
+      await applyStudentTab("protocols","protocols");
+      return;
+    }
     if(action==="delete-specialization"){
       if(!confirm('Удалить специализацию «'+t.getAttribute("data-name")+'»?')) return;
       try{
@@ -4887,9 +4947,11 @@ function wireEvents(root){
       var fdlq=new FormData(e.target); var lqAnswers={};
       (lqLesson.quiz||[]).forEach(function(q){ lqAnswers[q.id]=parseInt(fdlq.get(q.id),10); });
       var btnlq=e.target.querySelector("button[type=submit]"); btnlq.disabled=true; btnlq.textContent="Считаем результат…";
+      var wasProtoAvailLQ = protocolsSectionAvailable();
       if(previewMode){
         studentState.lessonQuizResult={ score:100 };
         if(course.progress.completed_lessons.indexOf(lqLessonId)===-1) course.progress.completed_lessons.push(lqLessonId);
+        maybeCelebrateProtocolsUnlock(wasProtoAvailLQ);
         render(); return;
       }
       try{
@@ -4899,6 +4961,7 @@ function wireEvents(root){
         if(!course.progress.lesson_quiz_scores) course.progress.lesson_quiz_scores={};
         course.progress.lesson_quiz_scores[lqLessonId]=rlq.score;
         studentState.lessonQuizResult = { score: rlq.score };
+        maybeCelebrateProtocolsUnlock(wasProtoAvailLQ);
       }catch(err){ showToast(err.message); btnlq.disabled=false; btnlq.textContent="Завершить тест"; return; }
       render(); return;
     }
