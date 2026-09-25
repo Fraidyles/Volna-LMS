@@ -43,7 +43,7 @@ describe("Справочник специализаций", () => {
     const admin = await createUser({ role: "admin" });
     const cookie = await loginAs(admin);
     const student = await createUser({ role: "student" });
-    await pool.query("UPDATE users SET specialization_id='therapist' WHERE id=$1", [student.id]);
+    await pool.query("INSERT INTO user_specializations (user_id, specialization_id) VALUES ($1,'therapist')", [student.id]);
 
     const res = await request(app).delete("/api/specializations/therapist").set("Cookie", cookie);
     expect(res.status).toBe(400);

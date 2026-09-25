@@ -41,7 +41,7 @@ function signToken(user) {
 }
 
 router.post("/register", authLimiter, async (req, res) => {
-  const { email: rawEmail, password, name, specializationId, workplace, phone, ref, interestIds, staffInviteCode } = req.body || {};
+  const { email: rawEmail, password, name, specializationIds, workplace, phone, ref, interestIds, staffInviteCode } = req.body || {};
   const email = normEmail(rawEmail);
 
   if (!email || !email.includes("@") || !password || password.length < 6 || !name || !name.trim()) {
@@ -71,14 +71,17 @@ router.post("/register", authLimiter, async (req, res) => {
     }
   }
 
-  // Специализация — из справочника (фиксированный список), а не свободный текст:
+  // Текущая специализация — из справочника (фиксированный список, можно несколько:
+  // многие врачи практикуют сразу в нескольких направлениях), а не свободный текст —
   // от неё зависит, какие протоколы потом попадут врачу в «Ваши протоколы».
-  let specializationRow = null;
+  let specializationRows = [];
   if (role === "student") {
-    if (!specializationId) return res.status(400).json({ error: "invalid_input", message: "Укажите специализацию" });
-    const spec = await pool.query("SELECT id, name FROM specializations WHERE id=$1", [specializationId]);
+    if (!Array.isArray(specializationIds) || !specializationIds.length) {
+      return res.status(400).json({ error: "invalid_input", message: "Укажите текущую специализацию" });
+    }
+    const spec = await pool.query("SELECT id, name FROM specializations WHERE id = ANY($1::text[])", [specializationIds]);
     if (!spec.rowCount) return res.status(400).json({ error: "invalid_input", message: "Неизвестная специализация" });
-    specializationRow = spec.rows[0];
+    specializationRows = spec.rows;
   }
 
   let referredBy = null;
@@ -92,11 +95,16 @@ router.post("/register", authLimiter, async (req, res) => {
   const referralCode = generateReferralCode();
 
   await pool.query(
-    `INSERT INTO users (id, email, password_hash, name, role, specialization, specialization_id, workplace, phone, referral_code, referred_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-    [id, email, hash, name.trim(), role, specializationRow ? specializationRow.name : null,
-      specializationRow ? specializationRow.id : null, workplace || null, phone || null, referralCode, referredBy]
+    `INSERT INTO users (id, email, password_hash, name, role, workplace, phone, referral_code, referred_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [id, email, hash, name.trim(), role, workplace || null, phone || null, referralCode, referredBy]
   );
+  for (const row of specializationRows) {
+    await pool.query(
+      "INSERT INTO user_specializations (user_id, specialization_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+      [id, row.id]
+    );
+  }
 
   // «Хочу развиваться в...» — необязательные, невалидные/чужие id просто отбрасываем,
   // а не роняем всю регистрацию из-за одного плохого значения в необязательном поле.
@@ -133,8 +141,7 @@ router.post("/register", authLimiter, async (req, res) => {
   // специализация/место работы/телефон выглядели бы пустыми на экране до перезахода.
   const profileOut = {
     id, email, name: name.trim(), role,
-    specialization: specializationRow ? specializationRow.name : null,
-    specializationId: specializationRow ? specializationRow.id : null,
+    specializationIds: specializationRows.map((r) => r.id),
     interestIds: interestRows.map((r) => r.id),
     workplace: workplace || null, phone: phone || null,
     referral_code: referralCode, product: "longevity", payment_status: "unpaid"
@@ -172,10 +179,13 @@ router.post("/login", authLimiter, async (req, res) => {
   const interests = await pool.query(
     "SELECT specialization_id FROM user_specialization_interests WHERE user_id=$1", [row.id]
   );
+  const currentSpecs = await pool.query(
+    "SELECT specialization_id FROM user_specializations WHERE user_id=$1", [row.id]
+  );
   res.json({
     user: {
       id: row.id, email: row.email, name: row.name, role: row.role,
-      specialization: row.specialization, specializationId: row.specialization_id,
+      specializationIds: currentSpecs.rows.map((r) => r.specialization_id),
       interestIds: interests.rows.map((r) => r.specialization_id),
       workplace: row.workplace, phone: row.phone,
       stream_id: row.stream_id, referral_code: row.referral_code, created_at: row.created_at,
@@ -199,14 +209,20 @@ router.post("/logout-everywhere", authRequired, async (req, res) => {
 
 router.get("/me", authRequired, async (req, res) => {
   const result = await pool.query(
-    "SELECT id, email, name, role, specialization, specialization_id, workplace, phone, stream_id, referral_code, created_at, product, payment_status FROM users WHERE id=$1",
+    "SELECT id, email, name, role, workplace, phone, stream_id, referral_code, created_at, product, payment_status FROM users WHERE id=$1",
     [req.user.id]
   );
   if (!result.rowCount) return res.status(404).json({ error: "not_found" });
   const interests = await pool.query(
     "SELECT specialization_id FROM user_specialization_interests WHERE user_id=$1", [req.user.id]
   );
-  res.json({ user: Object.assign({}, result.rows[0], { interestIds: interests.rows.map((r) => r.specialization_id) }) });
+  const currentSpecs = await pool.query(
+    "SELECT specialization_id FROM user_specializations WHERE user_id=$1", [req.user.id]
+  );
+  res.json({ user: Object.assign({}, result.rows[0], {
+    specializationIds: currentSpecs.rows.map((r) => r.specialization_id),
+    interestIds: interests.rows.map((r) => r.specialization_id)
+  }) });
 });
 
 // «Мой профиль» → «Текущие сеансы»: с какого устройства, откуда (IP) и когда входили.
@@ -223,9 +239,9 @@ router.get("/sessions", authRequired, async (req, res) => {
 });
 
 // Самостоятельное редактирование своих же контактных данных — имя, телефон, место
-// работы, а для врача ещё и специализация. Email и роль отсюда не меняются намеренно.
+// работы, а для врача ещё и специализации. Email и роль отсюда не меняются намеренно.
 router.patch("/me", authRequired, async (req, res) => {
-  const { name, phone, workplace, specializationId, interestIds } = req.body || {};
+  const { name, phone, workplace, specializationIds, interestIds } = req.body || {};
   const sets = [];
   const values = [];
   if (typeof name === "string") {
@@ -234,21 +250,34 @@ router.patch("/me", authRequired, async (req, res) => {
   }
   if (typeof phone === "string") { sets.push(`phone=$${sets.length + 1}`); values.push(phone.trim() || null); }
   if (typeof workplace === "string") { sets.push(`workplace=$${sets.length + 1}`); values.push(workplace.trim() || null); }
-  if (typeof specializationId === "string" && req.user.role === "student") {
-    const spec = await pool.query("SELECT id, name FROM specializations WHERE id=$1", [specializationId]);
-    if (!spec.rowCount) return res.status(400).json({ error: "invalid_input", message: "Неизвестная специализация" });
-    sets.push(`specialization_id=$${sets.length + 1}`); values.push(spec.rows[0].id);
-    sets.push(`specialization=$${sets.length + 1}`); values.push(spec.rows[0].name);
+
+  // specializationIds, в отличие от interestIds, не может стать пустым списком —
+  // текущая специализация обязательна (как и на регистрации), просто теперь их может быть несколько.
+  if (Array.isArray(specializationIds) && req.user.role === "student" && !specializationIds.length) {
+    return res.status(400).json({ error: "invalid_input", message: "Укажите текущую специализацию" });
   }
-  if (!sets.length && !Array.isArray(interestIds)) return res.status(400).json({ error: "invalid_input" });
+  if (!sets.length && !Array.isArray(interestIds) && !Array.isArray(specializationIds)) {
+    return res.status(400).json({ error: "invalid_input" });
+  }
 
   if (sets.length) {
     values.push(req.user.id);
     await pool.query(`UPDATE users SET ${sets.join(", ")} WHERE id=$${values.length}`, values);
   }
 
-  // Список интересов заменяется целиком — это то же самое, что переотметить
-  // чекбоксы в форме «хочу развиваться в...» заново, а не точечно добавлять/убирать.
+  // Списки специализаций/интересов заменяются целиком — это то же самое, что
+  // переотметить чекбоксы в форме заново, а не точечно добавлять/убирать.
+  if (Array.isArray(specializationIds) && req.user.role === "student") {
+    const valid = await pool.query("SELECT id FROM specializations WHERE id = ANY($1::text[])", [specializationIds]);
+    if (!valid.rowCount) return res.status(400).json({ error: "invalid_input", message: "Неизвестная специализация" });
+    await pool.query("DELETE FROM user_specializations WHERE user_id=$1", [req.user.id]);
+    for (const row of valid.rows) {
+      await pool.query(
+        "INSERT INTO user_specializations (user_id, specialization_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+        [req.user.id, row.id]
+      );
+    }
+  }
   if (Array.isArray(interestIds) && req.user.role === "student") {
     await pool.query("DELETE FROM user_specialization_interests WHERE user_id=$1", [req.user.id]);
     if (interestIds.length) {
@@ -263,12 +292,15 @@ router.patch("/me", authRequired, async (req, res) => {
   }
 
   const result = await pool.query(
-    "SELECT id, email, name, role, specialization, specialization_id, workplace, phone, stream_id, referral_code, token_version, created_at, product, payment_status FROM users WHERE id=$1",
+    "SELECT id, email, name, role, workplace, phone, stream_id, referral_code, token_version, created_at, product, payment_status FROM users WHERE id=$1",
     [req.user.id]
   );
   const row = result.rows[0];
   const interests = await pool.query(
     "SELECT specialization_id FROM user_specialization_interests WHERE user_id=$1", [req.user.id]
+  );
+  const currentSpecs = await pool.query(
+    "SELECT specialization_id FROM user_specializations WHERE user_id=$1", [req.user.id]
   );
   // Имя могло поменяться — перевыпускаем токен, чтобы во всех последующих действиях
   // (например, в журнале аудита) снова фигурировало актуальное имя, а не старое из JWT.
@@ -276,7 +308,7 @@ router.patch("/me", authRequired, async (req, res) => {
   res.cookie("token", signToken(user), COOKIE_OPTS);
   res.json({ user: {
     id: row.id, email: row.email, name: row.name, role: row.role,
-    specialization: row.specialization, specializationId: row.specialization_id,
+    specializationIds: currentSpecs.rows.map((r) => r.specialization_id),
     interestIds: interests.rows.map((r) => r.specialization_id),
     workplace: row.workplace, phone: row.phone, stream_id: row.stream_id, referral_code: row.referral_code,
     created_at: row.created_at, product: row.product, payment_status: row.payment_status

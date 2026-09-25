@@ -453,3 +453,17 @@ CREATE TABLE IF NOT EXISTS staff_invite_code (
   generated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ---------- Этап 16: врач может указывать НЕСКОЛЬКО текущих специализаций ----------
+-- Раньше "текущая" специализация была одна (users.specialization/specialization_id) —
+-- не отражало реальность: многие врачи практикуют сразу в нескольких направлениях.
+-- Эта таблица по структуре зеркальна user_specialization_interests (та про "хочу
+-- развиваться в...", эта — про "уже практикую сейчас"); от нашего профиля-справочника
+-- specializations зависит и подбор протоколов. Старые users.specialization/
+-- specialization_id не трогаем и не удаляем (денормализованный след истории), но
+-- новый код их больше не читает и не пишет — единственный источник истины теперь эта таблица.
+CREATE TABLE IF NOT EXISTS user_specializations (
+  user_id            TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  specialization_id  TEXT NOT NULL REFERENCES specializations(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, specialization_id)
+);
+

@@ -23,9 +23,14 @@ function canAssignRole(actingRole, targetRole) {
 // (какие ответы дал врач на каждый вопрос) — сами по себе индексы ответов
 // без ключа правильных ответов (доступен только admin/super_admin) ничего
 // не раскрывают, так что отдаём их куратору наравне с остальным списком.
+// specializations/specialization_ids — агрегированный список ТЕКУЩИХ специализаций
+// врача (их может быть несколько, см. user_specializations); коррелированные
+// подзапросы, а не JOIN+GROUP BY, — чтобы не плодить дубли строк по p.* при джойне.
 const STUDENT_FIELDS = `
-  u.id, u.name, u.email, u.phone, u.specialization, u.specialization_id, u.workplace, u.created_at, u.stream_id,
+  u.id, u.name, u.email, u.phone, u.workplace, u.created_at, u.stream_id,
   u.product, u.payment_status, u.assigned_curator_id, u.referral_code,
+  COALESCE((SELECT array_agg(s.name ORDER BY s.name) FROM user_specializations us JOIN specializations s ON s.id = us.specialization_id WHERE us.user_id = u.id), '{}') AS specializations,
+  COALESCE((SELECT array_agg(us.specialization_id) FROM user_specializations us WHERE us.user_id = u.id), '{}') AS specialization_ids,
   p.completed_lessons, p.quiz_score, p.completed, p.certificate_status,
   p.certificate_issued_at, p.certificate_issued_by, p.requested_full_access,
   p.access_expires_at, p.access_blocked, p.quiz_answers, p.last_seen_at, p.is_online
@@ -235,9 +240,9 @@ router.patch("/students/:id/curator", authRequired, requireRole("curator", "admi
 });
 
 // Персонал правит контактные данные врача (например, тот сам не может/не успел
-// это сделать) — имя, телефон, место работы, специализация.
+// это сделать) — имя, телефон, место работы, текущие специализации.
 router.patch("/students/:id/profile", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
-  const { name, phone, workplace, specializationId } = req.body || {};
+  const { name, phone, workplace, specializationIds } = req.body || {};
   const sets = [];
   const values = [];
   if (typeof name === "string") {
@@ -246,23 +251,36 @@ router.patch("/students/:id/profile", authRequired, requireRole("curator", "admi
   }
   if (typeof phone === "string") { sets.push(`phone=$${sets.length + 1}`); values.push(phone.trim() || null); }
   if (typeof workplace === "string") { sets.push(`workplace=$${sets.length + 1}`); values.push(workplace.trim() || null); }
-  if (specializationId) {
-    const spec = await pool.query("SELECT id, name FROM specializations WHERE id=$1", [specializationId]);
-    if (!spec.rowCount) return res.status(400).json({ error: "invalid_input", message: "Неизвестная специализация" });
-    sets.push(`specialization_id=$${sets.length + 1}`); values.push(spec.rows[0].id);
-    sets.push(`specialization=$${sets.length + 1}`); values.push(spec.rows[0].name);
+
+  let validSpecs = null;
+  if (Array.isArray(specializationIds)) {
+    if (!specializationIds.length) return res.status(400).json({ error: "invalid_input", message: "Укажите текущую специализацию" });
+    validSpecs = await pool.query("SELECT id FROM specializations WHERE id = ANY($1::text[])", [specializationIds]);
+    if (!validSpecs.rowCount) return res.status(400).json({ error: "invalid_input", message: "Неизвестная специализация" });
   }
-  if (!sets.length) return res.status(400).json({ error: "invalid_input" });
+  if (!sets.length && !validSpecs) return res.status(400).json({ error: "invalid_input" });
 
-  const before = await pool.query("SELECT name, phone, workplace, specialization, specialization_id FROM users WHERE id=$1 AND role='student'", [req.params.id]);
+  const before = await pool.query("SELECT name, phone, workplace FROM users WHERE id=$1 AND role='student'", [req.params.id]);
   if (!before.rowCount) return res.status(404).json({ error: "not_found" });
+  const beforeSpecs = await pool.query("SELECT specialization_id FROM user_specializations WHERE user_id=$1", [req.params.id]);
 
-  values.push(req.params.id);
-  const result = await pool.query(`UPDATE users SET ${sets.join(", ")} WHERE id=$${values.length} AND role='student' RETURNING id`, values);
-  if (!result.rowCount) return res.status(404).json({ error: "not_found" });
+  if (sets.length) {
+    values.push(req.params.id);
+    const result = await pool.query(`UPDATE users SET ${sets.join(", ")} WHERE id=$${values.length} AND role='student' RETURNING id`, values);
+    if (!result.rowCount) return res.status(404).json({ error: "not_found" });
+  }
+  if (validSpecs) {
+    await pool.query("DELETE FROM user_specializations WHERE user_id=$1", [req.params.id]);
+    for (const row of validSpecs.rows) {
+      await pool.query(
+        "INSERT INTO user_specializations (user_id, specialization_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+        [req.params.id, row.id]
+      );
+    }
+  }
 
   await logAction(req.user, "student.profile_update", "student", req.params.id, name ? name.trim() : before.rows[0].name,
-    { before: before.rows[0] }, true);
+    { before: Object.assign({}, before.rows[0], { specializationIds: beforeSpecs.rows.map((r) => r.specialization_id) }) }, true);
   res.json({ ok: true });
 });
 

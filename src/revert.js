@@ -83,9 +83,16 @@ const HANDLERS = {
   "student.profile_update": async (log) => {
     const b = requireBefore(log);
     await pool.query(
-      "UPDATE users SET name=$1, phone=$2, workplace=$3, specialization=$4, specialization_id=$5 WHERE id=$6",
-      [b.name, b.phone, b.workplace, b.specialization, b.specialization_id || null, log.target_id]
+      "UPDATE users SET name=$1, phone=$2, workplace=$3 WHERE id=$4",
+      [b.name, b.phone, b.workplace, log.target_id]
     );
+    await pool.query("DELETE FROM user_specializations WHERE user_id=$1", [log.target_id]);
+    for (const specId of b.specializationIds || []) {
+      await pool.query(
+        "INSERT INTO user_specializations (user_id, specialization_id) VALUES ($1,$2) ON CONFLICT DO NOTHING",
+        [log.target_id, specId]
+      );
+    }
   },
   "content.lesson_created": async (log) => {
     await pool.query("DELETE FROM lessons WHERE id=$1", [log.target_id]);

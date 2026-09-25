@@ -326,12 +326,12 @@ router.get("/protocols", authRequired, requireRole("student"), async (req, res) 
 
   if (!completedLessons.length) return res.json({ forYou: [], additional: [] });
 
-  const me = await pool.query("SELECT specialization_id FROM users WHERE id=$1", [req.user.id]);
+  const mySpecs = await pool.query("SELECT specialization_id FROM user_specializations WHERE user_id=$1", [req.user.id]);
   const interests = await pool.query(
     "SELECT specialization_id FROM user_specialization_interests WHERE user_id=$1", [req.user.id]
   );
   const relevantIds = new Set(interests.rows.map((r) => r.specialization_id));
-  if (me.rows[0].specialization_id) relevantIds.add(me.rows[0].specialization_id);
+  mySpecs.rows.forEach((r) => relevantIds.add(r.specialization_id));
 
   const protocolRows = await pool.query(
     `SELECT DISTINCT p.id, p.title, p.summary

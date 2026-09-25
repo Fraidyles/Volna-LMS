@@ -58,7 +58,7 @@ router.delete("/:id", authRequired, requireRole("admin", "super_admin"), async (
   // пока есть ссылки, и просим сначала переназначить их.
   const inUse = await pool.query(
     `SELECT
-       (SELECT COUNT(*)::int FROM users WHERE specialization_id=$1) AS users_count,
+       (SELECT COUNT(*)::int FROM user_specializations WHERE specialization_id=$1) AS users_count,
        (SELECT COUNT(*)::int FROM user_specialization_interests WHERE specialization_id=$1) AS interests_count,
        (SELECT COUNT(*)::int FROM protocol_guides WHERE specialization_id=$1) AS guides_count`,
     [req.params.id]

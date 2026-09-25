@@ -115,7 +115,7 @@ describe("Протоколы", () => {
       .send({ lessonIds: [course.lessonIds[0]] });
 
     const student = await createUser({ role: "student", courseId: course.courseId });
-    await pool.query("UPDATE users SET specialization_id='therapist' WHERE id=$1", [student.id]);
+    await pool.query("INSERT INTO user_specializations (user_id, specialization_id) VALUES ($1,'therapist')", [student.id]);
     const cookie = await loginAs(student);
 
     const beforeRes = await request(app).get("/api/course/protocols").set("Cookie", cookie);
@@ -145,7 +145,7 @@ describe("Протоколы", () => {
       .send({ lessonIds: [course.lessonIds[0]] });
 
     const student = await createUser({ role: "student", courseId: course.courseId });
-    await pool.query("UPDATE users SET specialization_id='therapist' WHERE id=$1", [student.id]);
+    await pool.query("INSERT INTO user_specializations (user_id, specialization_id) VALUES ($1,'therapist')", [student.id]);
     const cookie = await loginAs(student);
     await request(app).post("/api/course/lesson-done").set("Cookie", cookie).send({ lessonId: course.lessonIds[0] });
 
@@ -169,7 +169,7 @@ describe("Протоколы", () => {
       .send({ lessonIds: [course.lessonIds[0]] });
 
     const student = await createUser({ role: "student", courseId: course.courseId });
-    await pool.query("UPDATE users SET specialization_id='therapist' WHERE id=$1", [student.id]);
+    await pool.query("INSERT INTO user_specializations (user_id, specialization_id) VALUES ($1,'therapist')", [student.id]);
     await pool.query(
       "INSERT INTO user_specialization_interests (user_id, specialization_id) VALUES ($1,'anti_age')", [student.id]
     );
@@ -212,7 +212,7 @@ describe("Файлы-вложения к гайдам протоколов", () 
     expect(guide.files[0].id).toBe(fileId);
 
     const student = await createUser({ role: "student", courseId: course.courseId });
-    await pool.query("UPDATE users SET specialization_id='therapist' WHERE id=$1", [student.id]);
+    await pool.query("INSERT INTO user_specializations (user_id, specialization_id) VALUES ($1,'therapist')", [student.id]);
     const studentCookie = await loginAs(student);
     await request(app).post("/api/course/lesson-done").set("Cookie", studentCookie).send({ lessonId: course.lessonIds[0] });
 

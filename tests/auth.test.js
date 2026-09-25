@@ -4,18 +4,17 @@ const { app, pool, createUser, loginAs } = require("./helpers");
 afterAll(async () => { await pool.end(); });
 
 describe("Аутентификация", () => {
-  test("регистрация врача с корректными данными — успех, специализация и интересы сохраняются", async () => {
+  test("регистрация врача с корректными данными — успех, текущие специализации (можно несколько) и интересы сохраняются", async () => {
     const email = `reg.${Date.now()}@example.com`;
     const res = await request(app).post("/api/auth/register").send({
       email, password: "password123", name: "Анна Врачова",
-      specializationId: "therapist", interestIds: ["cardiologist", "anti_age"]
+      specializationIds: ["therapist", "cardiologist"], interestIds: ["anti_age"]
     });
     expect(res.status).toBe(200);
     expect(res.body.user.role).toBe("student");
     expect(res.body.user.email).toBe(email);
-    expect(res.body.user.specialization).toBe("Терапевт");
-    expect(res.body.user.specializationId).toBe("therapist");
-    expect(res.body.user.interestIds.sort()).toEqual(["anti_age", "cardiologist"]);
+    expect(res.body.user.specializationIds.sort()).toEqual(["cardiologist", "therapist"]);
+    expect(res.body.user.interestIds).toEqual(["anti_age"]);
   });
 
   test("регистрация без специализации — 400 (свободный текст больше не принимается)", async () => {
@@ -27,7 +26,7 @@ describe("Аутентификация", () => {
 
   test("регистрация с несуществующим id специализации — 400", async () => {
     const res = await request(app).post("/api/auth/register").send({
-      email: `badspec.${Date.now()}@example.com`, password: "password123", name: "Тест", specializationId: "no-such-id"
+      email: `badspec.${Date.now()}@example.com`, password: "password123", name: "Тест", specializationIds: ["no-such-id"]
     });
     expect(res.status).toBe(400);
   });
@@ -35,14 +34,14 @@ describe("Аутентификация", () => {
   test("регистрация с уже занятым email — 409", async () => {
     const user = await createUser();
     const res = await request(app).post("/api/auth/register").send({
-      email: user.email, password: "password123", name: "Дубль", specializationId: "therapist"
+      email: user.email, password: "password123", name: "Дубль", specializationIds: ["therapist"]
     });
     expect(res.status).toBe(409);
   });
 
   test("регистрация с коротким паролем — 400", async () => {
     const res = await request(app).post("/api/auth/register").send({
-      email: `short.${Date.now()}@example.com`, password: "123", name: "Тест", specializationId: "therapist"
+      email: `short.${Date.now()}@example.com`, password: "123", name: "Тест", specializationIds: ["therapist"]
     });
     expect(res.status).toBe(400);
   });
@@ -108,24 +107,34 @@ describe("Аутентификация", () => {
     expect(res.body.sessions.length).toBe(1);
   });
 
-  test("PATCH /auth/me — врач может поправить телефон, место работы, специализацию и интересы", async () => {
+  test("PATCH /auth/me — врач может поправить телефон, место работы, текущие специализации (несколько) и интересы", async () => {
     const user = await createUser({ role: "student" });
     const cookie = await loginAs(user);
     const res = await request(app).patch("/api/auth/me").set("Cookie", cookie)
-      .send({ phone: "+7 900 000-00-00", workplace: "Клиника «Надежда»", specializationId: "cardiologist", interestIds: ["anti_age"] });
+      .send({ phone: "+7 900 000-00-00", workplace: "Клиника «Надежда»", specializationIds: ["cardiologist", "therapist"], interestIds: ["anti_age"] });
     expect(res.status).toBe(200);
     expect(res.body.user.phone).toBe("+7 900 000-00-00");
     expect(res.body.user.workplace).toBe("Клиника «Надежда»");
-    expect(res.body.user.specialization).toBe("Кардиолог");
-    expect(res.body.user.specializationId).toBe("cardiologist");
+    expect(res.body.user.specializationIds.sort()).toEqual(["cardiologist", "therapist"]);
     expect(res.body.user.interestIds).toEqual(["anti_age"]);
   });
 
   test("PATCH /auth/me — неизвестный id специализации отклоняется (400)", async () => {
     const user = await createUser({ role: "student" });
     const cookie = await loginAs(user);
-    const res = await request(app).patch("/api/auth/me").set("Cookie", cookie).send({ specializationId: "no-such-id" });
+    const res = await request(app).patch("/api/auth/me").set("Cookie", cookie).send({ specializationIds: ["no-such-id"] });
     expect(res.status).toBe(400);
+  });
+
+  test("PATCH /auth/me — пустой список текущих специализаций отклоняется (400), в отличие от пустого списка интересов", async () => {
+    const user = await createUser({ role: "student" });
+    const cookie = await loginAs(user);
+    const empty = await request(app).patch("/api/auth/me").set("Cookie", cookie).send({ specializationIds: [] });
+    expect(empty.status).toBe(400);
+
+    const clearInterests = await request(app).patch("/api/auth/me").set("Cookie", cookie).send({ interestIds: [] });
+    expect(clearInterests.status).toBe(200);
+    expect(clearInterests.body.user.interestIds).toEqual([]);
   });
 
   test("PATCH /auth/me — пустое имя отклоняется, email не меняется этим путём", async () => {

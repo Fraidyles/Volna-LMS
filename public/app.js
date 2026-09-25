@@ -869,29 +869,27 @@ function renderProfileModal(){
 /* ============================= РЕНДЕР: АВТОРИЗАЦИЯ ============================= */
 // Специализация — фиксированный справочник (не свободный текст), от него зависит
 // автоматический подбор протоколов под профиль врача (см. «Ваши протоколы»).
-function renderSpecializationOptions(selectedId){
-  return specializationsList.map(function(s){
-    return '<option value="'+s.id+'"'+(selectedId===s.id?' selected':'')+'>'+escapeHtml(s.name)+'</option>';
-  }).join('');
-}
-// Общий блок «Специализация» + «Хочу развиваться в...» для формы профиля —
+// Общий блок «Текущая специализация» (можно несколько — многие врачи практикуют
+// сразу в нескольких направлениях) + «Желаемые специализации» для формы профиля —
 // используется и в модалке (renderProfileModal), и на странице «Мой профиль».
+// Оба поля — чекбоксы одного вида, но разных имён полей, чтобы не путать
+// "чем занимаетесь сейчас" и "куда хотите развиваться" — раньше это было
+// одно select-поле и одни чекбоксы без разделения смысла, отсюда и путаница.
 function renderProfileSpecializationFields(){
-  return '<div class="field"><label>Специализация</label><select class="input" name="specializationId">' +
-      '<option value="">Не указана</option>' +
-      renderSpecializationOptions(me.specializationId||null) +
-    '</select></div>' +
-    '<div class="field"><label>Хочу развиваться в <span style="font-weight:400;color:var(--muted-2);">(необязательно)</span></label>' +
-      renderSpecializationCheckboxes(me.interestIds||[]) +
+  return '<div class="field"><label>Текущая специализация</label>' +
+      renderSpecializationCheckboxes(me.specializationIds||[], "specializationIds") +
+    '</div>' +
+    '<div class="field"><label>Желаемые специализации <span style="font-weight:400;color:var(--muted-2);">— выберите специализации, в которых хотите развиваться, можно оставить поле пустым</span></label>' +
+      renderSpecializationCheckboxes(me.interestIds||[], "interestIds") +
     '</div>';
 }
-function renderSpecializationCheckboxes(selectedIds){
+function renderSpecializationCheckboxes(selectedIds, fieldName){
   var sel = selectedIds || [];
   var html = '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
   specializationsList.forEach(function(s){
     var checked = sel.indexOf(s.id)!==-1;
     html += '<label class="chip-check">' +
-      '<input type="checkbox" name="interestIds" value="'+s.id+'"'+(checked?' checked':'')+'>'+escapeHtml(s.name) +
+      '<input type="checkbox" name="'+fieldName+'" value="'+s.id+'"'+(checked?' checked':'')+'>'+escapeHtml(s.name) +
     '</label>';
   });
   html += '</div>';
@@ -929,12 +927,11 @@ function renderAuthScreen(mode){
         '<h2 style="font-size:19px;margin:0 0 20px;">Расскажите о себе</h2>' +
         '<form id="registerForm">' +
           '<div class="field"><label>Имя и фамилия</label><input class="input" name="name" required placeholder="Например, Анна Ковалёва"></div>' +
-          '<div class="field"><label>Специализация</label><select class="input" name="specializationId" required>' +
-            '<option value="">Выберите специализацию</option>' +
-            renderSpecializationOptions(null) +
-          '</select></div>' +
-          '<div class="field"><label>Хочу развиваться в <span style="font-weight:400;color:var(--muted-2);">(необязательно, можно несколько)</span></label>' +
-            renderSpecializationCheckboxes([]) +
+          '<div class="field"><label>Текущая специализация</label>' +
+            renderSpecializationCheckboxes([], "specializationIds") +
+          '</div>' +
+          '<div class="field"><label>Желаемые специализации <span style="font-weight:400;color:var(--muted-2);">— выберите специализации, в которых хотите развиваться, можно оставить поле пустым</span></label>' +
+            renderSpecializationCheckboxes([], "interestIds") +
           '</div>' +
           '<div class="field"><label>Email</label><input class="input" type="email" name="email" required></div>' +
           '<div class="field"><label>Телефон <span style="font-weight:400;color:var(--muted-2);">(необязательно)</span></label><input class="input" type="tel" name="phone"></div>' +
@@ -1768,11 +1765,10 @@ function renderPointTiersCta(points){
 // с бэкенда (GET /course/protocols), тут только рендер и переключение гайдов.
 function renderProtocolCard(p, isForYou){
   var expanded = !!protocolExpanded[p.id];
-  var myIds = [me.specializationId].concat(me.interestIds||[]).filter(Boolean);
+  var myIds = (me.specializationIds||[]).concat(me.interestIds||[]);
   var defaultGuide = null;
   if(isForYou){
-    defaultGuide = p.guides.find(function(g){ return g.specializationId===me.specializationId; }) ||
-      p.guides.find(function(g){ return myIds.indexOf(g.specializationId)!==-1; });
+    defaultGuide = p.guides.find(function(g){ return myIds.indexOf(g.specializationId)!==-1; });
   }
   var activeSpecId = protocolGuideTab[p.id] || (defaultGuide ? defaultGuide.specializationId : (p.guides[0] ? p.guides[0].specializationId : null));
   var activeGuide = p.guides.find(function(g){ return g.specializationId===activeSpecId; });
@@ -2780,9 +2776,11 @@ function renderChipGroup(title, options, selectedArr, groupName){
   return html;
 }
 
+function specNames(s){ return (s.specializations||[]).join(", "); }
+
 function distinctSpecializations(){
   var set = {};
-  staffState.students.forEach(function(s){ var v=(s.specialization||"").trim(); if(v) set[v]=true; });
+  staffState.students.forEach(function(s){ (s.specializations||[]).forEach(function(v){ if(v) set[v]=true; }); });
   return Object.keys(set).sort();
 }
 
@@ -2791,7 +2789,7 @@ function computeFilteredStudents(){
     var regDate = (s.created_at||"").slice(0,10);
     if(dashboardState.periodFrom && regDate && regDate < dashboardState.periodFrom) return false;
     if(dashboardState.periodTo && regDate && regDate > dashboardState.periodTo) return false;
-    if(dashboardState.specializations.length && dashboardState.specializations.indexOf(s.specialization||"")===-1) return false;
+    if(dashboardState.specializations.length && !(s.specializations||[]).some(function(v){ return dashboardState.specializations.indexOf(v)!==-1; })) return false;
     if(dashboardState.streams.length && dashboardState.streams.indexOf(s.stream_id||"")===-1) return false;
     if(dashboardState.stages.length && dashboardState.stages.indexOf(studentStage(s))===-1) return false;
     if(dashboardState.products.length && dashboardState.products.indexOf(s.product||"longevity")===-1) return false;
@@ -2811,7 +2809,7 @@ function exportDashboardCSV(list){
     var curatorName = (directory.filter(function(c){ return c.id===s.assigned_curator_id; })[0]||{}).name || "";
     var accessSt = accessStatusOf(s);
     rows.push([
-      s.name||"", s.specialization||"", s.email||"", s.phone||"",
+      s.name||"", (s.specializations||[]).join(", "), s.email||"", s.phone||"",
       streamName, PRODUCTS[s.product||"longevity"], STAGE_LABELS[studentStage(s)],
       (typeof s.quiz_score==="number"?s.quiz_score:""), (s.certificate_status==="issued"?"Выдан":"Нет"),
       PAYMENT_LABELS[s.payment_status||"unpaid"], (accessSt==="active"?"Активен":(accessSt==="blocked"?"Заблокирован":"Истёк")),
@@ -3048,7 +3046,7 @@ function renderDashboardTab(){
       var stageMagnet = magnet(stage==="certified"?"done":(stage==="demo_done"?"attention":(stage==="in_progress"?"active":"neutral")), STAGE_LABELS[stage]);
       html += '<tr>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;"><div class="who-cell"><div class="avatar">'+initials(s.name)+'</div><div><b>'+escapeHtml(s.name)+'</b></div></div></td>' +
-        '<td>'+escapeHtml(s.specialization||"—")+'</td>' +
+        '<td>'+escapeHtml(specNames(s)||"—")+'</td>' +
         '<td>'+escapeHtml(streamName)+'</td>' +
         '<td>'+escapeHtml(PRODUCTS[s.product||"longevity"])+'</td>' +
         '<td>'+stageMagnet+'</td>' +
@@ -3166,7 +3164,7 @@ function renderRoster(){
   var q = staffState.search.toLowerCase();
   var students = staffState.students.filter(function(s){
     if(!q) return true;
-    return (s.name||"").toLowerCase().indexOf(q)!==-1 || (s.specialization||"").toLowerCase().indexOf(q)!==-1 ||
+    return (s.name||"").toLowerCase().indexOf(q)!==-1 || specNames(s).toLowerCase().indexOf(q)!==-1 ||
       (s.email||"").toLowerCase().indexOf(q)!==-1 || (s.phone||"").toLowerCase().indexOf(q)!==-1;
   });
   var visibleIds = students.map(function(s){ return s.id; });
@@ -3222,7 +3220,7 @@ function renderRoster(){
       var status = s.completed ? magnet("done","Завершил") : (done>0 ? magnet("active","В процессе") : magnet("neutral","Новый"));
       html += '<tr>' +
         '<td><input type="checkbox" data-action="select-student" data-id="'+s.id+'"'+(isChecked?' checked':'')+'></td>' +
-        '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;"><div class="who-cell"><div class="avatar-wrap"><div class="avatar">'+initials(s.name)+'</div>'+(s.online?'<span class="presence-dot" title="Онлайн"></span>':'')+'</div><div><b>'+escapeHtml(s.name)+'</b><span>'+escapeHtml(s.specialization||"—")+'</span></div></div></td>' +
+        '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;"><div class="who-cell"><div class="avatar-wrap"><div class="avatar">'+initials(s.name)+'</div>'+(s.online?'<span class="presence-dot" title="Онлайн"></span>':'')+'</div><div><b>'+escapeHtml(s.name)+'</b><span>'+escapeHtml(specNames(s)||"—")+'</span></div></div></td>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+done+'/5</td>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+(typeof s.quiz_score==="number"?s.quiz_score+'%':'—')+'</td>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+status+'</td>' +
@@ -3511,7 +3509,7 @@ function renderStudentDrawer(){
 
   var head = '<div class="drawer-head">' +
     '<div style="display:flex;gap:12px;align-items:center;"><div class="avatar-wrap"><div class="avatar" style="width:42px;height:42px;font-size:15px;">'+initials(s.name)+'</div>'+(s.online?'<span class="presence-dot" title="Онлайн"></span>':'')+'</div>' +
-    '<div><b style="font-size:16px;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:13px;color:var(--muted);">'+escapeHtml(s.specialization||"—")+'</span>' +
+    '<div><b style="font-size:16px;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:13px;color:var(--muted);">'+escapeHtml(specNames(s)||"—")+'</span>' +
     '<span style="font-size:12px;color:var(--muted-2);display:block;margin-top:2px;">'+(s.online?'<span style="color:var(--status-active);font-weight:600;">● В сети сейчас</span>':'Была в сети: '+escapeHtml(timeSince(s.last_seen_at)))+'</span></div></div>' +
     '<button class="btn btn-ghost btn-sm" data-action="close-drawer">Закрыть ✕</button></div>';
 
@@ -3583,7 +3581,7 @@ function renderStudentDrawer(){
     var productSelectOpts = Object.keys(PRODUCTS).map(function(k){ return '<option value="'+k+'"'+((s.product||"longevity")===k?' selected':'')+'>'+escapeHtml(PRODUCTS[k])+'</option>'; }).join("");
     var paymentSelectOpts = Object.keys(PAYMENT_LABELS).map(function(k){ return '<option value="'+k+'"'+((s.payment_status||"unpaid")===k?' selected':'')+'>'+escapeHtml(PAYMENT_LABELS[k])+'</option>'; }).join("");
     body += '<div class="field"><label>Имя и фамилия</label><input class="input" id="studentProfileName" value="'+escapeHtml(s.name||"")+'"></div>' +
-      '<div class="field"><label>Специализация</label><select class="input" id="studentProfileSpecialization"><option value="">Не указана</option>'+renderSpecializationOptions(s.specialization_id||null)+'</select></div>' +
+      '<div class="field"><label>Текущая специализация</label><div id="studentProfileSpecializations">'+renderSpecializationCheckboxes(s.specialization_ids||[], "specializationIds")+'</div></div>' +
       '<div class="field"><label>Email</label><div class="input" style="background:var(--line-2);">'+escapeHtml(s.email||"—")+'</div></div>' +
       '<div class="field"><label>Телефон</label><input class="input" id="studentProfilePhone" value="'+escapeHtml(s.phone||"")+'"></div>' +
       '<div class="field"><label>Место работы</label><input class="input" id="studentProfileWorkplace" value="'+escapeHtml(s.workplace||"")+'"></div>' +
@@ -3978,25 +3976,26 @@ function wireEvents(root){
     }
     if(action==="save-student-profile"){
       var spId=t.getAttribute("data-id");
+      var spSpecIds=Array.from(document.querySelectorAll('#studentProfileSpecializations input:checked')).map(function(i){ return i.value; });
       var spPayload={
         name: document.getElementById("studentProfileName").value,
-        specializationId: document.getElementById("studentProfileSpecialization").value,
+        specializationIds: spSpecIds,
         phone: document.getElementById("studentProfilePhone").value,
         workplace: document.getElementById("studentProfileWorkplace").value
       };
       t.disabled=true; t.textContent="Сохраняем…";
       try{
         await api("/staff/students/"+spId+"/profile", { method:"PATCH", body: JSON.stringify(spPayload) });
-        // specializationId локально мержим как есть, а s.specialization (текстовое
-        // отображаемое имя в ростере/шапке карточки) досчитываем сами — иначе оно
-        // осталось бы старым до следующей перезагрузки списка.
-        var spMerge=Object.assign({}, spPayload);
-        if(spPayload.specializationId){
-          var spMatch=specializationsList.find(function(sp){ return sp.id===spPayload.specializationId; });
-          if(spMatch) spMerge.specialization=spMatch.name;
-        } else {
-          delete spMerge.specializationId;
-        }
+        // specialization_ids/specializations (список имён — то, что показывают ростер
+        // и шапка карточки) досчитываем сами — иначе они остались бы старыми до
+        // следующей перезагрузки списка.
+        var spMerge=Object.assign({}, spPayload, {
+          specialization_ids: spSpecIds,
+          specializations: spSpecIds.map(function(id){
+            var m=specializationsList.find(function(sp){ return sp.id===id; }); return m?m.name:id;
+          })
+        });
+        delete spMerge.specializationIds;
         staffState.selectedStudent=Object.assign({}, staffState.selectedStudent, spMerge);
         var spIdx=staffState.students.findIndex(function(x){ return x.id===spId; });
         if(spIdx!==-1) staffState.students[spIdx]=Object.assign({}, staffState.students[spIdx], spMerge);
@@ -4523,7 +4522,7 @@ function wireEvents(root){
       var q0=staffState.search.toLowerCase();
       var visible=staffState.students.filter(function(s){
         if(!q0) return true;
-        return (s.name||"").toLowerCase().indexOf(q0)!==-1 || (s.specialization||"").toLowerCase().indexOf(q0)!==-1 ||
+        return (s.name||"").toLowerCase().indexOf(q0)!==-1 || specNames(s).toLowerCase().indexOf(q0)!==-1 ||
           (s.email||"").toLowerCase().indexOf(q0)!==-1 || (s.phone||"").toLowerCase().indexOf(q0)!==-1;
       }).map(function(s){ return s.id; });
       staffState.selectedIds = t.checked ? visible : [];
@@ -4730,7 +4729,7 @@ function wireEvents(root){
       var btn2=e.target.querySelector("button[type=submit]"); btn2.disabled=true; btn2.textContent="Регистрируем…";
       try{
         var d2=await api("/auth/register", { method:"POST", body: JSON.stringify({
-          name:fd2.get("name"), specializationId:fd2.get("specializationId"), email:fd2.get("email"),
+          name:fd2.get("name"), specializationIds:fd2.getAll("specializationIds"), email:fd2.get("email"),
           phone:fd2.get("phone"), password:fd2.get("password"),
           staffInviteCode:fd2.get("staffInviteCode"),
           interestIds: fd2.getAll("interestIds")
@@ -4897,7 +4896,7 @@ function wireEvents(root){
       var payloadPe={ name:fdpe.get("name"), phone:fdpe.get("phone")||"" };
       if(me.role==="student"){
         payloadPe.workplace=fdpe.get("workplace")||"";
-        if(fdpe.get("specializationId")) payloadPe.specializationId=fdpe.get("specializationId");
+        payloadPe.specializationIds=fdpe.getAll("specializationIds");
         payloadPe.interestIds=fdpe.getAll("interestIds");
       }
       try{
