@@ -92,6 +92,11 @@ button{font-family:var(--sans);cursor:pointer;}
 .ic-sm{width:14px;height:14px;}
 .ic-lg{width:28px;height:28px;stroke-width:1.5;}
 
+/* Цветной значок-кружок в заголовке карточки — чтобы разные по смыслу плитки
+   (задачи/уведомления/сообщения/отчёт) не сливались в одинаковые тёмные прямоугольники. */
+.tile-icon{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.tile-icon .ic{vertical-align:0;}
+
 /* ---------------- Статус: тихая цветная точка + обычный текст ---------------- */
 @keyframes fadeUp{0%{opacity:0;transform:translateY(4px);}100%{opacity:1;transform:translateY(0);}}
 @keyframes pulse-ring{0%,100%{box-shadow:0 0 0 0 rgba(255,111,166,.5);}50%{box-shadow:0 0 0 4px rgba(255,111,166,0);}}

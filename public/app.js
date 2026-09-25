@@ -2030,10 +2030,17 @@ function renderStaffHome(container){
       var activeCount = list.filter(function(s){ return (s.completed_lessons||[]).length>0 && !s.completed; }).length;
       var avgPct = Math.round(list.reduce(function(sum,s){ return sum + Math.min(100, Math.round(((s.completed_lessons||[]).length/totalLessons)*100)); },0) / list.length);
       streamsHtml += '<div class="card" style="padding:18px;">' +
-        '<b style="font-size:13.5px;display:block;margin-bottom:8px;">'+escapeHtml(name)+'</b>' +
-        '<div style="font-family:var(--display);font-weight:800;font-size:22px;">'+list.length+'</div>' +
-        '<span style="font-size:12px;color:var(--muted);">врачей · '+activeCount+' активных</span>' +
-        '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2);font-size:12.5px;color:var(--muted);">Средний прогресс: '+avgPct+'%</div>' +
+        '<div style="display:flex;align-items:center;gap:12px;">' +
+          '<div class="progress-ring" style="width:46px;height:46px;background:conic-gradient(var(--primary) '+avgPct+'%, var(--line-2) 0);"><div class="progress-ring-inner" style="width:34px;height:34px;font-size:11px;">'+avgPct+'%</div></div>' +
+          '<div>' +
+            '<b style="font-size:13.5px;display:block;">'+escapeHtml(name)+'</b>' +
+            '<span style="font-size:12px;color:var(--muted);">средний прогресс</span>' +
+          '</div>' +
+        '</div>' +
+        '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line-2);display:flex;align-items:baseline;gap:6px;">' +
+          '<span style="font-family:var(--display);font-weight:800;font-size:22px;">'+list.length+'</span>' +
+          '<span style="font-size:12px;color:var(--muted);">врачей · '+activeCount+' активных</span>' +
+        '</div>' +
       '</div>';
     });
     streamsHtml += '</div>';
@@ -2042,7 +2049,12 @@ function renderStaffHome(container){
 
   var inbox = staffState.inbox || {inactive:[],unanswered:[],pendingCertificates:[]};
   var totalTasks = inbox.inactive.length + inbox.unanswered.length + inbox.pendingCertificates.length;
-  container.appendChild(el('<b style="font-size:14.5px;display:block;margin:20px 0 10px;">Задачи на сегодня</b>'));
+  container.appendChild(el(
+    '<div style="display:flex;align-items:center;gap:10px;margin:20px 0 10px;">' +
+      '<div class="tile-icon" style="background:var(--status-attention-tint);color:var(--status-attention);">'+icon("clipboard")+'</div>' +
+      '<b style="font-size:14.5px;">Задачи на сегодня</b>' +
+    '</div>'
+  ));
   if(totalTasks) container.appendChild(renderInboxCard());
   else container.appendChild(el('<div class="card empty-state" style="padding:24px 20px;">На сегодня задач нет.</div>'));
 
@@ -2050,7 +2062,10 @@ function renderStaffHome(container){
   var unmutedUnanswered = inbox.unanswered.filter(function(r){ return !isChatMutedLocal("curator", r.id); });
   var gridHtml = '<div class="grid-2" style="margin-top:20px;">';
   gridHtml += '<div class="card" style="padding:18px 20px;">' +
-    '<b style="font-size:14px;display:block;margin-bottom:10px;">Уведомления</b>';
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">' +
+      '<div class="tile-icon" style="background:var(--primary-tint);color:var(--primary);">'+icon("bell")+'</div>' +
+      '<b style="font-size:14px;">Уведомления</b>' +
+    '</div>';
   if(!reminders.length){
     gridHtml += '<p style="font-size:13px;color:var(--muted);margin:0;">У вас нет новых уведомлений.</p>';
   } else {
@@ -2059,9 +2074,13 @@ function renderStaffHome(container){
     });
   }
   gridHtml += '</div>';
+  var msgColor = unmutedUnanswered.length ? '--status-live' : '--status-active';
   gridHtml += '<div class="card" style="padding:18px 20px;">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
-      '<b style="font-size:14px;">Сообщения</b>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+      '<div style="display:flex;align-items:center;gap:10px;">' +
+        '<div class="tile-icon" style="background:var('+msgColor+'-tint);color:var('+msgColor+');">'+icon("message")+'</div>' +
+        '<b style="font-size:14px;">Сообщения</b>' +
+      '</div>' +
       (unmutedUnanswered.length ? '<button class="btn btn-sm btn-ghost" data-action="sidebar-nav" data-key="chats">Все →</button>' : '') +
     '</div>';
   if(!unmutedUnanswered.length){
@@ -2074,7 +2093,10 @@ function renderStaffHome(container){
 
   var d = staffState.digest;
   var digestHtml = '<div class="card" style="padding:18px 20px;margin-top:20px;max-width:640px;">' +
-    '<b style="font-size:14px;display:block;margin-bottom:10px;">ИИ-ассистент — отчёт за вчера</b>';
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">' +
+      '<div class="tile-icon" style="background:var(--status-done-tint);color:var(--status-done);">'+icon("chartbar")+'</div>' +
+      '<b style="font-size:14px;">ИИ-ассистент — отчёт за вчера</b>' +
+    '</div>';
   if(!d){
     digestHtml += '<p style="font-size:13px;color:var(--muted);margin:0;">Формируется каждый день в 9:00 по МСК.</p>';
   } else {
