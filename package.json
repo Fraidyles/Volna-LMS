@@ -8,6 +8,7 @@
     "start": "node src/server.js",
     "migrate": "node src/migrate.js",
     "seed": "node src/seed.js",
+    "seed-demo": "node scripts/seed-demo.js",
     "reset-password": "node src/reset-password.js",
     "test": "jest --runInBand"
   },
