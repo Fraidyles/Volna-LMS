@@ -847,3 +847,15 @@ table.roster tbody tr:hover{background:var(--surface-2);}
 .mat-item:hover .mat-open,.mat-item:focus-within .mat-open{opacity:1;}
 @media (hover:none){.mat-open{opacity:1;}}
 @media (max-width:800px){.mat-grid{grid-template-columns:1fr;}}
+
+/* Поля выбора файла (импорт CSV, видео урока, гайды протоколов): вместо
+   системной серой кнопки браузера — кнопка в стиле платформы, рядом спокойное
+   имя файла. Одно правило на все такие поля. */
+input[type="file"]{font-family:var(--sans);font-size:13px;color:var(--muted);max-width:100%;cursor:pointer;}
+input[type="file"].input{padding:6px 8px;height:auto;display:flex;align-items:center;}
+input[type="file"]::file-selector-button{font:600 13px var(--sans);color:var(--ink);background:var(--surface-2);
+  border:1px solid var(--line);border-radius:var(--radius-s);padding:7px 14px;margin-right:12px;cursor:pointer;
+  transition:border-color .15s,background .15s;}
+input[type="file"]:hover::file-selector-button{border-color:color-mix(in srgb,var(--primary) 55%,transparent);background:color-mix(in srgb,var(--primary) 10%,var(--surface-2));}
+input[type="file"]:focus-visible{outline:2px solid color-mix(in srgb,var(--primary) 60%,transparent);outline-offset:2px;border-radius:var(--radius-s);}
+input[type="file"]:disabled{opacity:.5;cursor:default;}

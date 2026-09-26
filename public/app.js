@@ -3504,7 +3504,7 @@ function renderRoster(){
       '<b style="font-size:13.5px;display:block;margin-bottom:6px;">Массовый импорт врачей</b>' +
       '<p style="font-size:12.5px;color:var(--muted);margin:0 0 10px;">CSV с заголовком: Имя, Email, Телефон, Место работы, Специализация, Поток (последние три необязательны). Записывает сразу на курс «'+escapeHtml((staffState.coursesList.find(function(c){return c.id===staffState.activeCourseId;})||{}).title||"")+'» — переключите курс сверху, если нужен другой.</p>' +
       '<form id="importStudentsForm" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
-        '<input class="input" type="file" name="file" accept=".csv,.txt" required style="max-width:280px;">' +
+        '<input class="input" type="file" name="file" accept=".csv,.txt" required style="max-width:360px;flex:1;">' +
         '<button class="btn btn-sm btn-primary" type="submit">Загрузить</button>' +
       '</form>';
     if(staffState.importResult){
