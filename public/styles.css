@@ -289,11 +289,26 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
 /* ---------------- Вход / приглашение ---------------- */
 .onb-shell{min-height:100vh;display:grid;grid-template-columns:1.05fr 1fr;background:var(--bg);}
 .onb-left{background:var(--surface);padding:56px;display:flex;flex-direction:column;justify-content:center;gap:40px;border-right:var(--border-hairline);}
-/* Иллюстрация вместо прежнего радиального свечения. Картинка нарисована на своём
-   тёмном фоне, поэтому она всегда в скруглённой плитке — в светлой теме это
-   читается как тёмная bento-карточка, а не как вырезанный кусок фона. */
-.onb-art{margin:0;max-width:520px;border-radius:var(--radius-l);overflow:hidden;border:var(--border-hairline);background:#44444e;box-shadow:var(--shadow);animation:fadeUp .5s cubic-bezier(.16,1,.3,1) both;}
-.onb-art img{display:block;width:100%;height:auto;}
+/* Абстрактное «сияние» вместо прежнего радиального свечения: несколько размытых
+   лент в --primary/--teal с лёгким зерном, края растворяются маской. Всё на CSS,
+   без картинок — поэтому само перекрашивается в светлой теме (там ленты
+   смешиваются multiply и бледнее). Чисто декоративное (aria-hidden). */
+.onb-aurora{position:relative;width:100%;max-width:540px;aspect-ratio:3/2;animation:fadeUp .8s cubic-bezier(.16,1,.3,1) both;
+  -webkit-mask-image:radial-gradient(ellipse 50% 46% at 50% 50%,#000 40%,transparent 100%);mask-image:radial-gradient(ellipse 50% 46% at 50% 50%,#000 40%,transparent 100%);}
+.onb-aurora .band{position:absolute;border-radius:50%;filter:blur(20px);mix-blend-mode:var(--aurora-blend,screen);animation:auroraDrift 14s ease-in-out infinite alternate;}
+.onb-aurora .b1{width:92%;height:16%;left:4%;top:36%;transform:rotate(-16deg);border-radius:100% 30% 100% 30%;
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--primary) 85%,transparent) 35%,color-mix(in srgb,var(--teal) 80%,transparent) 75%,transparent);}
+.onb-aurora .b2{width:74%;height:10%;left:18%;top:54%;transform:rotate(-9deg);border-radius:30% 100% 30% 100%;animation-delay:-5s;
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--teal) 70%,transparent),transparent);}
+.onb-aurora .b3{width:44%;height:44%;left:14%;top:10%;filter:blur(40px);opacity:.7;animation-delay:-9s;
+  background:radial-gradient(closest-side,color-mix(in srgb,var(--primary) 60%,transparent),transparent);}
+.onb-aurora .b4{width:10%;height:62%;left:58%;top:14%;transform:rotate(18deg);filter:blur(22px);opacity:.55;animation-delay:-3s;
+  background:linear-gradient(180deg,transparent,color-mix(in srgb,#fff 55%,var(--teal)),transparent);}
+.onb-aurora .grain{position:absolute;inset:0;opacity:.22;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
+:root[data-theme="light"] .onb-aurora{--aurora-blend:multiply;}
+:root[data-theme="light"] .onb-aurora .band{opacity:.55;}
+@keyframes auroraDrift{from{translate:-10px 4px;}to{translate:12px -6px;}}
 .onb-left h1{font-size:38px;line-height:1.2;max-width:440px;color:var(--ink);font-weight:600;}
 .onb-left p{font-size:16px;color:var(--muted);max-width:400px;line-height:1.6;}
 .onb-right{display:flex;align-items:center;justify-content:center;padding:40px 24px;}

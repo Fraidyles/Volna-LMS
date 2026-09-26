@@ -152,16 +152,17 @@ Fixed: dark `--muted-2` raised to `#86868F` (5.19:1); light `--muted-2` raised t
 hardcoded hex in `index.html`'s pre-JS loading fallback that the CSS variable change didn't
 reach. Re-verified: zero warning/slop findings remain.
 
-## Open follow-up — auth illustrations: done
+## Open follow-up — auth-screen art: done
 
-Previously blocked (no image generation available). Now built: two FLUX.1-dev illustrations
-(`public/generated-images/auth-login.webp`, `auth-register.webp`) replace the radial glow in the
-auth screen's left panel, framed in a `--radius-l` tile (`.onb-art`). Pollinations (the MCP in
-`.mcp.json`) was tried first but its npm package is blocked in the sandbox and the paid API ran
-out of balance; the free anonymous tier only serves a low-quality model with a watermark. AI
-Horde worked for free but output was visibly soft. Final images came from the Hugging Face
-FLUX.1-dev Space with a user token. The Apple logo FLUX drew on the laptop lid was painted over.
-Verified in both themes at 1440×900. Still open: empty-state illustrations.
+Previously blocked (no image generation available). Final: a CSS-only abstract "aurora"
+(`.onb-aurora`) replaces the radial glow in the auth left panel — blurred violet/teal bands,
+a soft halo, a thin light ray and SVG-noise grain, edge-faded by a radial mask; token-driven so
+it re-tints in light theme. Chosen by the user after several rounds: FLUX.1-dev character
+illustrations (rejected — wanted abstraction), geometric glass/curve/bento compositions
+(rejected — "not geometric"), and biology motifs (cells, DNA helix). Image-generation route
+notes: Pollinations MCP package is blocked in the sandbox and its paid API ran dry; AI Horde is
+free but soft; the Hugging Face FLUX.1-dev Space works with a user token but has a small daily
+quota. Verified at 1440×900 in both themes and at 390px (panel hidden). Still open: empty states.
 
 ---
 

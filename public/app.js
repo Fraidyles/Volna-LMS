@@ -1031,8 +1031,7 @@ function renderAuthScreen(mode){
       '<div><div class="brand">'+brandMark()+'Медицина Долголетия</div>' +
       '<h1 style="margin-top:56px;">'+(isLogin ? "С возвращением" : "Регистрация на демо-курс")+'</h1>' +
       '<p>'+(isLogin ? "Войдите, чтобы продолжить обучение или открыть панель куратора." : "Пара полей — и вы сразу в первом уроке.")+'</p></div>' +
-      // Иллюстрации сгенерированы FLUX.1-dev (см. DESIGN.md → «Иллюстрации»); alt пустой — чисто декоративные.
-      '<figure class="onb-art"><img src="generated-images/'+(isLogin ? "auth-login" : "auth-register")+'.webp" alt="" width="1024" height="704" decoding="async"></figure>' +
+      '<div class="onb-aurora" aria-hidden="true"><span class="band b3"></span><span class="band b1"></span><span class="band b2"></span><span class="band b4"></span><span class="grain"></span></div>' +
     '</div>';
 
   var right;
