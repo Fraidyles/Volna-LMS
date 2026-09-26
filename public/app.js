@@ -518,7 +518,7 @@ function render(){
   var savedVideoState = prevVideo ? { src: prevVideo.currentSrc, time: prevVideo.currentTime, playing: !prevVideo.paused && !prevVideo.ended } : null;
   var node;
   applyGlow();
-  if(view === "loading") node = el('<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;color:#8A968F;">Загрузка…</div>');
+  if(view === "loading") node = el('<div style="min-height:100vh;"></div>');
   else if(view === "login") node = renderAuthScreen("login");
   else if(view === "register") node = renderAuthScreen("register");
   else if(view === "student") node = renderStudentShell();
