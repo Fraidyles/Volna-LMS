@@ -387,11 +387,32 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
    применяется через селектор, а не через правку каждого вызова в app.js —
    поэтому автоматически подхватывается и на главной куратора/админа. */
 .board-strip>.card{background:var(--glass-bg);border:var(--glass-border);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));box-shadow:none;}
+/* Отклик на курсор: рамка подсвечивается фиолетово-бирюзовым там, где курсор
+   (координаты --mx/--my ставит pointermove в app.js), изнутри — слабое пятно
+   света, плитка чуть приподнимается. Только у небольших плиток строки — на
+   длинных списках такая подсветка отвлекала бы. */
+.board-strip>.card{position:relative;transition:transform .25s cubic-bezier(.16,1,.3,1);}
+.board-strip>.card::after{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;opacity:0;transition:opacity .35s ease;
+  background:radial-gradient(260px circle at var(--mx,50%) var(--my,50%),color-mix(in srgb,var(--primary) 85%,transparent),color-mix(in srgb,var(--teal) 55%,transparent) 45%,transparent 75%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);}
+.board-strip>.card::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .35s ease;
+  background:radial-gradient(420px circle at var(--mx,50%) var(--my,50%),color-mix(in srgb,var(--primary) 9%,transparent),transparent 60%);}
+@media (hover:hover){
+  .board-strip>.card:hover{transform:translateY(-2px);}
+  .board-strip>.card:hover::after,.board-strip>.card:hover::before{opacity:1;}
+}
 
 /* Кольцо прогресса — заметно крупнее и с мягким свечением акцентом (было
    плоским 60px без тени). Конус-градиент делит заливку/пустоту по проценту;
    свечение снаружи — через box-shadow тем же акцентным цветом. */
-.progress-ring{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 0 1px var(--glass-border) inset, 0 0 22px -4px color-mix(in srgb, var(--primary) 55%, transparent);}
+/* Заполнение кольца анимируется через зарегистрированное свойство --ring-p
+   (обычный градиент не интерполируется). Класс ring-fill ставит
+   runEntranceAnimations() один раз при открытии экрана. */
+@property --ring-p{syntax:'<percentage>';inherits:false;initial-value:0%;}
+.progress-ring.ring-fill{animation:ringFill 1.1s cubic-bezier(.16,1,.3,1) both;}
+@keyframes ringFill{from{--ring-p:0%;}}
+.progress-ring{background:conic-gradient(var(--primary) var(--ring-p,0%), var(--line-2) 0);width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 0 1px var(--glass-border) inset, 0 0 22px -4px color-mix(in srgb, var(--primary) 55%, transparent);}
 .progress-ring-inner{width:57px;height:57px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:700;font-size:16px;}
 /* Приглушённый, не янтарный: серия/очки — это просто метрика прогресса,
    не праздничный бейдж consumer-habit-app — тон платформы деловой, не игровой. */
