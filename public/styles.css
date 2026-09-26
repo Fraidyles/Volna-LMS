@@ -321,6 +321,13 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
 .onb-left h1{font-size:38px;line-height:1.2;max-width:440px;color:var(--ink);font-weight:600;}
 .onb-left p{font-size:16px;color:var(--muted);max-width:400px;line-height:1.6;}
 .onb-right{display:flex;align-items:center;justify-content:center;padding:40px 24px;}
+/* На широком мониторе половины экрана «живут» по краям окна, и между текстом слева
+   и формой справа зияет пустая середина. Фон по-прежнему делится пополам, а
+   содержимое обеих половин подтягивается к центральной линии. */
+@media (min-width:1280px){
+  .onb-left > *{width:100%;max-width:540px;margin-left:auto;}
+  .onb-right{justify-content:flex-start;padding-left:clamp(64px,7vw,120px);}
+}
 /* Раньше этот блок стоял ДО .onb-left{display:flex;...} выше — та база с
    display:flex шла позже в файле и при равной специфичности всегда побеждала
    media-query, так что .onb-left физически никогда не скрывался на мобильном
