@@ -3247,7 +3247,7 @@ function analyticsRegistrationsByDay(filtered){
   var fromDate = dashboardState.periodFrom ? new Date(dashboardState.periodFrom+"T00:00:00") : new Date(toDate.getTime()-29*86400000);
   var days = Math.max(1, Math.round((toDate-fromDate)/86400000)+1);
   var weekly = days > 45;
-  var buckets = {}, order = [];
+  var buckets = {}, order = [], members = {};
   if(!weekly){
     for(var i=0;i<days;i++){ var key=isoDate(new Date(fromDate.getTime()+i*86400000)); buckets[key]=0; order.push(key); }
   } else {
@@ -3262,9 +3262,9 @@ function analyticsRegistrationsByDay(filtered){
     var key;
     if(!weekly) key=regDate;
     else{ var dd=new Date(d.getTime()); var dow2=(dd.getDay()+6)%7; dd.setDate(dd.getDate()-dow2); key=isoDate(dd); }
-    if(buckets[key]!==undefined) buckets[key]++;
+    if(buckets[key]!==undefined){ buckets[key]++; (members[key] = members[key] || []).push(s); }
   });
-  return { weekly:weekly, labels:order, counts:order.map(function(k){ return buckets[k]; }) };
+  return { weekly:weekly, labels:order, counts:order.map(function(k){ return buckets[k]; }), members:members };
 }
 
 function analyticsFunnel(filtered){
@@ -3302,12 +3302,14 @@ function analyticsQuizStats(filtered){
   });
 }
 
-function renderVBarChart(labels, counts, weekly){
+function renderVBarChart(labels, counts, weekly, selectedKey){
   var max = Math.max.apply(null, counts.concat([1]));
-  var html = '<div class="chart-vbars">';
+  var html = '<div class="chart-vbars'+(selectedKey?' has-sel':'')+'">';
   counts.forEach(function(c,i){
     var h = Math.round((c/max)*100);
-    html += '<div class="chart-vbar-col"><div class="chart-vbar" style="height:'+(h||1)+'%;" title="'+escapeHtml(fmtDate(labels[i]))+(weekly?' (неделя)':'')+': '+c+'"></div></div>';
+    // Вся колонка кликабельна (а не только сам столбик — он бывает в 2px высотой).
+    html += '<div class="chart-vbar-col'+(labels[i]===selectedKey?' sel':'')+'" data-action="reg-bar-select" data-key="'+labels[i]+'" title="'+escapeHtml(fmtDate(labels[i]))+(weekly?' (неделя)':'')+': '+c+'">' +
+      '<div class="chart-vbar" style="height:'+(h||1)+'%;"></div></div>';
   });
   html += '</div>';
   // Абсолютное позиционирование вместо ячейки-на-колонку: при 30+ узких столбцах
@@ -3366,6 +3368,30 @@ function renderQuizStackChart(stats){
   return html;
 }
 
+// Кто зарегистрировался в выбранный день/неделю (клик по столбцу «Регистрации»).
+function renderRegBarDetail(reg){
+  var key = dashboardState.regBarKey;
+  if(!key || reg.labels.indexOf(key)===-1) return '';
+  var list = (reg.members[key]||[]).slice().sort(function(a,b){ return (b.created_at||"").localeCompare(a.created_at||""); });
+  var d = new Date(key+"T00:00:00"), title;
+  if(reg.weekly){ var e = new Date(d.getTime()+6*86400000); title = "Неделя "+d.toLocaleDateString("ru-RU",{day:"numeric",month:"short"})+" – "+e.toLocaleDateString("ru-RU",{day:"numeric",month:"short"}); }
+  else title = d.toLocaleDateString("ru-RU",{weekday:"short",day:"numeric",month:"long"});
+  var n = list.length, word = n%10===1&&n%100!==11 ? "врач" : (n%10>=2&&n%10<=4&&(n%100<10||n%100>=20) ? "врача" : "врачей");
+  var h = '<div class="reg-detail"><div class="reg-detail-head"><b>'+escapeHtml(title)+'</b><span>'+n+' '+word+'</span>' +
+    '<button class="btn btn-sm btn-ghost" data-action="reg-bar-select" data-key="'+key+'" title="Закрыть">✕</button></div>';
+  if(!n){ h += '<p class="reg-detail-empty">В этот '+(reg.weekly?'период':'день')+' никто не зарегистрировался.</p></div>'; return h; }
+  list.forEach(function(st){
+    var stream = st.stream_id ? calendarState.streams.find(function(x){ return x.id===st.stream_id; }) : null;
+    var sub = [specNames(st), stream ? stream.name : "без потока"].filter(Boolean).join(" · ");
+    h += '<div class="reg-detail-row" data-action="open-student" data-id="'+st.id+'">' +
+      '<div class="avatar" style="'+avatarTone(st.name)+'">'+initials(st.name)+'</div>' +
+      '<div class="reg-detail-who"><b>'+escapeHtml(st.name)+'</b><small>'+escapeHtml(sub)+'</small></div>' +
+      '<span class="reg-detail-meta">'+escapeHtml(STAGE_LABELS[studentStage(st)]||"")+' · '+(st.completed_lessons||[]).length+' ур.</span>' +
+      '<span class="reg-detail-open">Открыть →</span></div>';
+  });
+  return h + '</div>';
+}
+
 function renderAnalyticsSection(filtered){
   var reg = analyticsRegistrationsByDay(filtered);
   var funnel = analyticsFunnel(filtered);
@@ -3376,8 +3402,9 @@ function renderAnalyticsSection(filtered){
   var html = '<div class="chart-grid">';
   html += '<div class="card chart-card">' +
     '<b class="chart-card-title">Регистрации '+(reg.weekly?'по неделям':'по дням')+'</b>' +
-    '<p class="chart-card-sub">Всего за период: '+regTotal+'</p>' +
-    renderVBarChart(reg.labels, reg.counts, reg.weekly) +
+    '<p class="chart-card-sub">Всего за период: '+regTotal+' · нажмите на столбец, чтобы увидеть врачей</p>' +
+    renderVBarChart(reg.labels, reg.counts, reg.weekly, reg.labels.indexOf(dashboardState.regBarKey)!==-1 ? dashboardState.regBarKey : null) +
+    renderRegBarDetail(reg) +
   '</div>';
   html += '<div class="card chart-card">' +
     '<b class="chart-card-title">Воронка</b>' +
@@ -5103,12 +5130,32 @@ function wireEvents(root){
       render(); return;
     }
 
+    if(action==="reg-bar-select"){ var rk=t.getAttribute("data-key"); dashboardState.regBarKey = dashboardState.regBarKey===rk ? null : rk; render(); return; }
     if(action==="edit-stream"){ calendarState.editingStreamId=t.getAttribute("data-id"); render(); var ei=document.querySelector('[data-stream-telegram-input]'); if(ei) ei.focus(); return; }
     if(action==="cancel-edit-stream"){ calendarState.editingStreamId=null; render(); return; }
     if(action==="toggle-stream-form"){ calendarState.showStreamForm=!calendarState.showStreamForm; render(); return; }
     if(action==="delete-stream"){
-      try{ await api("/streams/"+t.getAttribute("data-id"), { method:"DELETE" }); await loadCalendarData(); showToast("Поток удалён"); }catch(err){ showToast(err.message); }
-      render(); return;
+      var delId=t.getAttribute("data-id");
+      var delStream=calendarState.streams.find(function(x){ return x.id===delId; });
+      var delCount=(staffState.students||[]).filter(function(x){ return x.stream_id===delId; }).length;
+      var delMod10=delCount%10, delMod100=delCount%100;
+      var delPhrase=delCount+(delMod10===1&&delMod100!==11?" врач останется":(delMod10>=2&&delMod10<=4&&(delMod100<10||delMod100>=20)?" врача останутся":" врачей останутся"));
+      var delEvents=(calendarState.events||[]).filter(function(x){ return x.stream_id===delId && new Date(x.event_date+"T23:59:59")>=new Date(); }).length;
+      askConfirm({
+        title:"Удалить поток?",
+        // На сервере streams удаляется с ON DELETE SET NULL: врачи остаются без потока,
+        // а эфиры потока становятся общими — их увидят врачи всех потоков.
+        body:"Вы уверены, что хотите удалить поток «"+(delStream?delStream.name:"")+"»?"+
+          (delCount?" "+delPhrase+" без потока — их нужно будет распределить заново.":"")+
+          (delEvents?" "+delEvents+" "+(delEvents%10===1&&delEvents%100!==11?"предстоящий эфир потока станет общим — его":"предстоящих эфира(-ов) потока станут общими — их")+" увидят врачи всех потоков.":"")+
+          " Это действие нельзя отменить.",
+        confirmLabel:"Удалить поток",
+        onConfirm: async function(){
+          try{ await api("/streams/"+delId, { method:"DELETE" }); await loadCalendarData(); showToast("Поток удалён"); }catch(err){ showToast(err.message); }
+          render();
+        }
+      });
+      return;
     }
     if(action==="save-stream-telegram"){
       var stId=t.getAttribute("data-id");
