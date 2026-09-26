@@ -4100,51 +4100,85 @@ function renderCourseOverview(){
 }
 
 function renderTeamTab(){
+  // Слева — плитки сотрудников (для кураторов — их врачи и активность), справа —
+  // код сотрудника, приглашение и ожидающие регистрации приглашения.
   var myOptions = assignableRoleOptions(me.role);
-  var html = '<div class="grid-2" style="align-items:flex-start;">';
-
-  html += '<div class="card" style="padding:18px 20px;">' +
-    '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Администраторы и кураторы</b>';
+  var myOptionsForChange = assignableRoleOptions(me.role);
+  var students = staffState.students || [];
+  var weekAgo = Date.now() - 7*86400000;
+  var html = '<div class="page-wide team-grid"><div>' +
+    '<div class="courses-head"><b class="page-h" style="margin:0;">Администраторы и кураторы</b><span class="courses-count">'+staffState.staff.length+' '+ruPluralClient(staffState.staff.length,"человек","человека","человек")+'</span></div>';
   if(!staffState.staff.length){
-    html += '<div class="empty-state" style="padding:30px 10px;">Пока только вы.</div>';
+    html += '<div class="card empty-state" style="padding:30px 10px;">Пока только вы.</div>';
   } else {
-    var myOptionsForChange = assignableRoleOptions(me.role);
+    html += '<div class="team-tiles">';
     staffState.staff.forEach(function(c){
       var isMe = c.id===me.id;
       var canManage = !isMe && canAssignRole(me.role, c.role);
-      // Смена роли имеет смысл только тогда, когда есть больше одного варианта на выбор —
-      // у администратора он один («куратор»), т.е. фактически no-op; показываем только главному администратору.
       var canChangeRole = canManage && myOptionsForChange.length>1;
-      html += '<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);flex-wrap:wrap;">' +
-        '<div class="avatar">'+initials(c.name)+'</div>' +
-        '<div style="flex:1;min-width:140px;"><b style="font-size:13.8px;display:block;">'+escapeHtml(c.name)+(isMe?' <span style="color:var(--muted);font-weight:400;">(вы)</span>':'')+'</b>' +
-        '<span style="font-size:12px;color:var(--muted);">'+roleLabel(c.role)+' · с '+fmtDate(c.created_at)+'</span></div>' +
-        (canChangeRole ? '<select class="input btn-sm" style="width:auto;" data-role-select data-id="'+c.id+'">' +
-          myOptionsForChange.map(function(r){ return '<option value="'+r+'"'+(c.role===r?' selected':'')+'>'+roleLabel(r)+'</option>'; }).join("") + '</select>' : '') +
-        (canManage ? '<button class="btn btn-sm btn-ghost" data-action="reset-staff-password" data-id="'+c.id+'" data-name="'+escapeHtml(c.name)+'">Сбросить пароль</button>' : '') +
-        (canManage ? '<button class="btn btn-sm btn-ghost" data-action="remove-staff" data-id="'+c.id+'">Убрать</button>' : '') +
-      '</div>';
+      html += '<div class="card team-tile">' +
+        '<div class="team-top"><div class="avatar team-av" style="'+avatarTone(c.name)+'">'+initials(c.name)+'</div>' +
+          '<div class="team-who"><b>'+escapeHtml(c.name)+(isMe?' <span class="team-me">вы</span>':'')+'</b><small>'+escapeHtml(c.email||"")+'</small></div></div>' +
+        '<div class="team-meta"><span class="team-role">'+roleLabel(c.role)+'</span><span>в команде с '+fmtDateShort(c.created_at)+'</span></div>';
+      if(c.role==="curator"){
+        var mine = students.filter(function(st){ return st.assigned_curator_id===c.id; });
+        var act = mine.filter(function(st){ return st.last_seen_at && new Date(st.last_seen_at).getTime()>=weekAgo; }).length;
+        var fin = mine.filter(function(st){ return st.completed; }).length;
+        html += '<div class="team-stats"><div><b>'+mine.length+'</b><span>'+ruPluralClient(mine.length,"врач","врача","врачей")+'</span></div>' +
+          '<div><b>'+act+'</b><span>активны за 7 дн.</span></div><div><b>'+fin+'</b><span>завершили</span></div></div>';
+      } else {
+        html += '<p class="team-note">Управляет курсами, материалами и командой.</p>';
+      }
+      if(canManage){
+        html += '<div class="team-actions">' +
+          (canChangeRole ? '<select class="input" data-role-select data-id="'+c.id+'">' +
+            myOptionsForChange.map(function(r){ return '<option value="'+r+'"'+(c.role===r?' selected':'')+'>'+roleLabel(r)+'</option>'; }).join("") + '</select>' : '') +
+          '<button class="btn btn-sm btn-ghost" data-action="reset-staff-password" data-id="'+c.id+'" data-name="'+escapeHtml(c.name)+'">Сбросить пароль</button>' +
+          '<button class="btn btn-sm btn-ghost" data-action="remove-staff" data-id="'+c.id+'">Убрать</button></div>';
+      }
+      html += '</div>';
     });
+    html += '</div>';
+    // Нагрузка кураторов: сколько врачей закреплено за каждым и сколько ещё без куратора.
+    var curators = staffState.staff.filter(function(c){ return c.role==="curator"; });
+    if(curators.length){
+      var unassigned = students.filter(function(st){ return !st.assigned_curator_id || !curators.some(function(c){ return c.id===st.assigned_curator_id; }); }).length;
+      var maxN = Math.max.apply(null, curators.map(function(c){ return students.filter(function(st){ return st.assigned_curator_id===c.id; }).length; }).concat([unassigned,1]));
+      html += '<div class="card co-card" style="margin-top:14px;"><div class="co-head"><b>Врачи по кураторам</b>' +
+        '<button class="btn btn-sm btn-ghost" data-action="sidebar-nav" data-key="students">К врачам →</button></div><div class="load-rows">';
+      curators.forEach(function(c){
+        var n = students.filter(function(st){ return st.assigned_curator_id===c.id; }).length;
+        html += '<div class="load-row"><span class="load-name">'+escapeHtml(c.name)+'</span><div class="co-bar"><i style="width:'+Math.round(n/maxN*100)+'%"></i></div><b>'+n+'</b></div>';
+      });
+      html += '<div class="load-row muted"><span class="load-name">Без куратора</span><div class="co-bar"><i style="width:'+Math.round(unassigned/maxN*100)+'%;background:var(--muted-2)"></i></div><b>'+unassigned+'</b></div>';
+      html += '</div>'+(unassigned?'<p class="team-hint" style="margin:12px 0 0;">Назначить куратора можно в карточке врача, вкладка «Профиль».</p>':'')+'</div>';
+    }
   }
-  html += '</div>';
-
-  html += '<div class="card" style="padding:18px 20px;">';
+  html += '</div><div class="team-side">';
   if(myOptions.length){
     if(staffState.inviteCode){
-      html += '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Код сотрудника</b>' +
-        '<p style="font-size:12.5px;color:var(--muted);margin:0 0 10px;">Продиктуйте его отдельно (не тем же письмом, где email) тому, кого приглашаете куратором или администратором, — без этого кода регистрация по приглашению останется обычным врачом.</p>' +
-        '<div style="font-size:22px;font-weight:700;letter-spacing:3px;font-family:monospace;padding:10px 14px;background:var(--surface-2);border-radius:var(--radius-s);display:inline-block;">'+escapeHtml(staffState.inviteCode.code)+'</div>' +
-        '<p class="hint" style="margin-top:8px;">Действует до '+fmtDate(staffState.inviteCode.expiresAt)+', '+fmtTime(staffState.inviteCode.expiresAt)+' — потом перевыпустится сам при следующем заходе сюда.</p>' +
-        '<hr style="border:none;border-top:1px solid var(--line-2);margin:16px 0;">';
+      html += '<div class="card co-card"><b class="co-card-title" style="margin-bottom:6px;">Код сотрудника</b>' +
+        '<div class="team-code">'+escapeHtml(staffState.inviteCode.code)+'</div>' +
+        '<p class="team-hint">Продиктуйте его отдельно (не тем же письмом, где email) тому, кого приглашаете куратором или администратором — без кода регистрация по приглашению останется обычным врачом.</p>' +
+        '<p class="team-hint">Действует до '+fmtDateShort(staffState.inviteCode.expiresAt)+', '+fmtTime(staffState.inviteCode.expiresAt)+' — потом перевыпустится сам.</p></div>';
     }
-    html += '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Пригласить по email</b>' +
+    html += '<div class="card co-card"><b class="co-card-title" style="margin-bottom:10px;">Пригласить сотрудника</b>' +
       '<form id="inviteStaffForm">' +
-        '<div class="field"><label>Email</label><input class="input" type="email" name="email" required></div>' +
+        '<div class="field"><label>Email</label><input class="input" type="email" name="email" required placeholder="name@clinic.ru"></div>' +
         '<div class="field"><label>Роль</label><select class="input" name="role">' + myOptions.map(function(r){ return '<option value="'+r+'">'+roleLabel(r)+'</option>'; }).join("") + '</select></div>' +
         '<button class="btn btn-primary btn-block" type="submit">Отправить приглашение</button>' +
       '</form>';
+    var pending = (staffState.invites||[]).filter(function(iv){ return iv.role==="curator" || iv.role==="admin"; });
+    if(pending.length){
+      html += '<div class="team-pending"><div class="team-pending-h">Ожидают регистрации · '+pending.length+'</div>';
+      pending.forEach(function(iv){
+        html += '<div class="team-pending-row"><span class="ell">'+escapeHtml(iv.email)+'</span><small>'+roleLabel(iv.role)+' · '+fmtDateShort(iv.invited_at)+'</small></div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
   } else {
-    html += '<p style="font-size:13px;color:var(--muted);margin:0;">Назначать роли может главный администратор или администратор.</p>';
+    html += '<div class="card co-card"><p style="font-size:13px;color:var(--muted);margin:0;">Назначать роли может главный администратор или администратор.</p></div>';
   }
   html += '</div></div>';
   return el(html);

@@ -1028,3 +1028,39 @@ select.input,select{-webkit-appearance:none;appearance:none;cursor:pointer;paddi
 .co-active{margin-top:14px;padding-top:12px;border-top:1px solid var(--line-2);font-size:12.5px;color:var(--muted);}
 .co-active b{color:var(--ink);}
 @media (max-width:900px){.co-grid{grid-template-columns:1fr;}}
+
+/* ---------------- Команда ---------------- */
+.team-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(300px,1fr);gap:18px;align-items:start;}
+.team-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;}
+.team-tile{padding:18px 20px;display:flex;flex-direction:column;gap:12px;}
+.team-top{display:flex;align-items:center;gap:12px;min-width:0;}
+.team-av{width:42px;height:42px;font-size:14px;}
+.team-who{min-width:0;display:flex;flex-direction:column;}
+.team-who b{font-size:14.5px;font-weight:600;}
+.team-who small{font-size:12px;color:var(--muted-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.team-me{font-size:11px;font-weight:500;color:var(--muted);padding:1px 7px;border-radius:999px;border:var(--border-hairline);margin-left:4px;}
+.team-meta{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);flex-wrap:wrap;}
+.team-role{font-size:11.5px;font-weight:600;color:var(--primary);background:var(--primary-tint);padding:3px 9px;border-radius:999px;}
+.team-stats{display:flex;gap:22px;padding-top:12px;border-top:1px solid var(--line-2);}
+.team-stats div{display:flex;flex-direction:column;}
+.team-stats b{font-size:20px;font-weight:800;letter-spacing:-.02em;}
+.team-stats span{font-size:11.5px;color:var(--muted);}
+.team-note{font-size:12.5px;color:var(--muted);margin:0;padding-top:12px;border-top:1px solid var(--line-2);}
+.team-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+.team-actions select.input{width:auto;padding:6px 32px 6px 10px;font-size:12.5px;}
+.team-actions .btn{padding:6px 11px;font-size:12.5px;}
+.team-side{display:flex;flex-direction:column;gap:14px;}
+.team-code{font-size:24px;font-weight:800;letter-spacing:.18em;padding:12px 16px;background:var(--surface-2);border-radius:var(--radius-s);display:inline-block;margin:4px 0 10px;font-variant-numeric:tabular-nums;}
+.team-hint{font-size:12.5px;color:var(--muted);line-height:1.55;margin:0 0 6px;}
+.team-pending{margin-top:16px;padding-top:12px;border-top:1px solid var(--line-2);}
+.team-pending-h{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;}
+.team-pending-row{display:flex;flex-direction:column;padding:6px 0;min-width:0;}
+.team-pending-row .ell{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.team-pending-row small{font-size:11.5px;color:var(--muted-2);}
+@media (max-width:1000px){.team-grid{grid-template-columns:1fr;}}
+.load-rows{display:flex;flex-direction:column;gap:12px;margin-top:14px;}
+.load-row{display:grid;grid-template-columns:minmax(120px,200px) 1fr 40px;align-items:center;gap:14px;font-size:13.5px;}
+.load-row b{text-align:right;font-weight:600;}
+.load-row.muted .load-name{color:var(--muted);}
+.load-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.load-row .co-bar{height:6px;}
