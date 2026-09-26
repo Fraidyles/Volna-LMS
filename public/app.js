@@ -685,8 +685,22 @@ function render(){
   runEntranceAnimations();
   if(view==="student" && studentState.tab==="lesson" && !studentState.quizMode && studentState.lessonStage==="video"){
     setTimeout(function(){ wireLessonVideo(savedVideoState); }, 0);
+  } else if(lessonPlyrInstance){
+    // Ушли со стадии "видео" — старую разметку Plyr уже снёс app.innerHTML="",
+    // так что просто отпускаем ссылку на инстанс, а не пытаемся destroy() над
+    // отсутствующими в DOM узлами.
+    lessonPlyrInstance = null;
   }
 }
+
+// Plyr переодевает стандартный <video> в свой интерфейс, но сам элемент с id
+// lessonVideoPlayer остаётся в DOM и продолжает как обычно стрелять timeupdate/
+// ended — весь код ниже (главы, восстановление позиции) написан для нативного
+// <video> и не менялся. render() пересобирает DOM целиком на каждый вызов
+// (в т.ч. на фоновый поллинг уведомлений), поэтому старый экземпляр Plyr нужно
+// явно уничтожать перед созданием нового — иначе на каждый render накапливался
+// бы ещё один живой инстанс поверх уже удалённой из DOM разметки.
+var lessonPlyrInstance = null;
 
 // Подсветка текущей главы под видео обновляется через timeupdate БЕЗ полного
 // render() на каждый тик (десятки раз в секунду) — иначе моргало бы видео и
@@ -700,6 +714,19 @@ function wireLessonVideo(savedVideoState){
   if(savedVideoState && savedVideoState.src && v.currentSrc===savedVideoState.src){
     if(savedVideoState.time>0) v.currentTime = savedVideoState.time;
     if(savedVideoState.playing) v.play().catch(function(){});
+  }
+  if(lessonPlyrInstance){ lessonPlyrInstance.destroy(); lessonPlyrInstance=null; }
+  if(typeof Plyr!=="undefined"){
+    // iconUrl по умолчанию у Plyr указывает на cdn.plyr.io — самохостим вместе с
+    // JS/CSS (см. plyr.svg в public/vendor/plyr), иначе иконки не загрузятся ни
+    // при заблокированном внешнем CDN за корпоративным файрволом, ни из-за CSP
+    // connect-src 'self' на этом сервере (см. src/server.js).
+    lessonPlyrInstance = new Plyr(v, {
+      iconUrl: "vendor/plyr/plyr.svg",
+      controls: ["play-large","play","progress","current-time","duration","mute","volume","settings","fullscreen"],
+      settings: ["speed"],
+      speed: { selected:1, options:[0.75,1,1.25,1.5,2] }
+    });
   }
   var tcs = lesson.videoTimecodes||[];
   var lastChapterId = null;
@@ -849,7 +876,7 @@ function renderVideoEditorModal(){
           '<input type="file" id="videoFileInput" accept=".mp4,.webm,.mov,.m4v" style="font-size:12px;flex:1;min-width:0;"'+(uploading?' disabled':'')+'>' +
           '<button type="button" class="btn btn-sm btn-primary" data-action="upload-lesson-video" data-id="'+videoEditor.lessonId+'"'+(uploading?' disabled':'')+'>'+(uploading?'Загружаем…':'Загрузить')+'</button>' +
         '</div>' +
-        (uploading ? '<div style="margin-top:8px;height:6px;border-radius:3px;background:var(--line-2);overflow:hidden;"><div style="height:100%;width:100%;background:var(--primary);transform:scaleX('+(videoEditor.uploadProgress/100)+');transform-origin:left;transition:transform .15s;"></div></div>' : '') +
+        (uploading ? '<div style="margin-top:8px;height:6px;border-radius:3px;background:var(--line-2);overflow:hidden;"><div id="videoUploadProgressFill" style="height:100%;width:100%;background:var(--primary);transform:scaleX('+(videoEditor.uploadProgress/100)+');transform-origin:left;transition:transform .15s;"></div></div>' : '') +
       '</div>' +
       '<div style="display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--muted-2);font-size:12.5px;"><span style="flex:1;height:1px;background:var(--line-2);"></span>или<span style="flex:1;height:1px;background:var(--line-2);"></span></div>' +
     '<form id="videoEditorForm">' +
@@ -1500,7 +1527,7 @@ function renderStudentHome(){
     if(certsOn){
       var issued = pr.certificate_status==="issued";
       html += magnet(issued?"done":"attention", issued?"Сертификат выдан":"На проверке") +
-        '<div style="font-family:var(--display);font-weight:800;font-size:26px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
+        '<div style="font-family:var(--sans);font-weight:800;font-size:26px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
         '<span style="font-size:12px;color:var(--muted);">результат теста</span>';
       if(!issued && !pr.requested_full_access){
         html += '<button class="btn btn-sm btn-primary btn-block" style="margin-top:12px;" data-action="request-full">Заявка на полную программу</button>';
@@ -1509,7 +1536,7 @@ function renderStudentHome(){
       }
     } else {
       html += magnet("done","Демо пройдено") +
-        '<div style="font-family:var(--display);font-weight:800;font-size:26px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
+        '<div style="font-family:var(--sans);font-weight:800;font-size:26px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
         '<span style="font-size:12px;color:var(--muted);">результат теста · скидка 10% на полный курс</span>';
       if(!pr.requested_full_access){
         html += '<button class="btn btn-sm btn-primary btn-block" style="margin-top:12px;" data-action="request-full">Хочу полное обучение</button>';
@@ -1531,12 +1558,12 @@ function renderStudentHome(){
     magnet("neutral","Прогресс") +
     '<div style="display:flex;align-items:baseline;gap:6px;margin-top:10px;">' +
       icon("flame","ic-sm streak-flame") +
-      '<span style="font-family:var(--display);font-weight:800;font-size:22px;letter-spacing:-.02em;" data-count="'+(gam.currentStreak||0)+'">'+(gam.currentStreak||0)+'</span>' +
+      '<span style="font-family:var(--sans);font-weight:800;font-size:22px;letter-spacing:-.02em;" data-count="'+(gam.currentStreak||0)+'">'+(gam.currentStreak||0)+'</span>' +
       '<span style="font-size:12px;color:var(--muted);">'+(gam.currentStreak===1?"день подряд":"дней подряд")+'</span>' +
     '</div>' +
     '<span style="font-size:12px;color:var(--muted);display:block;margin-top:2px;">рекорд: '+(gam.longestStreak||0)+'</span>' +
     '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2);">' +
-      '<span style="font-family:var(--display);font-weight:800;font-size:18px;" data-count="'+(gam.points||0)+'">'+(gam.points||0)+'</span>' +
+      '<span style="font-family:var(--sans);font-weight:800;font-size:18px;" data-count="'+(gam.points||0)+'">'+(gam.points||0)+'</span>' +
       '<span style="font-size:12px;color:var(--muted);"> / 1000 очков</span>' +
       '<button class="btn btn-sm btn-ghost" style="display:block;margin-top:8px;padding:4px 0;" data-action="student-tab" data-tab="progress">Как получить скидку →</button>' +
     '</div>' +
@@ -2104,11 +2131,11 @@ function renderMyProgressPage(){
     '<div class="board-strip" style="margin-top:0;">' +
       '<div class="card" style="padding:18px;">'+magnet("neutral","Серия дней") +
         '<div style="display:flex;align-items:baseline;gap:6px;margin-top:10px;">'+icon("flame","ic-sm streak-flame") +
-        '<span style="font-family:var(--display);font-weight:800;font-size:22px;letter-spacing:-.02em;" data-count="'+(gam.currentStreak||0)+'">'+(gam.currentStreak||0)+'</span>' +
+        '<span style="font-family:var(--sans);font-weight:800;font-size:22px;letter-spacing:-.02em;" data-count="'+(gam.currentStreak||0)+'">'+(gam.currentStreak||0)+'</span>' +
         '<span style="font-size:12px;color:var(--muted);">'+(gam.currentStreak===1?"день подряд":"дней подряд")+'</span></div>' +
         '<span style="font-size:12px;color:var(--muted);display:block;margin-top:2px;">рекорд: '+(gam.longestStreak||0)+'</span></div>' +
       '<div class="card" style="padding:18px;">'+magnet(anyDiscountUnlocked?"done":"neutral","Очки") +
-        '<div style="font-family:var(--display);font-weight:800;font-size:22px;margin-top:10px;letter-spacing:-.02em;"><span data-count="'+points+'">'+points+'</span> <span style="font-size:13px;font-weight:500;color:var(--muted);">/ '+POINTS_MAX+'</span></div>' +
+        '<div style="font-family:var(--sans);font-weight:800;font-size:22px;margin-top:10px;letter-spacing:-.02em;"><span data-count="'+points+'">'+points+'</span> <span style="font-size:13px;font-weight:500;color:var(--muted);">/ '+POINTS_MAX+'</span></div>' +
         '<div style="position:relative;height:5px;border-radius:100px;background:var(--line-2);margin-top:12px;overflow:visible;">' +
           '<div style="height:100%;width:'+pointsPct+'%;background:var(--primary);border-radius:100px;"></div>' +
           POINT_TIERS.map(function(t){ return '<span style="position:absolute;top:-3px;left:'+(t.points/POINTS_MAX*100)+'%;width:11px;height:11px;margin-left:-5.5px;border-radius:50%;background:'+(points>=t.points?'var(--primary)':'var(--surface)')+';border:2px solid '+(points>=t.points?'var(--primary)':'var(--line)')+';"></span>'; }).join("") +
@@ -2117,7 +2144,7 @@ function renderMyProgressPage(){
       (quizDone
         ? '<div class="card" style="padding:18px;">' +
             magnet(pr.certificate_status==="issued"?"done":"attention", pr.certificate_status==="issued"?"Сертификат выдан":"На проверке") +
-            '<div style="font-family:var(--display);font-weight:800;font-size:22px;margin-top:10px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
+            '<div style="font-family:var(--sans);font-weight:800;font-size:22px;margin-top:10px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
           '</div>'
         : '') +
     '</div>' +
@@ -2421,7 +2448,7 @@ function renderStaffHome(container){
           '</div>' +
         '</div>' +
         '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line-2);display:flex;align-items:baseline;gap:6px;">' +
-          '<span style="font-family:var(--display);font-weight:800;font-size:22px;" data-count="'+list.length+'">'+list.length+'</span>' +
+          '<span style="font-family:var(--sans);font-weight:800;font-size:22px;" data-count="'+list.length+'">'+list.length+'</span>' +
           '<span style="font-size:12px;color:var(--muted);">врачей · '+activeCount+' активных</span>' +
         '</div>' +
       '</div>';
@@ -4497,9 +4524,14 @@ function wireEvents(root){
       render();
       try{
         var vur = await apiUploadWithProgress("/course/lessons/"+videoEditor.lessonId+"/video-upload", vfd, function(pct){
-          // Событий прогресса может быть сотни в секунду — перерисовываем не чаще,
-          // чем реально меняется процент, иначе пересборка всего DOM тормозит загрузку.
-          if(pct !== videoEditor.uploadProgress){ videoEditor.uploadProgress = pct; render(); }
+          // Событий прогресса — десятки-сотни в секунду. render() пересобирает
+          // ВЕСЬ app.innerHTML на каждый вызов — на такой частоте это заметно
+          // мерцало экраном на всё время загрузки. Двигаем сам прогресс-бар
+          // напрямую через DOM, без render(); полный render() нужен только один
+          // раз в начале (чтобы бар вообще появился) и один раз в конце.
+          videoEditor.uploadProgress = pct;
+          var fill = document.getElementById("videoUploadProgressFill");
+          if(fill) fill.style.transform = "scaleX("+(pct/100)+")";
         });
         videoEditor.videoUrl = vur.videoUrl;
         showToast("Видео загружено");

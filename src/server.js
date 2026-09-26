@@ -77,6 +77,11 @@ const cspMiddleware = helmet.contentSecurityPolicy({
     // img/src урока тоже не ограничен по домену на бэкенде — картинки в уроке могут
     // лежать на любом внешнем хосте.
     imgSrc: ["'self'", "https:", "data:"],
+    // Видео урока — либо загруженный файл (тот же origin), либо прямой внешний
+    // URL на mp4 (см. поле "Ссылка на видео" в редакторе урока) — по той же логике,
+    // что и imgSrc выше. Без явного mediaSrc CSP падает на defaultSrc:'self' и
+    // молча блокирует воспроизведение любого стороннего видео по прямой ссылке.
+    mediaSrc: ["'self'", "https:"],
     // iframe урока (see sanitize.js) не ограничен по домену — там встраивают видео
     // с разных площадок (GetCourse и т.п.), поэтому https: обязателен здесь.
     frameSrc: ["https:"],
@@ -162,10 +167,18 @@ if (BASE_PATH) {
 
 const PORT = process.env.PORT || 8790;
 if (require.main === module) {
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log("LMS backend запущен на порту " + PORT);
     console.log("Документация API: http://localhost:" + PORT + "/api-docs");
   });
+  // Node с v14.11 по умолчанию рвёт любой запрос, не завершившийся за 5 минут
+  // (server.requestTimeout=300000 — защита от slow-loris). Для большинства
+  // роутов это не заметно, но загрузка видео до 500 МБ (см. course.js,
+  // /lessons/:id/video-upload) на не самом быстром аплинке легко занимает
+  // дольше 5 минут — соединение обрывалось посреди загрузки без внятной
+  // ошибки на фронте. Поднимаем до 30 минут — этого достаточно даже на
+  // медленном канале и всё ещё ограничивает зависшие соединения.
+  server.requestTimeout = 30 * 60 * 1000;
 }
 
 module.exports = app;

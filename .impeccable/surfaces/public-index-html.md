@@ -11,6 +11,39 @@ Primary target: `public/index.html` (the whole SPA — врач dashboard, cours
 quiz, calendar, messages, certificate — plus curator/admin/super_admin dashboard, students,
 team, audit-log views rendered by `public/app.js`). Visitor mode: **Operate** throughout.
 
+## Direction contract (v4 — supersedes the v3 contract below)
+
+**What changed from v3:** two independent Claude Code sessions worked the same
+branch point in parallel — this session (content/video/font) and a sibling
+session (illustrations → ambient glow animation, on branch
+`claude/busy-allen-qsefoc`) — then merged. Two real deltas from v3, both
+user-driven:
+
+1. **Two-voice type system dropped to one voice.** V3's Unbounded (hero
+   numbers/headlines) read as a chosen accent in isolation but as a foreign,
+   clashing element once seen live on the actual dashboard next to Manrope
+   body text — direct user feedback ("шрифты... слишком выпирающие, сильно
+   отличаются от основного шрифта"). Compared two live variants (drop
+   Unbounded entirely vs. keep it lighter/smaller) via screenshots; user chose
+   dropping it. `var(--display)`, the `@font-face` declarations, and the font
+   files themselves are removed from the codebase — hierarchy is now weight
+   (600/700/800) and size only, same principle v3 already used for Manrope's
+   own non-display text. Do not reintroduce a second display face without a
+   fresh request.
+2. **The sibling session's animation system merged in unchanged**, just
+   re-fonted: `.hero-aurora`/`.side-flow`/`.aurora` ambient glow motifs
+   (drifting bands, `--anim-t`-anchored so they survive the app's frequent
+   full re-renders), `@property --ring-p` + `.ring-fill` progress-ring fill
+   animation, `data-count`/`data-suffix` number count-up
+   (`runEntranceAnimations()`), and the `--mx`/`--my` pointer-tracked glow on
+   `.board-strip > .card` hover — all of it already respects
+   `prefers-reduced-motion` and the "admin is a work tool" density rule (no
+   glow/blur on dense table screens). See that session's own DESIGN.md
+   entries for the full rationale on each motif; nothing here duplicates that.
+
+Everything else in v3's contract below (bento layout, glass scoping, violet+
+teal accent pair, skeuomorphic buttons, radii) is unchanged.
+
 ## Direction contract (v3 — supersedes the v2 contract below)
 
 **THESIS:** V2 was built, audited, and rejected by the user as "a well-executed but
