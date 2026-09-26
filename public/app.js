@@ -4048,8 +4048,55 @@ function renderCoursesTab(){
   } else {
     html += '<button type="button" class="course-tile-new" data-action="toggle-create-course"><span>+</span>Новый курс</button>';
   }
-  html += '</div></div>';
+  html += '</div>' + renderCourseOverview() + '</div>';
   return el(html);
+}
+
+// Обзор выбранного курса под плитками: слева — уроки с долей врачей, прошедших
+// каждый (и пометками «черновик» / «открывается на N-й день»), справа — состав
+// курса и распределение врачей по этапам. Всё из уже загруженных данных.
+function renderCourseOverview(){
+  var c = (staffState.coursesList||[]).find(function(x){ return x.id===staffState.activeCourseId; });
+  if(!c) return '';
+  var lessons = staffState.materials || [], students = staffState.students || [];
+  var total = students.length;
+  var h = '<div class="co-grid">';
+  // Уроки
+  h += '<div class="card co-lessons"><div class="co-head"><b>Уроки курса «'+escapeHtml(c.title)+'»</b>' +
+    '<button class="btn btn-sm btn-ghost" data-action="sidebar-nav" data-key="materials">Редактировать →</button></div>';
+  if(!lessons.length){
+    h += '<div class="empty-state" style="padding:28px 10px;">Уроков пока нет — добавьте их в «Учебных материалах».</div>';
+  } else {
+    h += '<div class="co-lessons-sub">доля врачей курса, прошедших урок</div>';
+    lessons.forEach(function(l, i){
+      var doneN = students.filter(function(st){ return (st.completed_lessons||[]).indexOf(l.id)!==-1; }).length;
+      var pct = total ? Math.round(doneN/total*100) : 0;
+      var tags = (l.has_draft?'<span class="co-tag">черновик</span>':'') + (l.drip_days?'<span class="co-tag">открывается на '+l.drip_days+'-й день</span>':'');
+      h += '<div class="co-lesson"><span class="co-num">'+(i+1)+'</span>' +
+        '<div class="co-lesson-main"><div class="co-lesson-title"><span>'+escapeHtml(l.title)+'</span>'+tags+'</div>' +
+        '<div class="co-bar"><i style="width:'+pct+'%"></i></div></div>' +
+        '<span class="co-pct">'+pct+'%<small>'+doneN+' из '+total+'</small></span></div>';
+    });
+  }
+  h += '</div>';
+  // Справа: состав + врачи по этапам
+  var mods = (moduleManagerState.modules||[]).length, qs = (staffState.quizAdmin||[]).length, prots = (adminProtocolsState.list||[]).length;
+  h += '<div class="co-side"><div class="card co-card"><b class="co-card-title">Состав курса</b><div class="co-stats">' +
+    '<div><b>'+lessons.length+'</b><span>'+ruPluralClient(lessons.length,"урок","урока","уроков")+'</span></div>' +
+    '<div><b>'+mods+'</b><span>'+ruPluralClient(mods,"модуль","модуля","модулей")+'</span></div>' +
+    '<div><b>'+qs+'</b><span>'+ruPluralClient(qs,"вопрос","вопроса","вопросов")+' в тесте</span></div>' +
+    '<div><b>'+prots+'</b><span>'+ruPluralClient(prots,"протокол","протокола","протоколов")+'</span></div></div></div>';
+  var stages = [["new","Новые","var(--muted-2)"],["in_progress","Проходят","var(--primary)"],["demo_done","Завершили демо","var(--teal)"],["certified","С сертификатом","var(--status-done)"]];
+  var cnt = {}; students.forEach(function(st){ var k = studentStage(st); cnt[k] = (cnt[k]||0)+1; });
+  var weekAgo = Date.now() - 7*86400000;
+  var active7 = students.filter(function(st){ return st.last_seen_at && new Date(st.last_seen_at).getTime() >= weekAgo; }).length;
+  h += '<div class="card co-card"><b class="co-card-title">Врачи на курсе · '+total+'</b><div class="co-stack">';
+  stages.forEach(function(sg){ var n = cnt[sg[0]]||0; if(n) h += '<i style="flex:'+n+';background:'+sg[2]+'" title="'+sg[1]+': '+n+'"></i>'; });
+  if(!total) h += '<i style="flex:1;background:var(--line-2)"></i>';
+  h += '</div><div class="co-legend">';
+  stages.forEach(function(sg){ h += '<div><span style="background:'+sg[2]+'"></span>'+sg[1]+'<b>'+(cnt[sg[0]]||0)+'</b></div>'; });
+  h += '</div><div class="co-active">Заходили за последние 7 дней: <b>'+active7+'</b> из '+total+'</div></div></div>';
+  return h + '</div>';
 }
 
 function renderTeamTab(){
