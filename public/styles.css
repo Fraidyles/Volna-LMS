@@ -1064,3 +1064,23 @@ select.input,select{-webkit-appearance:none;appearance:none;cursor:pointer;paddi
 .load-row.muted .load-name{color:var(--muted);}
 .load-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .load-row .co-bar{height:6px;}
+
+/* Боковые панели — на всю высоту окна (раньше короткая панель висела плашкой в
+   правом верхнем углу). Короткие диалоги (подтверждение, Telegram, пароль,
+   профиль…) — по центру экрана, как обычные модальные окна. */
+.overlay:not(.overlay-center) > .drawer{height:100%;}
+.drawer.modal{height:auto;max-height:calc(100vh - 40px);border:var(--border-hairline);border-radius:var(--radius-l);background:var(--surface);
+  animation:modalIn .22s cubic-bezier(.16,1,.3,1) both;}
+.drawer.modal .drawer-head{background:var(--surface);border-radius:var(--radius-l) var(--radius-l) 0 0;}
+:root:not([data-theme="light"]) .drawer.modal{background-image:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,0) 30%);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),var(--shadow-lift);}
+@keyframes modalIn{0%{opacity:0;transform:translateY(8px) scale(.97);}100%{opacity:1;transform:none;}}
+
+/* Колонки одной высоты: верх и низ соседних колонок совпадают, последняя
+   карточка в колонке дотягивается до низа. */
+.team-grid,.co-grid,.pp-grid{align-items:stretch;}
+.team-main,.team-side,.co-side,.pp-col{display:flex;flex-direction:column;gap:14px;min-width:0;}
+.team-main > .team-tiles + .card{margin-top:0 !important;}
+.team-main > :last-child,.team-side > :last-child,.co-side > :last-child,.pp-col > :last-child{flex:1;}
+.team-side .courses-head,.team-main .courses-head{margin-bottom:-2px;}
+.co-grid > .co-lessons{height:100%;}
+a.btn{text-decoration:none;}

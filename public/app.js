@@ -1136,7 +1136,7 @@ function renderTempPasswordModal(){
       '</div>' +
       '<button class="btn btn-primary btn-block" data-action="close-temp-password">Понятно</button>' +
     '</div>';
-  return el('<div class="overlay" data-action="close-temp-password"><div class="drawer" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay overlay-center" data-action="close-temp-password"><div class="drawer modal" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
 }
 
 function renderConfirmModal(){
@@ -1148,7 +1148,7 @@ function renderConfirmModal(){
         '<button class="btn '+(confirmState.danger?'btn-danger':'btn-primary')+' btn-block" data-action="confirm-modal-yes">'+escapeHtml(confirmState.confirmLabel)+'</button>' +
       '</div>' +
     '</div>';
-  return el('<div class="overlay" data-action="overlay-close-confirm"><div class="drawer" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay overlay-center" data-action="overlay-close-confirm"><div class="drawer modal" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
 }
 
 function renderChangePasswordModal(){
@@ -1161,7 +1161,7 @@ function renderChangePasswordModal(){
     '</form>' +
     '<button class="btn btn-ghost btn-block" style="margin-top:10px;" data-action="logout-everywhere">Выйти со всех устройств</button>' +
     '</div>';
-  return el('<div class="overlay" data-action="overlay-close-password"><div class="drawer" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay overlay-center" data-action="overlay-close-password"><div class="drawer modal" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
 }
 
 // Врач раньше не видел вообще, за какой продукт и как оплачено — только персонал
@@ -1197,7 +1197,7 @@ function renderProfileModal(){
     '</form>' +
     (isStudent ? renderMyProductBlock() : '') +
     '</div>';
-  return el('<div class="overlay" data-action="overlay-close-profile-editor"><div class="drawer" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay overlay-center" data-action="overlay-close-profile-editor"><div class="drawer modal" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
 }
 
 // Всё общение врачей, кураторов и преподавателей — в Telegram-группе потока, не
@@ -1235,7 +1235,7 @@ function renderTelegramModal(){
     }
   }
   body += '</div>';
-  return el('<div class="overlay" data-action="overlay-close-telegram-modal"><div class="drawer" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay overlay-center" data-action="overlay-close-telegram-modal"><div class="drawer modal" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
 }
 
 /* ============================= РЕНДЕР: АВТОРИЗАЦИЯ ============================= */
@@ -3905,7 +3905,7 @@ function renderSpecializationEditorModal(){
       '<div class="err-text" id="specializationEditorError" style="display:none;"></div>' +
       '<button class="btn btn-primary btn-block" type="submit">Сохранить</button>' +
     '</form></div>';
-  return el('<div class="overlay" data-action="overlay-close-specialization-editor"><div class="drawer" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay overlay-center" data-action="overlay-close-specialization-editor"><div class="drawer modal" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
 }
 
 function renderProtocolGuideFiles(g){
@@ -4106,7 +4106,7 @@ function renderTeamTab(){
   var myOptionsForChange = assignableRoleOptions(me.role);
   var students = staffState.students || [];
   var weekAgo = Date.now() - 7*86400000;
-  var html = '<div class="page-wide team-grid"><div>' +
+  var html = '<div class="page-wide team-grid"><div class="team-main">' +
     '<div class="courses-head"><b class="page-h" style="margin:0;">Администраторы и кураторы</b><span class="courses-count">'+staffState.staff.length+' '+ruPluralClient(staffState.staff.length,"человек","человека","человек")+'</span></div>';
   if(!staffState.staff.length){
     html += '<div class="card empty-state" style="padding:30px 10px;">Пока только вы.</div>';
@@ -4154,7 +4154,7 @@ function renderTeamTab(){
       html += '</div>'+(unassigned?'<p class="team-hint" style="margin:12px 0 0;">Назначить куратора можно в карточке врача, вкладка «Профиль».</p>':'')+'</div>';
     }
   }
-  html += '</div><div class="team-side">';
+  html += '</div><div class="team-side"><div class="courses-head"><b class="page-h" style="margin:0;">Приглашения</b></div>';
   if(myOptions.length){
     if(staffState.inviteCode){
       html += '<div class="card co-card"><b class="co-card-title" style="margin-bottom:6px;">Код сотрудника</b>' +
