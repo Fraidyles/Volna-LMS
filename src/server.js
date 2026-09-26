@@ -167,10 +167,18 @@ if (BASE_PATH) {
 
 const PORT = process.env.PORT || 8790;
 if (require.main === module) {
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log("LMS backend запущен на порту " + PORT);
     console.log("Документация API: http://localhost:" + PORT + "/api-docs");
   });
+  // Node с v14.11 по умолчанию рвёт любой запрос, не завершившийся за 5 минут
+  // (server.requestTimeout=300000 — защита от slow-loris). Для большинства
+  // роутов это не заметно, но загрузка видео до 500 МБ (см. course.js,
+  // /lessons/:id/video-upload) на не самом быстром аплинке легко занимает
+  // дольше 5 минут — соединение обрывалось посреди загрузки без внятной
+  // ошибки на фронте. Поднимаем до 30 минут — этого достаточно даже на
+  // медленном канале и всё ещё ограничивает зависшие соединения.
+  server.requestTimeout = 30 * 60 * 1000;
 }
 
 module.exports = app;

@@ -784,7 +784,7 @@ function renderVideoEditorModal(){
           '<input type="file" id="videoFileInput" accept=".mp4,.webm,.mov,.m4v" style="font-size:12px;flex:1;min-width:0;"'+(uploading?' disabled':'')+'>' +
           '<button type="button" class="btn btn-sm btn-primary" data-action="upload-lesson-video" data-id="'+videoEditor.lessonId+'"'+(uploading?' disabled':'')+'>'+(uploading?'Загружаем…':'Загрузить')+'</button>' +
         '</div>' +
-        (uploading ? '<div style="margin-top:8px;height:6px;border-radius:3px;background:var(--line-2);overflow:hidden;"><div style="height:100%;width:100%;background:var(--primary);transform:scaleX('+(videoEditor.uploadProgress/100)+');transform-origin:left;transition:transform .15s;"></div></div>' : '') +
+        (uploading ? '<div style="margin-top:8px;height:6px;border-radius:3px;background:var(--line-2);overflow:hidden;"><div id="videoUploadProgressFill" style="height:100%;width:100%;background:var(--primary);transform:scaleX('+(videoEditor.uploadProgress/100)+');transform-origin:left;transition:transform .15s;"></div></div>' : '') +
       '</div>' +
       '<div style="display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--muted-2);font-size:12.5px;"><span style="flex:1;height:1px;background:var(--line-2);"></span>или<span style="flex:1;height:1px;background:var(--line-2);"></span></div>' +
     '<form id="videoEditorForm">' +
@@ -4413,9 +4413,14 @@ function wireEvents(root){
       render();
       try{
         var vur = await apiUploadWithProgress("/course/lessons/"+videoEditor.lessonId+"/video-upload", vfd, function(pct){
-          // Событий прогресса может быть сотни в секунду — перерисовываем не чаще,
-          // чем реально меняется процент, иначе пересборка всего DOM тормозит загрузку.
-          if(pct !== videoEditor.uploadProgress){ videoEditor.uploadProgress = pct; render(); }
+          // Событий прогресса — десятки-сотни в секунду. render() пересобирает
+          // ВЕСЬ app.innerHTML на каждый вызов — на такой частоте это заметно
+          // мерцало экраном на всё время загрузки. Двигаем сам прогресс-бар
+          // напрямую через DOM, без render(); полный render() нужен только один
+          // раз в начале (чтобы бар вообще появился) и один раз в конце.
+          videoEditor.uploadProgress = pct;
+          var fill = document.getElementById("videoUploadProgressFill");
+          if(fill) fill.style.transform = "scaleX("+(pct/100)+")";
         });
         videoEditor.videoUrl = vur.videoUrl;
         showToast("Видео загружено");
