@@ -218,6 +218,8 @@ function magnet(kind, label){
   return '<span class="magnet '+kind+'"><span class="magnet-dot"></span><span class="magnet-label">'+escapeHtml(label)+'</span></span>';
 }
 function fmtDate(iso){ if(!iso) return "—"; try{ return new Date(iso).toLocaleDateString("ru-RU",{day:"numeric",month:"short",year:"numeric"}); }catch(e){ return "—"; } }
+// Короткая дата для таблиц: без года, если он текущий («26 сент.»).
+function fmtDateShort(iso){ if(!iso) return "—"; try{ var d=new Date(iso), o={day:"numeric",month:"short"}; if(d.getFullYear()!==new Date().getFullYear()) o.year="numeric"; return d.toLocaleDateString("ru-RU",o); }catch(e){ return "—"; } }
 function fmtTime(iso){ if(!iso) return ""; try{ return new Date(iso).toLocaleTimeString("ru-RU",{hour:"2-digit",minute:"2-digit"}); }catch(e){ return ""; } }
 function fmtTimecode(sec){ sec=Math.max(0,Math.round(sec||0)); var m=Math.floor(sec/60), s=sec%60; return m+":"+(s<10?"0":"")+s; }
 function ruPluralClient(n, one, few, many){
@@ -3476,7 +3478,10 @@ function renderDashboardTab(){
   if(!filtered.length){
     html += '<div class="empty-state"><div class="big">'+icon("search","ic-lg")+'</div>Никого не нашлось по этим фильтрам.</div>';
   } else {
-    html += '<div style="overflow-x:auto;"><table class="roster"><thead><tr><th>Врач</th><th>Специальность</th><th>Поток</th><th>Продукт</th><th>Этап</th><th>Тест</th><th>Сертификат</th><th>Оплата</th><th>Доступ</th><th>Куратор</th><th>Регистрация</th><th></th></tr></thead><tbody>';
+    // 12 колонок не помещались в карточку — правый край уезжал под рамку.
+    // Специальность — под именем, продукт — под потоком, сертификат — рядом с
+    // баллом теста; строка целиком кликабельна (без отдельной кнопки «Открыть»).
+    html += '<div class="table-wrap"><table class="roster roster-compact"><thead><tr><th>Врач</th><th>Поток · продукт</th><th>Этап</th><th>Тест</th><th>Оплата</th><th>Доступ</th><th>Куратор</th><th>Регистрация</th></tr></thead><tbody>';
     filtered.forEach(function(s){
       var streamName = (calendarState.streams.filter(function(x){ return x.id===s.stream_id; })[0]||{}).name || "—";
       var curatorName = (directory.filter(function(c){ return c.id===s.assigned_curator_id; })[0]||{}).name || "—";
@@ -3484,19 +3489,15 @@ function renderDashboardTab(){
       var accessMagnet = accessSt==="active"?magnet("active","Активен"):(accessSt==="blocked"?magnet("blocked","Заблокирован"):magnet("attention","Истёк"));
       var stage = studentStage(s);
       var stageMagnet = magnet(stage==="certified"?"done":(stage==="demo_done"?"attention":(stage==="in_progress"?"active":"neutral")), STAGE_LABELS[stage]);
-      html += '<tr>' +
-        '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;"><div class="who-cell"><div class="avatar">'+initials(s.name)+'</div><div><b>'+escapeHtml(s.name)+'</b></div></div></td>' +
-        '<td>'+escapeHtml(specNames(s)||"—")+'</td>' +
-        '<td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+escapeHtml(streamName)+'">'+escapeHtml(streamName)+'</td>' +
-        '<td>'+escapeHtml(PRODUCTS[s.product||"longevity"])+'</td>' +
-        '<td>'+stageMagnet+'</td>' +
-        '<td>'+(typeof s.quiz_score==="number"?s.quiz_score+'%':'—')+'</td>' +
-        '<td>'+(s.certificate_status==="issued"?"Выдан":"—")+'</td>' +
+      html += '<tr class="row-link" data-action="open-student" data-id="'+s.id+'">' +
+        '<td><div class="who-cell"><div class="avatar">'+initials(s.name)+'</div><div><b>'+escapeHtml(s.name)+'</b><span>'+escapeHtml(specNames(s)||"—")+'</span></div></div></td>' +
+        '<td class="cell-2l"><span class="ell" title="'+escapeHtml(streamName)+'">'+escapeHtml(streamName)+'</span><small>'+escapeHtml(PRODUCTS[s.product||"longevity"])+'</small></td>' +
+        '<td class="nowrap">'+stageMagnet+'</td>' +
+        '<td class="nowrap">'+(typeof s.quiz_score==="number"?s.quiz_score+'%':'—')+(s.certificate_status==="issued"?'<small class="sub">серт. выдан</small>':'')+'</td>' +
         '<td>'+PAYMENT_LABELS[s.payment_status||"unpaid"]+'</td>' +
-        '<td>'+accessMagnet+'</td>' +
-        '<td>'+escapeHtml(curatorName)+'</td>' +
-        '<td style="color:var(--muted);">'+fmtDate(s.created_at)+'</td>' +
-        '<td style="text-align:right;"><button class="btn btn-sm btn-ghost" data-action="open-student" data-id="'+s.id+'">Открыть →</button></td>' +
+        '<td class="nowrap">'+accessMagnet+'</td>' +
+        '<td><span class="ell">'+escapeHtml(curatorName)+'</span></td>' +
+        '<td class="nowrap" style="color:var(--muted);">'+fmtDateShort(s.created_at)+'</td>' +
       '</tr>';
     });
     html += '</tbody></table></div>';
@@ -3698,13 +3699,13 @@ function renderRoster(){
       html += '<tr>' +
         '<td><input type="checkbox" data-action="select-student" data-id="'+s.id+'"'+(isChecked?' checked':'')+'></td>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;"><div class="who-cell"><div class="avatar-wrap"><div class="avatar">'+initials(s.name)+'</div>'+(s.online?'<span class="presence-dot" title="Онлайн"></span>':'')+'</div><div><b>'+escapeHtml(s.name)+'</b><span>'+escapeHtml(specNames(s)||"—")+'</span></div></div></td>' +
-        '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+done+'/5</td>' +
+        '<td class="nowrap" data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+done+'/'+((staffState.materials||[]).length||5)+'</td>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+(typeof s.quiz_score==="number"?s.quiz_score+'%':'—')+'</td>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+status+'</td>' +
         '<td><select class="input" style="font-size:12.5px;padding:5px 8px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" data-stream-select data-id="'+s.id+'">'+buildStreamOptions(s.stream_id||"", "Без потока")+'</select></td>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+(s.online?magnet("active","В сети"):'<span style="color:var(--muted);font-size:12.5px;">'+escapeHtml(timeSince(s.last_seen_at))+'</span>')+'</td>' +
-        '<td style="color:var(--muted);">'+fmtDate(s.created_at)+'</td>' +
-        '<td style="text-align:right;"><button class="btn btn-sm btn-ghost" data-action="open-student" data-id="'+s.id+'">Открыть →</button></td>' +
+        '<td class="nowrap" style="color:var(--muted);">'+fmtDateShort(s.created_at)+'</td>' +
+        '<td class="nowrap" style="text-align:right;"><button class="btn btn-sm btn-ghost row-open" data-action="open-student" data-id="'+s.id+'">Открыть →</button></td>' +
       '</tr>';
     });
     html += '</tbody></table></div>';

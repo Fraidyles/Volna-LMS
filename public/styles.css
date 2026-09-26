@@ -935,3 +935,17 @@ input[type="date"]:invalid::-webkit-datetime-edit,input[type="date"]:not(:focus)
 .stream-foot{position:relative;}
 .stream-foot .stream-actions{position:absolute;right:0;top:50%;transform:translateY(-50%);background:var(--surface-2);padding-left:10px;box-shadow:-14px 0 12px var(--surface-2);}
 .stream-card:not(:hover):not(:focus-within) .stream-foot .stream-actions{pointer-events:none;}
+
+/* Таблицы: ничего не должно уезжать под рамку карточки. */
+table.roster th{white-space:nowrap;}
+table.roster td.nowrap{white-space:nowrap;}
+.table-wrap{overflow-x:auto;margin:0 -4px;padding:0 4px;}
+.roster-compact td,.roster-compact th{padding-left:10px;padding-right:10px;}
+.roster-compact .who-cell span{display:block;font-size:12px;color:var(--muted-2);}
+.roster-compact .cell-2l{max-width:170px;}
+.roster-compact .cell-2l .ell,.roster-compact td > .ell{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:170px;}
+.roster-compact .cell-2l small,.roster-compact small.sub{display:block;font-size:12px;color:var(--muted-2);white-space:nowrap;}
+tr.row-link{cursor:pointer;}
+table.roster .row-open{opacity:0;transition:opacity .15s;}
+table.roster tr:hover .row-open,table.roster .row-open:focus-visible{opacity:1;}
+@media (hover:none){table.roster .row-open{opacity:1;}}
