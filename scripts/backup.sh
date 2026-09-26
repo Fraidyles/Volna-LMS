@@ -14,7 +14,21 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 if [ -f .env ]; then
-  export $(grep -v '^#' .env | xargs)
+  # Ни export $(... | xargs) (падает на значении с пробелом, например
+  # BOOTSTRAP_ADMIN_NAME=Главный администратор), ни прямой `source .env`
+  # (тот же пробел без кавычек — уже невалидный bash) не годятся. Парсим
+  # тем же пакетом dotenv, что и src/server.js, — одна точка правды для
+  # формата .env, — и оборачиваем каждое значение в безопасные для shell
+  # одинарные кавычки перед export.
+  eval "$(node -e '
+    const fs = require("fs");
+    const dotenv = require("dotenv");
+    const env = dotenv.parse(fs.readFileSync(".env"));
+    for (const [k, v] of Object.entries(env)) {
+      const q = "\x27" + String(v).replace(/\x27/g, "\x27\\\x27\x27") + "\x27";
+      process.stdout.write("export " + k + "=" + q + "\n");
+    }
+  ')"
 fi
 
 if [ -z "${DATABASE_URL:-}" ]; then

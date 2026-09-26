@@ -112,7 +112,27 @@ server {
 ```
 Затем: `sudo certbot --nginx -d edu.вашдомен.ру`
 
-## 7. Проверка, что всё работает
+## 7. Ежедневные бэкапы БД
+
+```bash
+chmod +x scripts/backup.sh
+crontab -e
+```
+Добавить строку (бэкап каждую ночь в 03:00, старше 14 дней удаляются автоматически):
+```
+0 3 * * * cd /путь/к/lms-backend && ./scripts/backup.sh >> /var/log/lms-backup.log 2>&1
+```
+Проверить вручную, что бэкап реально снимается:
+```bash
+./scripts/backup.sh
+ls -la backups/
+```
+Восстановление из бэкапа:
+```bash
+gunzip -c backups/lms_2026-01-15_030000.sql.gz | psql "$DATABASE_URL"
+```
+
+## 8. Проверка, что всё работает
 
 ```bash
 curl http://localhost:8790/health
