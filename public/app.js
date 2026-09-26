@@ -529,35 +529,75 @@ function applyGlow(){
 // экран + порядковый номер элемента; при переходе на другой экран сбрасывается.
 // Разметка уже содержит итоговое значение, так что без JS/при reduced-motion
 // просто показывается результат.
-var animSeen = {}, animScreen = "";
+var animSeen = {}, animScreen = "", animTimers = [], animRun = 0;
+// Поочерёдно: следующий элемент стартует, когда закончился предыдущий (порядок —
+// как на экране). Пока ждёт очереди, стоит на нуле. Процент внутри кольца идёт
+// вместе со своим кольцом (один шаг).
+var ANIM_RING_MS = 2000, ANIM_COUNT_MS = 1500;
+function animateCount(elc, dur, onDone){
+  var target = parseInt(elc.getAttribute("data-count"), 10);
+  var suffix = elc.getAttribute("data-suffix") || "", start = null;
+  if(!(target > 0)){ elc.textContent = target+suffix; if(onDone) onDone(); return; }
+  function step(ts){
+    if(!elc.isConnected) return;
+    if(start===null) start = ts;
+    // мягкое замедление (ease-out quad) — та же кривая, что у кольца
+    var t = Math.min(1, (ts-start)/dur), eased = 1 - Math.pow(1-t, 2);
+    elc.textContent = Math.round(target*eased)+suffix;
+    if(t < 1) requestAnimationFrame(step); else if(onDone) onDone();
+  }
+  requestAnimationFrame(step);
+}
 function runEntranceAnimations(){
   var screen = view+"|"+(view==="student" ? studentState.tab : (view==="staff" ? staffState.mainTab : ""))+"|"+(activeCourseId||staffState.activeCourseId||"");
   if(screen !== animScreen){ animSeen = {}; animScreen = screen; }
   var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var root = document.getElementById("app");
-  root.querySelectorAll('[data-anim="ring"]').forEach(function(elr, i){
-    var key = "ring"+i;
+  var steps = [];
+  root.querySelectorAll('[data-anim="ring"], [data-count]').forEach(function(elx, i){
+    if(elx.hasAttribute("data-count") && elx.closest('[data-anim="ring"]')) return; // идёт со своим кольцом
+    var key = (elx.hasAttribute("data-count") ? "count" : "ring")+i;
     if(animSeen[key]) return;
     animSeen[key] = true;
-    if(!reduce) elr.classList.add("ring-fill");
+    if(!reduce) steps.push(elx);
   });
-  root.querySelectorAll("[data-count]").forEach(function(elc, i){
-    var key = "count"+i;
-    if(animSeen[key]) return;
-    animSeen[key] = true;
-    var target = parseInt(elc.getAttribute("data-count"), 10);
-    if(reduce || !(target > 0)) return;
-    // 2с и мягкое замедление (ease-out quad) — синхронно с заполнением кольца.
-    var suffix = elc.getAttribute("data-suffix") || "", start = null, dur = 2000;
-    elc.textContent = "0"+suffix;
-    function step(ts){
-      if(start===null) start = ts;
-      var t = Math.min(1, (ts-start)/dur), eased = 1 - Math.pow(1-t, 2);
-      elc.textContent = Math.round(target*eased)+suffix;
-      if(t < 1 && elc.isConnected) requestAnimationFrame(step);
+  if(!steps.length) return;
+  animTimers.forEach(clearTimeout); animTimers = [];
+  // исходное состояние — всё на нуле
+  steps.forEach(function(elx){
+    if(elx.getAttribute("data-anim")==="ring"){
+      elx.setAttribute("data-ring-target", elx.style.getPropertyValue("--ring-p"));
+      elx.style.setProperty("--ring-p", "0%");
+      elx.querySelectorAll("[data-count]").forEach(function(c){ c.textContent = "0"+(c.getAttribute("data-suffix")||""); });
+    } else if(parseInt(elx.getAttribute("data-count"),10) > 0){
+      elx.textContent = "0"+(elx.getAttribute("data-suffix")||"");
     }
-    requestAnimationFrame(step);
   });
+  // Цепочка по фактическому окончанию шага (а не по таймеру): CSS-анимация кольца
+  // может стартовать на кадр позже, и таймер тогда давал бы наложение.
+  var runId = ++animRun;
+  function runStep(idx){
+    if(runId !== animRun || idx >= steps.length) return;
+    var elx = steps[idx], next = function(){ runStep(idx+1); };
+    if(!elx.isConnected) return;
+    if(elx.getAttribute("data-anim")==="ring"){
+      elx.style.setProperty("--ring-p", elx.getAttribute("data-ring-target"));
+      elx.classList.add("ring-fill");
+      var inner = elx.querySelector("[data-count]"), suffix = inner ? (inner.getAttribute("data-suffix")||"") : "";
+      var finished = false, done = function(){ if(finished) return; finished = true; if(inner) inner.textContent = inner.getAttribute("data-count")+suffix; next(); };
+      elx.addEventListener("animationend", done, { once:true });
+      animTimers.push(setTimeout(done, ANIM_RING_MS + 400)); // страховка
+      // Цифра внутри кольца читает текущее заполнение самого кольца — идут строго вместе.
+      (function tick(){
+        if(finished || !elx.isConnected) return;
+        if(inner) inner.textContent = Math.round(parseFloat(getComputedStyle(elx).getPropertyValue("--ring-p")) || 0)+suffix;
+        requestAnimationFrame(tick);
+      })();
+    } else {
+      animateCount(elx, ANIM_COUNT_MS, next);
+    }
+  }
+  runStep(0);
 }
 
 // Отклик карточек на курсор: координаты для подсветки рамки (.board-strip > .card).
