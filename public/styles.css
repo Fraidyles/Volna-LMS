@@ -12,14 +12,6 @@
    как это делает сам css2-эндпоинт Google Fonts: unicode-range показывает
    браузеру, какой файл грузить для конкретных символов, вместо одного
    тяжёлого файла со всеми подряд. */
-@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:400;font-display:swap;src:url('fonts/ibm-plex-sans-latin-400-normal.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
-@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:400;font-display:swap;src:url('fonts/ibm-plex-sans-cyrillic-400-normal.woff2') format('woff2');unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}
-@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:500;font-display:swap;src:url('fonts/ibm-plex-sans-latin-500-normal.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
-@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:500;font-display:swap;src:url('fonts/ibm-plex-sans-cyrillic-500-normal.woff2') format('woff2');unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}
-@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:600;font-display:swap;src:url('fonts/ibm-plex-sans-latin-600-normal.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
-@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:600;font-display:swap;src:url('fonts/ibm-plex-sans-cyrillic-600-normal.woff2') format('woff2');unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}
-@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:700;font-display:swap;src:url('fonts/ibm-plex-sans-latin-700-normal.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
-@font-face{font-family:'IBM Plex Sans';font-style:normal;font-weight:700;font-display:swap;src:url('fonts/ibm-plex-sans-cyrillic-700-normal.woff2') format('woff2');unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}
 @font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:400;font-display:swap;src:url('fonts/ibm-plex-mono-latin-400-normal.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
 @font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:400;font-display:swap;src:url('fonts/ibm-plex-mono-cyrillic-400-normal.woff2') format('woff2');unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}
 @font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:500;font-display:swap;src:url('fonts/ibm-plex-mono-latin-500-normal.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
@@ -186,7 +178,13 @@ button{font-family:var(--sans);cursor:pointer;}
 .sidebar:hover,.sidebar:focus-within{width:236px;box-shadow:var(--shadow-lift);}
 /* Раскрытый по hover/focus сайдбар — fixed-панель без подложки: без этого сдвига
    она просто накладывалась на контент страницы и обрезала текст под собой
-   (см. .app-main ниже — margin-left двигается вместе с шириной сайдбара). */
+   (см. .app-main ниже — margin-left двигается вместе с шириной сайдбара).
+   Детектор помечает transition:width/margin-left как layout-transition —
+   проверено и осознанно оставлено: здесь реально нужно, чтобы область
+   контента сузилась (а не просто визуально сдвинулась), а это в принципе
+   не выразить через transform без потери самого эффекта; кроме того,
+   срабатывает только по hover, не в цикле/скролле, так что цена одного
+   layout-пересчёта на 180мс не создаёт заметного дрожания. */
 .app-main{transition:margin-left .18s cubic-bezier(.16,1,.3,1);}
 .sidebar:hover~.app-main,.sidebar:focus-within~.app-main{margin-left:236px;}
 .sidebar-toggle{display:none;margin-left:auto;background:none;border:none;color:var(--muted);cursor:pointer;padding:6px;flex-shrink:0;}
@@ -358,7 +356,9 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
    свечение снаружи — через box-shadow тем же акцентным цветом. */
 .progress-ring{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 0 1px var(--glass-border) inset, 0 0 22px -4px color-mix(in srgb, var(--primary) 55%, transparent);}
 .progress-ring-inner{width:57px;height:57px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:700;font-size:16px;}
-.streak-flame{color:var(--accent);}
+/* Приглушённый, не янтарный: серия/очки — это просто метрика прогресса,
+   не праздничный бейдж consumer-habit-app — тон платформы деловой, не игровой. */
+.streak-flame{color:var(--muted);}
 
 /* Звёзды мини-опроса по модулю — кликабельная оценка вместо текстового поля. */
 .star-btn{background:none;border:none;padding:4px;cursor:pointer;color:var(--line-2);transition:color .12s;}

@@ -757,7 +757,7 @@ function renderVideoEditorModal(){
           '<input type="file" id="videoFileInput" accept=".mp4,.webm,.mov,.m4v" style="font-size:12px;flex:1;min-width:0;"'+(uploading?' disabled':'')+'>' +
           '<button type="button" class="btn btn-sm btn-primary" data-action="upload-lesson-video" data-id="'+videoEditor.lessonId+'"'+(uploading?' disabled':'')+'>'+(uploading?'Загружаем…':'Загрузить')+'</button>' +
         '</div>' +
-        (uploading ? '<div style="margin-top:8px;height:6px;border-radius:3px;background:var(--line-2);overflow:hidden;"><div style="height:100%;width:'+videoEditor.uploadProgress+'%;background:var(--primary);transition:width .15s;"></div></div>' : '') +
+        (uploading ? '<div style="margin-top:8px;height:6px;border-radius:3px;background:var(--line-2);overflow:hidden;"><div style="height:100%;width:100%;background:var(--primary);transform:scaleX('+(videoEditor.uploadProgress/100)+');transform-origin:left;transition:transform .15s;"></div></div>' : '') +
       '</div>' +
       '<div style="display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--muted-2);font-size:12.5px;"><span style="flex:1;height:1px;background:var(--line-2);"></span>или<span style="flex:1;height:1px;background:var(--line-2);"></span></div>' +
     '<form id="videoEditorForm">' +
@@ -1268,7 +1268,7 @@ function renderStudentSchedule(){
     '</div>';
   }
 
-  var html = '<div style="margin-top:6px;max-width:640px;"><b style="font-size:14.5px;display:block;margin-bottom:12px;">Ближайшие эфиры</b>';
+  var html = '<div style="margin-top:6px;max-width:760px;"><b style="font-size:14.5px;display:block;margin-bottom:12px;">Ближайшие эфиры</b>';
   if(!upcoming.length) html += '<div class="card empty-state" style="padding:30px 20px;">Пока эфиры не запланированы.</div>';
   else upcoming.forEach(function(ev){ html += row(ev, true); });
   if(past.length){
@@ -1945,7 +1945,7 @@ function renderProtocolCard(p, isForYou){
 }
 
 function renderProtocolsPage(){
-  var html = '<div style="margin-top:6px;max-width:680px;">' +
+  var html = '<div style="margin-top:6px;max-width:760px;">' +
     '<div class="card" style="padding:18px 20px;margin-bottom:16px;background:var(--primary-tint);border-color:transparent;">' +
       '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Ваша коллекция протоколов</b>' +
       '<p style="font-size:13px;color:var(--muted);margin:0;">После каждого пройденного урока сюда добавляются протоколы, о которых говорил спикер — с готовым гайдом по внедрению именно в рамках вашей специализации.</p>' +
@@ -1984,7 +1984,7 @@ function renderMyProgressPage(){
   var maxedOut = points >= POINTS_MAX;
   var anyDiscountUnlocked = points >= POINT_TIERS[0].points;
 
-  var html = '<div style="margin-top:6px;max-width:640px;">' +
+  var html = '<div style="margin-top:6px;max-width:760px;">' +
     '<div class="card" style="padding:22px 24px;margin-bottom:14px;">' +
       '<div style="display:flex;align-items:center;gap:16px;">' +
         '<div class="progress-ring" style="background:conic-gradient(var(--primary) '+pct+'%, var(--line-2) 0);"><div class="progress-ring-inner">'+pct+'%</div></div>' +
@@ -2034,7 +2034,7 @@ function renderMyProgressPage(){
 function renderNotificationsPage(){
   var reminders = upcomingEventReminders();
   var items = reminders.concat(notifState.items);
-  var html = '<div style="margin-top:6px;max-width:640px;">' +
+  var html = '<div style="margin-top:6px;max-width:760px;">' +
     '<div class="card" style="padding:18px 20px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
         '<b style="font-size:14.5px;">Уведомления</b>' +
@@ -2258,7 +2258,7 @@ function renderStaffShell(){
 // и пустое состояние вместо выдуманной ленты.
 function renderStaffNotificationsPage(){
   var reminders = upcomingEventReminders();
-  var html = '<div style="margin-top:6px;max-width:640px;"><div class="card" style="padding:18px 20px;">' +
+  var html = '<div style="margin-top:6px;max-width:760px;"><div class="card" style="padding:18px 20px;">' +
     '<b style="font-size:14.5px;display:block;margin-bottom:14px;">Уведомления</b>';
   if(!reminders.length){
     html += '<div class="empty-state" style="padding:30px 10px;">У вас нет новых уведомлений.</div>';
@@ -3062,7 +3062,7 @@ function renderDashboardTab(){
       html += '<tr>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;"><div class="who-cell"><div class="avatar">'+initials(s.name)+'</div><div><b>'+escapeHtml(s.name)+'</b></div></div></td>' +
         '<td>'+escapeHtml(specNames(s)||"—")+'</td>' +
-        '<td>'+escapeHtml(streamName)+'</td>' +
+        '<td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="'+escapeHtml(streamName)+'">'+escapeHtml(streamName)+'</td>' +
         '<td>'+escapeHtml(PRODUCTS[s.product||"longevity"])+'</td>' +
         '<td>'+stageMagnet+'</td>' +
         '<td>'+(typeof s.quiz_score==="number"?s.quiz_score+'%':'—')+'</td>' +
@@ -3259,7 +3259,7 @@ function renderRoster(){
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+done+'/5</td>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+(typeof s.quiz_score==="number"?s.quiz_score+'%':'—')+'</td>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+status+'</td>' +
-        '<td><select class="input" style="font-size:12.5px;padding:5px 8px;" data-stream-select data-id="'+s.id+'">'+buildStreamOptions(s.stream_id||"", "Без потока")+'</select></td>' +
+        '<td><select class="input" style="font-size:12.5px;padding:5px 8px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" data-stream-select data-id="'+s.id+'">'+buildStreamOptions(s.stream_id||"", "Без потока")+'</select></td>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+(s.online?magnet("active","В сети"):'<span style="color:var(--muted);font-size:12.5px;">'+escapeHtml(timeSince(s.last_seen_at))+'</span>')+'</td>' +
         '<td style="color:var(--muted);">'+fmtDate(s.created_at)+'</td>' +
         '<td style="text-align:right;"><button class="btn btn-sm btn-ghost" data-action="open-student" data-id="'+s.id+'">Открыть →</button></td>' +
@@ -3525,7 +3525,7 @@ function renderCoursesTab(){
       html += '<p style="font-size:13px;margin:0 0 8px;">Удалить курс «'+escapeHtml(c.title)+'» безвозвратно вместе со всеми уроками, тестами и прогрессом '+c.enrolledCount+' врачей? Наберите название курса, чтобы подтвердить.</p>' +
         '<input class="input" id="courseDeleteConfirmInput" placeholder="'+escapeHtml(c.title)+'" style="margin-bottom:8px;">' +
         '<div style="display:flex;gap:8px;">' +
-          '<button class="btn btn-sm btn-ghost" style="color:var(--status-critical, #d64545);" data-action="confirm-delete-course" data-id="'+c.id+'">Удалить курс</button>' +
+          '<button class="btn btn-sm btn-ghost" style="color:var(--danger);" data-action="confirm-delete-course" data-id="'+c.id+'">Удалить курс</button>' +
           '<button class="btn btn-sm btn-ghost" data-action="cancel-delete-course">Отмена</button>' +
         '</div>';
     } else {
@@ -5318,6 +5318,32 @@ function wireEvents(root){
     }
   });
 }
+
+// Esc закрывает открытую модалку/дровер — раньше работало только по клику на
+// подложку или на «Закрыть», без единого глобального обработчика клавиатуры.
+// Порядок проверки — от заведомо самого верхнего слоя (confirmState монтируется
+// последним) к самому нижнему, чтобы Esc закрывал именно то, что видно сверху.
+document.addEventListener("keydown", function(e){
+  if(e.key !== "Escape") return;
+  if(confirmState){ confirmState=null; render(); return; }
+  if(quizEditor.open){ quizEditor.open=false; render(); return; }
+  if(unlockCelebration.open){ unlockCelebration.open=false; render(); return; }
+  if(specializationEditor.open){ specializationEditor.open=false; render(); return; }
+  if(protocolEditor.open){ protocolEditor.open=false; render(); return; }
+  if(moduleFeedbackViewer.open){ moduleFeedbackViewer.open=false; render(); return; }
+  if(moduleQuizManager.open){ moduleQuizManager.open=false; render(); return; }
+  if(lessonQuizManager.open){ lessonQuizManager.open=false; render(); return; }
+  if(videoEditor.open){ videoEditor.open=false; render(); return; }
+  if(lessonEditor.open){ lessonEditor.open=false; render(); return; }
+  if(tempPasswordResult){ tempPasswordResult=null; render(); return; }
+  if(telegramModal.open){ telegramModal.open=false; render(); return; }
+  if(profileEditor.open){ profileEditor.open=false; render(); return; }
+  if(changePasswordOpen){ changePasswordOpen=false; render(); return; }
+  if(typeof calendarState!=="undefined" && calendarState.eventModalMode){ calendarState.eventModalMode=null; render(); return; }
+  if(typeof materialsPicker!=="undefined" && materialsPicker.open){ materialsPicker.open=false; render(); return; }
+  if(typeof scheduleModal!=="undefined" && scheduleModal.open){ scheduleModal.open=false; render(); return; }
+  if(typeof staffState!=="undefined" && staffState.selectedStudentId){ staffState.selectedStudentId=null; render(); return; }
+});
 
 applyTheme();
 init();
