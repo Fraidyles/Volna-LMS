@@ -1396,7 +1396,7 @@ function renderStudentSchedule(){
     var live = isUpcoming && isLiveNow(ev);
     return '<div class="card" style="padding:14px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">' +
       '<div>'+(live?magnet("live","В эфире")+'<br>':'')+'<b style="font-size:14px;display:block;margin-top:'+(live?'6px':'0')+';">'+escapeHtml(ev.title)+'</b>' +
-      '<span style="font-family:var(--mono);font-size:12px;color:var(--muted);">'+fmtDate(ev.event_date)+' в '+escapeHtml(ev.event_time||"—")+(ev.speaker?(' · '+escapeHtml(ev.speaker)):'')+'</span></div>' +
+      '<span style="font-size:12.5px;color:var(--muted);">'+fmtDate(ev.event_date)+' в '+escapeHtml(ev.event_time||"—")+(ev.speaker?(' · '+escapeHtml(ev.speaker)):'')+'</span></div>' +
       (isUpcoming ? '<div style="display:flex;gap:8px;">' +
         (ev.join_url?'<a class="btn btn-sm '+(live?'btn-primary':'btn-ghost')+'" href="'+escapeHtml(ev.join_url)+'" target="_blank" rel="noopener">Подключиться</a>':'') +
         '<button class="btn btn-sm btn-ghost" data-action="download-ics" data-id="'+ev.id+'">В календарь</button></div>' : '') +
@@ -1513,7 +1513,7 @@ function renderStudentHome(){
   if(nextEvent){
     html += (liveNow ? magnet("live","Идёт сейчас") : magnet("attention","Ближайший эфир")) +
       '<b style="font-size:14px;display:block;margin:10px 0 2px;">'+escapeHtml(nextEvent.title)+'</b>' +
-      '<span style="font-family:var(--mono);font-size:12px;color:var(--muted);">'+fmtDate(nextEvent.event_date)+' · '+escapeHtml(nextEvent.event_time||"")+'</span>' +
+      '<span style="font-size:12.5px;color:var(--muted);">'+fmtDate(nextEvent.event_date)+' · '+escapeHtml(nextEvent.event_time||"")+'</span>' +
       (liveNow && nextEvent.join_url ? '<a class="btn btn-sm btn-primary" style="margin-top:12px;" href="'+escapeHtml(nextEvent.join_url)+'" target="_blank" rel="noopener">Подключиться</a>' :
         '<button class="btn btn-sm btn-ghost" style="margin-top:12px;" data-action="student-tab" data-tab="schedule">Все эфиры →</button>');
   } else {
@@ -2296,7 +2296,7 @@ function renderMyProfilePage(){
     mySessionsList.forEach(function(s){
       html += '<div style="padding:8px 0;border-bottom:1px solid var(--line-2);">' +
         '<div style="font-size:13px;">'+escapeHtml(s.device)+'</div>' +
-        '<div style="font-size:12px;color:var(--muted);font-family:var(--mono);margin-top:2px;">'+escapeHtml(s.ip||"—")+' · '+fmtDate(s.createdAt)+' '+fmtTime(s.createdAt)+'</div>' +
+        '<div style="font-size:12px;color:var(--muted);margin-top:2px;">'+escapeHtml(s.ip||"—")+' · '+fmtDate(s.createdAt)+' '+fmtTime(s.createdAt)+'</div>' +
       '</div>';
     });
   }

@@ -632,7 +632,7 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
 .chart-hbar-track{flex:1;height:22px;background:var(--line-2);border-radius:4px;overflow:hidden;}
 .chart-hbar-fill{height:100%;background:var(--primary);border-radius:0 4px 4px 0;transition:opacity .12s ease;cursor:default;}
 .chart-hbar-fill:hover{opacity:.78;}
-.chart-hbar-value{width:96px;flex-shrink:0;font-size:12px;color:var(--muted);text-align:right;font-family:var(--mono);}
+.chart-hbar-value{width:96px;flex-shrink:0;font-size:12px;color:var(--muted);text-align:right;}
 
 /* Составные 2-сегментные бары (верно/неверно по вопросу теста) */
 .chart-stack-row{margin-bottom:16px;}

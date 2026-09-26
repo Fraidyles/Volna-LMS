@@ -45,8 +45,8 @@ typography:
     fontSize: "13px"
     fontWeight: 500
   data:
-    fontFamily: "IBM Plex Mono, ui-monospace, SFMono-Regular, Menlo, monospace"
-    fontSize: "12px"
+    fontFamily: "Manrope, -apple-system, Helvetica, Arial, sans-serif"
+    fontSize: "12.5px"
     fontWeight: 400
 rounded:
   sm: "12px"
@@ -163,9 +163,11 @@ System-fallback шрифты (Georgia/Times, не настоящие веб-шр
 айдентики. Самохостится в `public/fonts/` (тот же принцип, что и раньше:
 корпоративный файрвол молча блокирует внешние CDN-шрифты, а браузер
 откатывается на системный без единой ошибки в интерфейсе — так уже случалось
-с Google Fonts в этом проекте). **IBM Plex Mono** остаётся зарезервированным
-для табличных/временных данных, где нужна более строгая табличность, чем
-даёт Manrope с `font-variant-numeric:tabular-nums`.
+с Google Fonts в этом проекте). **IBM Plex Mono** тоже убран из интерфейса
+(даты эфиров, сеансы, значения графиков): пользователь назвал его «говёным
+второстепенным шрифтом» — моноширинный выбивался из Manrope. Даты и числа —
+Manrope с `tabular-nums` (включено на `body`). Не возвращать моноширинный
+шрифт в интерфейс.
 
 *История:* Unbounded был частью первой версии редизайна v3 (крупные числа и
 hero-заголовки, `var(--display)`) — убран по прямому отзыву пользователя
