@@ -547,11 +547,12 @@ function runEntranceAnimations(){
     animSeen[key] = true;
     var target = parseInt(elc.getAttribute("data-count"), 10);
     if(reduce || !(target > 0)) return;
-    var suffix = elc.getAttribute("data-suffix") || "", start = null, dur = Math.min(1100, 500 + target*8);
+    // 2с и мягкое замедление (ease-out quad) — синхронно с заполнением кольца.
+    var suffix = elc.getAttribute("data-suffix") || "", start = null, dur = 2000;
     elc.textContent = "0"+suffix;
     function step(ts){
       if(start===null) start = ts;
-      var t = Math.min(1, (ts-start)/dur), eased = 1 - Math.pow(1-t, 3);
+      var t = Math.min(1, (ts-start)/dur), eased = 1 - Math.pow(1-t, 2);
       elc.textContent = Math.round(target*eased)+suffix;
       if(t < 1 && elc.isConnected) requestAnimationFrame(step);
     }
