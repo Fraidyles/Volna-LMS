@@ -11,6 +11,86 @@ Primary target: `public/index.html` (the whole SPA — врач dashboard, cours
 quiz, calendar, messages, certificate — plus curator/admin/super_admin dashboard, students,
 team, audit-log views rendered by `public/app.js`). Visitor mode: **Operate** throughout.
 
+## Direction contract (v3 — supersedes the v2 contract below)
+
+**THESIS:** V2 was built, audited, and rejected by the user as "a well-executed but
+depersonalized dark SaaS skin — barely distinguishable from Linear/Notion with the labels
+swapped." V3's thesis: bento-grid asymmetric layout + real glassmorphism (not a flat
+single-accent-dot restraint) + a genuinely committed, glowing accent pair, refusing the
+"near-black + one muted dot" default that both this project's own V2 and the calibration
+warning in new-work.md name as the most common AI-generated look.
+
+**Why this replaced v2:** full visual audit found zero motifs tying the identity to
+medicine/longevity, flagged as its own open question in v2's DESIGN.md. The user then drove a
+`concept-seed --scope direction` roll (degraded — roll service blocked by sandbox egress,
+confirmed via direct curl), which assigned a "formulary monograph" direction; four grounded
+candidates in total were built as real HTML/CSS comps and screenshotted (formulary card,
+biomarker panel, clinical-trial registry, editorial journal) — all four rejected by the user in
+one round as "ugly, not modern, not stylish," diagnosed jointly as: cheap system-font fallbacks,
+a washed-out single-accent-on-gray palette repeated across all four, and a document/table
+metaphor mismatched to an app surface. Per new-work.md's own instruction ("a user-provided
+reference beats any prior roll, always"), the user then supplied three concrete reference sites
+(noon.world, thevirtualwild.com, quitenice.com) and a named 2026 web-design-trends article,
+screenshotted directly into chat (all direct web/WebFetch access blocked by sandbox egress,
+confirmed on every domain including via a Google-cache fallback). V3 synthesizes the common
+ground across all three references and the article's own most-repeated techniques (bento grid,
+glassmorphism scoped to menus/cards, dark-first, soft skeuomorphic buttons), explicitly dropping
+what the user rejected outright (pink/magenta as an accent, cheap-looking fonts).
+
+**OWN-WORLD:** Dark base unchanged from v2 (`#121214`/`#1B1B1F`) but now paired with a real
+accent pair carrying visible glow: violet `#8B6BFF` (primary) + teal `#3FD0C9` (secondary,
+inherits the "live now" status role vacated by the rejected pink). Two-voice type system —
+Unbounded (self-hosted, cyrillic) for hero numbers/headlines only, Manrope (self-hosted,
+cyrillic) for everything else — replacing the single-voice IBM Plex Sans of v2. `.glass`
+utility (semi-transparent surface + `backdrop-filter:blur(20px)`) applied narrowly to
+showcase surfaces only (sidebar, the flagship dashboard hero tile, `.board-strip` tiles,
+modals) and deliberately withheld from dense list/table surfaces, per both the product's own
+"admin is a work tool, density beats wow" principle and the source article's explicit warning
+against blurring an entire site. Soft-skeuomorphic `.btn-primary` (inset highlight + colored
+glow shadow) replaces v2's flat fill. Radii bumped (`sm 12/md 20/lg 28`, was `10/16/24`).
+
+**STORY:** Same product truth as v2 and v1 before it — врач progress/streams/certificate/
+messages; staff dashboard/roster/audit-log/calendar — only the visual skin changed a third
+time. The врач home page is the flagship surface: a large glass hero tile (course title, glowing
+ring progress, segmented track, CTA) plus a `.board-strip` row of smaller glass tiles (live
+stream, certificate, curator, streak/points) below it — an explicit bento composition, not a
+column of identical cards. Curator and admin dashboards inherit almost all of this for free
+through the same shared `.course-hero`/`.board-strip>.card`/`.progress-ring`/`.btn-primary`/
+`.sidebar` CSS selectors v2 already used app-wide — no per-screen rebuild was needed for those
+roles' dashboards to pick up the new look.
+
+**FIRST VIEWPORT** (врач dashboard): onboarding checklist card (unchanged, flat) → glass hero
+tile (course title in Unbounded, 72px glowing progress ring, segmented track, CTA button with
+soft-skeuomorphic glow) → `.board-strip` of three glass tiles (эфир/сертификат-прогресс/
+куратор) → flat (non-glass) notification/chat/referral cards below, intentionally undecorated to
+keep the information hierarchy legible (glass = showcase, flat = task list).
+
+**FORM:** No image generation available in this session (checked again, still true from v1/v2).
+Code-led throughout — including the four rejected candidate directions, built as real running
+HTML/CSS comps (not mockup images) precisely so the user's "purely textual descriptions are hard
+to judge" feedback could be answered with something concrete to react to. Two direction rounds
+total: round 1 (concept-seed roll, degraded, 4 candidates shown 2-then-2) fully rejected; round 2
+(user-supplied references + trends article) produced this contract, confirmed by the user with a
+plain "делай" after seeing the synthesized bento/glass comp and two rounds of adjustment (font
+swap IBM Plex→Unbounded/Manrope, accent swap pink→teal).
+
+**Signature interaction:** none newly added this round (existing `fadeUp`/`pulse-ring` motion
+from v2 carries over unchanged); the progress ring's glow and the button's pressed `:active`
+state are static-but-dimensional rather than animated, consistent with v2's existing motion
+budget.
+
+**FINISH:** unreviewed and undocumented is unfinished — DESIGN.md rewritten from the built v3
+world (v2's DESIGN.md content fully superseded per the same convention v2 used against v1, not
+merged); no dedicated finish-reviewer/documenter subagent was available in this environment, so
+this brief and DESIGN.md were written directly, verified with Playwright screenshots across
+врач/curator/admin, dark/light, desktop/mobile, and a full 167/167 test-suite run rather than the
+skill's scripted `build-phase`/comp-diff gates (which require image generation this session does
+not have).
+
+---
+
+## v2 record (superseded, kept for history)
+
 ## Direction contract (v2 — supersedes the "Rounds Board" contract below)
 
 **THESIS:** A dark-first, single-voice modern EdTech interface — the opposite of a

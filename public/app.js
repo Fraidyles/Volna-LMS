@@ -1342,7 +1342,7 @@ function renderStudentHome(){
 
     var pct = Math.round((done + (quizDone?1:0)) / (total+1) * 100);
     html += '<div class="card course-hero">' +
-      '<div style="display:flex;align-items:center;gap:16px;">' +
+      '<div class="course-hero-top">' +
         '<div class="progress-ring" style="background:conic-gradient(var(--primary) '+pct+'%, var(--line-2) 0);"><div class="progress-ring-inner">'+pct+'%</div></div>' +
         '<div><h2 style="margin:0;">'+escapeHtml(course.course.title)+'</h2>' +
         '<p style="margin:4px 0 0;">'+total+' коротких уроков и итоговый тест. По завершении — сертификат и возможность оставить заявку на полную программу обучения.</p></div>' +
