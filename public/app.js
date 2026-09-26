@@ -1418,7 +1418,7 @@ function renderStudentHome(){
     if(certsOn){
       var issued = pr.certificate_status==="issued";
       html += magnet(issued?"done":"attention", issued?"Сертификат выдан":"На проверке") +
-        '<div style="font-family:var(--display);font-weight:800;font-size:26px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
+        '<div style="font-family:var(--sans);font-weight:800;font-size:26px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
         '<span style="font-size:12px;color:var(--muted);">результат теста</span>';
       if(!issued && !pr.requested_full_access){
         html += '<button class="btn btn-sm btn-primary btn-block" style="margin-top:12px;" data-action="request-full">Заявка на полную программу</button>';
@@ -1427,7 +1427,7 @@ function renderStudentHome(){
       }
     } else {
       html += magnet("done","Демо пройдено") +
-        '<div style="font-family:var(--display);font-weight:800;font-size:26px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
+        '<div style="font-family:var(--sans);font-weight:800;font-size:26px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
         '<span style="font-size:12px;color:var(--muted);">результат теста · скидка 10% на полный курс</span>';
       if(!pr.requested_full_access){
         html += '<button class="btn btn-sm btn-primary btn-block" style="margin-top:12px;" data-action="request-full">Хочу полное обучение</button>';
@@ -1449,12 +1449,12 @@ function renderStudentHome(){
     magnet("neutral","Прогресс") +
     '<div style="display:flex;align-items:baseline;gap:6px;margin-top:10px;">' +
       icon("flame","ic-sm streak-flame") +
-      '<span style="font-family:var(--display);font-weight:800;font-size:22px;letter-spacing:-.02em;">'+(gam.currentStreak||0)+'</span>' +
+      '<span style="font-family:var(--sans);font-weight:800;font-size:22px;letter-spacing:-.02em;">'+(gam.currentStreak||0)+'</span>' +
       '<span style="font-size:12px;color:var(--muted);">'+(gam.currentStreak===1?"день подряд":"дней подряд")+'</span>' +
     '</div>' +
     '<span style="font-size:12px;color:var(--muted);display:block;margin-top:2px;">рекорд: '+(gam.longestStreak||0)+'</span>' +
     '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2);">' +
-      '<span style="font-family:var(--display);font-weight:800;font-size:18px;">'+(gam.points||0)+'</span>' +
+      '<span style="font-family:var(--sans);font-weight:800;font-size:18px;">'+(gam.points||0)+'</span>' +
       '<span style="font-size:12px;color:var(--muted);"> / 1000 очков</span>' +
       '<button class="btn btn-sm btn-ghost" style="display:block;margin-top:8px;padding:4px 0;" data-action="student-tab" data-tab="progress">Как получить скидку →</button>' +
     '</div>' +
@@ -2022,11 +2022,11 @@ function renderMyProgressPage(){
     '<div class="board-strip" style="margin-top:0;">' +
       '<div class="card" style="padding:18px;">'+magnet("neutral","Серия дней") +
         '<div style="display:flex;align-items:baseline;gap:6px;margin-top:10px;">'+icon("flame","ic-sm streak-flame") +
-        '<span style="font-family:var(--display);font-weight:800;font-size:22px;letter-spacing:-.02em;">'+(gam.currentStreak||0)+'</span>' +
+        '<span style="font-family:var(--sans);font-weight:800;font-size:22px;letter-spacing:-.02em;">'+(gam.currentStreak||0)+'</span>' +
         '<span style="font-size:12px;color:var(--muted);">'+(gam.currentStreak===1?"день подряд":"дней подряд")+'</span></div>' +
         '<span style="font-size:12px;color:var(--muted);display:block;margin-top:2px;">рекорд: '+(gam.longestStreak||0)+'</span></div>' +
       '<div class="card" style="padding:18px;">'+magnet(anyDiscountUnlocked?"done":"neutral","Очки") +
-        '<div style="font-family:var(--display);font-weight:800;font-size:22px;margin-top:10px;letter-spacing:-.02em;">'+points+' <span style="font-size:13px;font-weight:500;color:var(--muted);">/ '+POINTS_MAX+'</span></div>' +
+        '<div style="font-family:var(--sans);font-weight:800;font-size:22px;margin-top:10px;letter-spacing:-.02em;">'+points+' <span style="font-size:13px;font-weight:500;color:var(--muted);">/ '+POINTS_MAX+'</span></div>' +
         '<div style="position:relative;height:5px;border-radius:100px;background:var(--line-2);margin-top:12px;overflow:visible;">' +
           '<div style="height:100%;width:'+pointsPct+'%;background:var(--primary);border-radius:100px;"></div>' +
           POINT_TIERS.map(function(t){ return '<span style="position:absolute;top:-3px;left:'+(t.points/POINTS_MAX*100)+'%;width:11px;height:11px;margin-left:-5.5px;border-radius:50%;background:'+(points>=t.points?'var(--primary)':'var(--surface)')+';border:2px solid '+(points>=t.points?'var(--primary)':'var(--line)')+';"></span>'; }).join("") +
@@ -2035,7 +2035,7 @@ function renderMyProgressPage(){
       (quizDone
         ? '<div class="card" style="padding:18px;">' +
             magnet(pr.certificate_status==="issued"?"done":"attention", pr.certificate_status==="issued"?"Сертификат выдан":"На проверке") +
-            '<div style="font-family:var(--display);font-weight:800;font-size:22px;margin-top:10px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
+            '<div style="font-family:var(--sans);font-weight:800;font-size:22px;margin-top:10px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
           '</div>'
         : '') +
     '</div>' +
@@ -2337,7 +2337,7 @@ function renderStaffHome(container){
           '</div>' +
         '</div>' +
         '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line-2);display:flex;align-items:baseline;gap:6px;">' +
-          '<span style="font-family:var(--display);font-weight:800;font-size:22px;">'+list.length+'</span>' +
+          '<span style="font-family:var(--sans);font-weight:800;font-size:22px;">'+list.length+'</span>' +
           '<span style="font-size:12px;color:var(--muted);">врачей · '+activeCount+' активных</span>' +
         '</div>' +
       '</div>';

@@ -19,9 +19,12 @@
 @font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:600;font-display:swap;src:url('fonts/ibm-plex-mono-latin-600-normal.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
 @font-face{font-family:'IBM Plex Mono';font-style:normal;font-weight:600;font-display:swap;src:url('fonts/ibm-plex-mono-cyrillic-600-normal.woff2') format('woff2');unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}
 
-/* Редизайн v3: основной голос интерфейса — Manrope (тело/лейблы/кнопки),
-   Unbounded — только для крупных чисел и заголовков-акцентов (не для мелкого
-   текста: это плотный geometric-display, в 12-13px нечитаем). Обе с кириллицей. */
+/* Редизайн v3: основной голос интерфейса — Manrope (тело/лейблы/кнопки/крупные
+   числа/заголовки — иерархия через насыщенность, не через смену гарнитуры).
+   Ранее здесь был ещё Unbounded для крупных чисел/hero-заголовков — убран:
+   на живой странице читался как чужеродный акцент, конфликтующий с Manrope
+   (см. отзыв пользователя), а не как сигнатурная деталь. Файлы шрифта и
+   @font-face с этим отдельным весом больше не нужны — с кириллицей. */
 @font-face{font-family:'Manrope';font-style:normal;font-weight:400;font-display:swap;src:url('fonts/manrope-latin-400-normal.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
 @font-face{font-family:'Manrope';font-style:normal;font-weight:400;font-display:swap;src:url('fonts/manrope-cyrillic-400-normal.woff2') format('woff2');unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}
 @font-face{font-family:'Manrope';font-style:normal;font-weight:500;font-display:swap;src:url('fonts/manrope-latin-500-normal.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
@@ -32,12 +35,6 @@
 @font-face{font-family:'Manrope';font-style:normal;font-weight:700;font-display:swap;src:url('fonts/manrope-cyrillic-700-normal.woff2') format('woff2');unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}
 @font-face{font-family:'Manrope';font-style:normal;font-weight:800;font-display:swap;src:url('fonts/manrope-latin-800-normal.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
 @font-face{font-family:'Manrope';font-style:normal;font-weight:800;font-display:swap;src:url('fonts/manrope-cyrillic-800-normal.woff2') format('woff2');unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}
-@font-face{font-family:'Unbounded';font-style:normal;font-weight:600;font-display:swap;src:url('fonts/unbounded-latin-600-normal.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
-@font-face{font-family:'Unbounded';font-style:normal;font-weight:600;font-display:swap;src:url('fonts/unbounded-cyrillic-600-normal.woff2') format('woff2');unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}
-@font-face{font-family:'Unbounded';font-style:normal;font-weight:700;font-display:swap;src:url('fonts/unbounded-latin-700-normal.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
-@font-face{font-family:'Unbounded';font-style:normal;font-weight:700;font-display:swap;src:url('fonts/unbounded-cyrillic-700-normal.woff2') format('woff2');unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}
-@font-face{font-family:'Unbounded';font-style:normal;font-weight:800;font-display:swap;src:url('fonts/unbounded-latin-800-normal.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
-@font-face{font-family:'Unbounded';font-style:normal;font-weight:800;font-display:swap;src:url('fonts/unbounded-cyrillic-800-normal.woff2') format('woff2');unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}
 
 :root{
   /* Тёмная — база по умолчанию (не только через media-query) */
@@ -61,7 +58,6 @@
   /* Крупнее и мягче — под bento/стеклянную эстетику редизайна v3. */
   --radius-s:12px; --radius-m:20px; --radius-l:28px;
   --sans:'Manrope', -apple-system, Helvetica, Arial, sans-serif;
-  --display:'Unbounded', var(--sans);
   --mono:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 28px -16px rgba(0,0,0,.5);
   --shadow-lift: 0 4px 10px rgba(0,0,0,.35), 0 20px 44px -18px rgba(0,0,0,.6);
@@ -326,11 +322,11 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
    (--ambient-glow на body), а не плоская заливка var(--surface): это то, что
    реально отличает bento-редизайн v3 от предыдущей плоской карточки. */
 .course-hero{padding:28px 30px;background:var(--glass-bg);border:var(--glass-border);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));}
-.course-hero h2{font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-.01em;margin:0 0 8px;}
+.course-hero h2{font-family:var(--sans);font-size:22px;font-weight:800;letter-spacing:-.01em;margin:0 0 8px;}
 .course-hero p{color:var(--muted);font-size:14.5px;max-width:480px;line-height:1.55;margin:0 0 22px;}
 .course-hero-top{display:flex;align-items:center;gap:16px;}
-/* На узком экране крупное (72px) кольцо + широкий Unbounded-заголовок в один
-   ряд теснили друг друга — кольцо чуть меньше и заголовок переносится под него. */
+/* На узком экране крупное (72px) кольцо + заголовок в один ряд теснили друг
+   друга — кольцо чуть меньше и заголовок переносится под него. */
 @media (max-width:480px){
   .course-hero-top{flex-wrap:wrap;}
   .course-hero-top .progress-ring{width:56px;height:56px;}
@@ -338,7 +334,13 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
 }
 
 .status-track{display:flex;gap:6px;margin-bottom:12px;}
-.status-track .slot{flex:1;height:5px;border-radius:100px;background:var(--line);transition:background .2s;}
+/* var(--line) здесь почти сливался с фоном стеклянной hero-плитки в тёмной
+   теме (#2B2B31 на полупрозрачном .glass-bg поверх #121214) — из 10 сегментов
+   (9 уроков + тест) реально различить можно было едва ли половину, будто
+   уроков вдвое меньше. Полупрозрачная версия var(--ink) вместо этого всегда
+   контрастна к своей же поверхности в обеих темах — тем же принципом, что и
+   var(--muted). */
+.status-track .slot{flex:1;height:5px;border-radius:100px;background:color-mix(in srgb, var(--ink) 14%, transparent);transition:background .2s;}
 .status-track .slot.done{background:var(--status-done);}
 /* Приглушённая заливка (не сплошной var(--primary)) — иначе "текущий, ещё не
    пройденный" урок цветом почти не отличим от "done" (в светлой теме это вообще
@@ -356,7 +358,7 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
    плоским 60px без тени). Конус-градиент делит заливку/пустоту по проценту;
    свечение снаружи — через box-shadow тем же акцентным цветом. */
 .progress-ring{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 0 0 1px var(--glass-border) inset, 0 0 22px -4px color-mix(in srgb, var(--primary) 55%, transparent);}
-.progress-ring-inner{width:57px;height:57px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:700;font-size:16px;}
+.progress-ring-inner{width:57px;height:57px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;font-family:var(--sans);font-weight:800;font-size:16px;}
 /* Приглушённый, не янтарный: серия/очки — это просто метрика прогресса,
    не праздничный бейдж consumer-habit-app — тон платформы деловой, не игровой. */
 .streak-flame{color:var(--muted);}
