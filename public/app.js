@@ -1191,6 +1191,17 @@ function toggleTheme(){
 }
 
 /* ============================= РЕНДЕР: СТУДЕНТ ============================= */
+// «Растекающийся» свет в полях страницы (стили .side-flow). Кладём в .app-main
+// ДО .shell: слои закреплены относительно окна и должны лежать под контентом.
+function addSideFlow(main){
+  var blobs = '<span class="blob f1"></span><span class="blob f2"></span><span class="blob f3"></span><span class="blob f4"></span>';
+  var shell = main.querySelector(".shell");
+  [["l"],["r"]].forEach(function(side){
+    var node = el('<div class="side-flow '+side[0]+'" aria-hidden="true">'+blobs+'</div>');
+    if(shell) main.insertBefore(node, shell); else main.appendChild(node);
+  });
+}
+
 function renderStudentShell(){
   var wrap = el('<div></div>');
   var mobNavBackdrop = renderMobileNavBackdrop();
@@ -1201,13 +1212,7 @@ function renderStudentShell(){
   if(previewMode){
     main.appendChild(el('<div style="background:var(--accent);color:#1B1A14;text-align:center;padding:10px 16px;font-size:13.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;">'+icon("eye")+' Режим просмотра «глазами врача» — изменения не сохраняются</div>'));
   }
-  // «Растекающийся» свет в полях — только на экране урока (стили .lesson-flow).
-  // Кладём ДО .shell: он закреплён относительно окна и должен лежать под контентом.
-  if(course && studentState.tab === "lesson"){
-    var flowBlobs = '<span class="blob f1"></span><span class="blob f2"></span><span class="blob f3"></span><span class="blob f4"></span>';
-    main.appendChild(el('<div class="lesson-flow l" aria-hidden="true">'+flowBlobs+'</div>'));
-    main.appendChild(el('<div class="lesson-flow r" aria-hidden="true">'+flowBlobs+'</div>'));
-  }
+  if(course && studentState.tab === "lesson") addSideFlow(main);
   var shell = el('<div class="shell"><div class="wrap" id="studentContent"></div></div>');
   main.appendChild(shell);
   var content = shell.querySelector("#studentContent");
@@ -2247,11 +2252,13 @@ function renderStaffShell(){
   } else if(staffState.mainTab === "profile"){
     content.appendChild(renderMyProfilePage());
   } else if(staffState.mainTab === "students"){
+    addSideFlow(main);
     content.appendChild(renderInboxCard());
     content.appendChild(renderStaffStats());
     content.appendChild(renderCertificateQueue());
     content.appendChild(renderRoster());
   } else {
+    addSideFlow(main);
     renderStaffHome(content);
   }
 
