@@ -523,6 +523,51 @@ function applyGlow(){
   document.documentElement.setAttribute("data-glow", g);
 }
 
+// Входные анимации (кольца прогресса заполняются, числа отсчитываются от нуля):
+// играют один раз, когда экран открыли, а НЕ при каждой перерисовке (приложение
+// перерисовывается целиком, в т.ч. каждые 30с по опросу уведомлений). Ключ —
+// экран + порядковый номер элемента; при переходе на другой экран сбрасывается.
+// Разметка уже содержит итоговое значение, так что без JS/при reduced-motion
+// просто показывается результат.
+var animSeen = {}, animScreen = "";
+function runEntranceAnimations(){
+  var screen = view+"|"+(view==="student" ? studentState.tab : (view==="staff" ? staffState.mainTab : ""))+"|"+(activeCourseId||staffState.activeCourseId||"");
+  if(screen !== animScreen){ animSeen = {}; animScreen = screen; }
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var root = document.getElementById("app");
+  root.querySelectorAll('[data-anim="ring"]').forEach(function(elr, i){
+    var key = "ring"+i;
+    if(animSeen[key]) return;
+    animSeen[key] = true;
+    if(!reduce) elr.classList.add("ring-fill");
+  });
+  root.querySelectorAll("[data-count]").forEach(function(elc, i){
+    var key = "count"+i;
+    if(animSeen[key]) return;
+    animSeen[key] = true;
+    var target = parseInt(elc.getAttribute("data-count"), 10);
+    if(reduce || !(target > 0)) return;
+    var suffix = elc.getAttribute("data-suffix") || "", start = null, dur = Math.min(1100, 500 + target*8);
+    elc.textContent = "0"+suffix;
+    function step(ts){
+      if(start===null) start = ts;
+      var t = Math.min(1, (ts-start)/dur), eased = 1 - Math.pow(1-t, 3);
+      elc.textContent = Math.round(target*eased)+suffix;
+      if(t < 1 && elc.isConnected) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  });
+}
+
+// Отклик карточек на курсор: координаты для подсветки рамки (.board-strip > .card).
+document.addEventListener("pointermove", function(e){
+  var c = e.target && e.target.closest && e.target.closest(".board-strip > .card");
+  if(!c) return;
+  var r = c.getBoundingClientRect();
+  c.style.setProperty("--mx", (e.clientX - r.left)+"px");
+  c.style.setProperty("--my", (e.clientY - r.top)+"px");
+}, { passive:true });
+
 function render(){
   var app = document.getElementById("app");
   // render() полностью пересобирает DOM (app.innerHTML="") и вызывается очень часто
@@ -534,6 +579,11 @@ function render(){
   // (иначе при переходе на видео другого урока получили бы случайную перемотку).
   var prevVideo = document.getElementById("lessonVideoPlayer");
   var savedVideoState = prevVideo ? { src: prevVideo.currentSrc, time: prevVideo.currentTime, playing: !prevVideo.paused && !prevVideo.ended } : null;
+  // Приложение перерисовывается целиком (в т.ч. каждые 30с по опросу уведомлений),
+  // и без этого все декоративные анимации («сияние», свет у урока, нить прогресса)
+  // начинались бы заново — заметный скачок. Отрицательная задержка = время с
+  // загрузки страницы, так что после перерисовки они продолжают с того же места.
+  document.documentElement.style.setProperty("--anim-t", (-performance.now()/1000).toFixed(2)+"s");
   var node;
   applyGlow();
   if(view === "loading") node = el('<div style="min-height:100vh;"></div>');
@@ -591,6 +641,7 @@ function render(){
     app.appendChild(renderConfirmModal());
   }
   wireEvents(app);
+  runEntranceAnimations();
   if(view==="student" && studentState.tab==="lesson" && !studentState.quizMode && studentState.lessonStage==="video"){
     setTimeout(function(){ wireLessonVideo(savedVideoState); }, 0);
   } else if(lessonPlyrInstance){
@@ -1051,6 +1102,9 @@ function specPickerArrayFor(pickerId){
   return [];
 }
 
+// Слои абстрактного «сияния» (стили — .aurora в styles.css): экран входа и плитка курса.
+var AURORA_BANDS = '<span class="band b3"></span><span class="band b1"></span><span class="band b2"></span><span class="band b4"></span><span class="grain"></span>';
+
 function renderAuthScreen(mode){
   var isLogin = mode === "login";
   var left =
@@ -1058,6 +1112,7 @@ function renderAuthScreen(mode){
       '<div><div class="brand">'+brandMark()+'Медицина Долголетия</div>' +
       '<h1 style="margin-top:56px;">'+(isLogin ? "С возвращением" : "Регистрация на демо-курс")+'</h1>' +
       '<p>'+(isLogin ? "Войдите, чтобы продолжить обучение или открыть панель куратора." : "Пара полей — и вы сразу в первом уроке.")+'</p></div>' +
+      '<div class="onb-aurora aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
     '</div>';
 
   var right;
@@ -1209,6 +1264,17 @@ function toggleTheme(){
 }
 
 /* ============================= РЕНДЕР: СТУДЕНТ ============================= */
+// «Растекающийся» свет в полях страницы (стили .side-flow). Кладём в .app-main
+// ДО .shell: слои закреплены относительно окна и должны лежать под контентом.
+function addSideFlow(main){
+  var blobs = '<span class="blob f1"></span><span class="blob f2"></span><span class="blob f3"></span><span class="blob f4"></span>';
+  var shell = main.querySelector(".shell");
+  [["l"],["r"]].forEach(function(side){
+    var node = el('<div class="side-flow '+side[0]+'" aria-hidden="true">'+blobs+'</div>');
+    if(shell) main.insertBefore(node, shell); else main.appendChild(node);
+  });
+}
+
 function renderStudentShell(){
   var wrap = el('<div></div>');
   var mobNavBackdrop = renderMobileNavBackdrop();
@@ -1219,6 +1285,7 @@ function renderStudentShell(){
   if(previewMode){
     main.appendChild(el('<div style="background:var(--accent);color:#1B1A14;text-align:center;padding:10px 16px;font-size:13.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;">'+icon("eye")+' Режим просмотра «глазами врача» — изменения не сохраняются</div>'));
   }
+  if(course && studentState.tab === "lesson") addSideFlow(main);
   var shell = el('<div class="shell"><div class="wrap" id="studentContent"></div></div>');
   main.appendChild(shell);
   var content = shell.querySelector("#studentContent");
@@ -1369,8 +1436,9 @@ function renderStudentHome(){
 
     var pct = Math.round((done + (quizDone?1:0)) / (total+1) * 100);
     html += '<div class="card course-hero">' +
+      '<div class="hero-aurora aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
       '<div class="course-hero-top">' +
-        '<div class="progress-ring" style="background:conic-gradient(var(--primary) '+pct+'%, var(--line-2) 0);"><div class="progress-ring-inner">'+pct+'%</div></div>' +
+        '<div class="progress-ring" data-anim="ring" style="--ring-p:'+pct+'%;"><div class="progress-ring-inner"><span data-count="'+pct+'" data-suffix="%">'+pct+'%</span></div></div>' +
         '<div><h2 style="margin:0;">'+escapeHtml(course.course.title)+'</h2>' +
         '<p style="margin:4px 0 0;">'+total+' коротких уроков и итоговый тест. По завершении — сертификат и возможность оставить заявку на полную программу обучения.</p></div>' +
       '</div>' +
@@ -1449,12 +1517,12 @@ function renderStudentHome(){
     magnet("neutral","Прогресс") +
     '<div style="display:flex;align-items:baseline;gap:6px;margin-top:10px;">' +
       icon("flame","ic-sm streak-flame") +
-      '<span style="font-family:var(--sans);font-weight:800;font-size:22px;letter-spacing:-.02em;">'+(gam.currentStreak||0)+'</span>' +
+      '<span style="font-family:var(--sans);font-weight:800;font-size:22px;letter-spacing:-.02em;" data-count="'+(gam.currentStreak||0)+'">'+(gam.currentStreak||0)+'</span>' +
       '<span style="font-size:12px;color:var(--muted);">'+(gam.currentStreak===1?"день подряд":"дней подряд")+'</span>' +
     '</div>' +
     '<span style="font-size:12px;color:var(--muted);display:block;margin-top:2px;">рекорд: '+(gam.longestStreak||0)+'</span>' +
     '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2);">' +
-      '<span style="font-family:var(--sans);font-weight:800;font-size:18px;">'+(gam.points||0)+'</span>' +
+      '<span style="font-family:var(--sans);font-weight:800;font-size:18px;" data-count="'+(gam.points||0)+'">'+(gam.points||0)+'</span>' +
       '<span style="font-size:12px;color:var(--muted);"> / 1000 очков</span>' +
       '<button class="btn btn-sm btn-ghost" style="display:block;margin-top:8px;padding:4px 0;" data-action="student-tab" data-tab="progress">Как получить скидку →</button>' +
     '</div>' +
@@ -2014,7 +2082,7 @@ function renderMyProgressPage(){
   var html = '<div style="margin-top:6px;max-width:760px;">' +
     '<div class="card" style="padding:22px 24px;margin-bottom:14px;">' +
       '<div style="display:flex;align-items:center;gap:16px;">' +
-        '<div class="progress-ring" style="background:conic-gradient(var(--primary) '+pct+'%, var(--line-2) 0);"><div class="progress-ring-inner">'+pct+'%</div></div>' +
+        '<div class="progress-ring" data-anim="ring" style="--ring-p:'+pct+'%;"><div class="progress-ring-inner"><span data-count="'+pct+'" data-suffix="%">'+pct+'%</span></div></div>' +
         '<div><b style="font-size:15px;display:block;">Прогресс по курсу</b>' +
         '<span style="font-size:13px;color:var(--muted);">'+done+' из '+total+' уроков'+(quizDone?' · тест сдан ('+pr.quiz_score+'%)':' · итоговый тест ещё впереди')+'</span></div>' +
       '</div>' +
@@ -2022,11 +2090,11 @@ function renderMyProgressPage(){
     '<div class="board-strip" style="margin-top:0;">' +
       '<div class="card" style="padding:18px;">'+magnet("neutral","Серия дней") +
         '<div style="display:flex;align-items:baseline;gap:6px;margin-top:10px;">'+icon("flame","ic-sm streak-flame") +
-        '<span style="font-family:var(--sans);font-weight:800;font-size:22px;letter-spacing:-.02em;">'+(gam.currentStreak||0)+'</span>' +
+        '<span style="font-family:var(--sans);font-weight:800;font-size:22px;letter-spacing:-.02em;" data-count="'+(gam.currentStreak||0)+'">'+(gam.currentStreak||0)+'</span>' +
         '<span style="font-size:12px;color:var(--muted);">'+(gam.currentStreak===1?"день подряд":"дней подряд")+'</span></div>' +
         '<span style="font-size:12px;color:var(--muted);display:block;margin-top:2px;">рекорд: '+(gam.longestStreak||0)+'</span></div>' +
       '<div class="card" style="padding:18px;">'+magnet(anyDiscountUnlocked?"done":"neutral","Очки") +
-        '<div style="font-family:var(--sans);font-weight:800;font-size:22px;margin-top:10px;letter-spacing:-.02em;">'+points+' <span style="font-size:13px;font-weight:500;color:var(--muted);">/ '+POINTS_MAX+'</span></div>' +
+        '<div style="font-family:var(--sans);font-weight:800;font-size:22px;margin-top:10px;letter-spacing:-.02em;"><span data-count="'+points+'">'+points+'</span> <span style="font-size:13px;font-weight:500;color:var(--muted);">/ '+POINTS_MAX+'</span></div>' +
         '<div style="position:relative;height:5px;border-radius:100px;background:var(--line-2);margin-top:12px;overflow:visible;">' +
           '<div style="height:100%;width:'+pointsPct+'%;background:var(--primary);border-radius:100px;"></div>' +
           POINT_TIERS.map(function(t){ return '<span style="position:absolute;top:-3px;left:'+(t.points/POINTS_MAX*100)+'%;width:11px;height:11px;margin-left:-5.5px;border-radius:50%;background:'+(points>=t.points?'var(--primary)':'var(--surface)')+';border:2px solid '+(points>=t.points?'var(--primary)':'var(--line)')+';"></span>'; }).join("") +
@@ -2257,11 +2325,13 @@ function renderStaffShell(){
   } else if(staffState.mainTab === "profile"){
     content.appendChild(renderMyProfilePage());
   } else if(staffState.mainTab === "students"){
+    addSideFlow(main);
     content.appendChild(renderInboxCard());
     content.appendChild(renderStaffStats());
     content.appendChild(renderCertificateQueue());
     content.appendChild(renderRoster());
   } else {
+    addSideFlow(main);
     renderStaffHome(content);
   }
 
@@ -2330,14 +2400,14 @@ function renderStaffHome(container){
       var avgPct = Math.round(list.reduce(function(sum,s){ return sum + Math.min(100, Math.round(((s.completed_lessons||[]).length/totalLessons)*100)); },0) / list.length);
       streamsHtml += '<div class="card" style="padding:18px;">' +
         '<div style="display:flex;align-items:center;gap:12px;">' +
-          '<div class="progress-ring" style="width:46px;height:46px;background:conic-gradient(var(--primary) '+avgPct+'%, var(--line-2) 0);"><div class="progress-ring-inner" style="width:34px;height:34px;font-size:11px;">'+avgPct+'%</div></div>' +
+          '<div class="progress-ring" data-anim="ring" style="width:46px;height:46px;--ring-p:'+avgPct+'%;"><div class="progress-ring-inner" style="width:34px;height:34px;font-size:11px;"><span data-count="'+avgPct+'" data-suffix="%">'+avgPct+'%</span></div></div>' +
           '<div>' +
             '<b style="font-size:13.5px;display:block;">'+escapeHtml(name)+'</b>' +
             '<span style="font-size:12px;color:var(--muted);">средний прогресс</span>' +
           '</div>' +
         '</div>' +
         '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line-2);display:flex;align-items:baseline;gap:6px;">' +
-          '<span style="font-family:var(--sans);font-weight:800;font-size:22px;">'+list.length+'</span>' +
+          '<span style="font-family:var(--sans);font-weight:800;font-size:22px;" data-count="'+list.length+'">'+list.length+'</span>' +
           '<span style="font-size:12px;color:var(--muted);">врачей · '+activeCount+' активных</span>' +
         '</div>' +
       '</div>';
@@ -3156,10 +3226,10 @@ function renderStaffStats(){
   var avg = scoreCount ? Math.round(scoreSum/scoreCount) : null;
   return el(
     '<div class="stat-row">' +
-      '<div class="card stat"><div class="num">'+total+'</div><div class="lbl">Врачей зарегистрировано</div></div>' +
-      '<div class="card stat"><div class="num">'+inProgress+'</div><div class="lbl">Проходят курс сейчас</div></div>' +
-      '<div class="card stat"><div class="num">'+completed+'</div><div class="lbl">Завершили демо-курс</div></div>' +
-      '<div class="card stat"><div class="num">'+(avg===null?'—':avg+'%')+'</div><div class="lbl">Средний балл теста</div></div>' +
+      '<div class="card stat"><div class="num" data-count="'+total+'">'+total+'</div><div class="lbl">Врачей зарегистрировано</div></div>' +
+      '<div class="card stat"><div class="num" data-count="'+inProgress+'">'+inProgress+'</div><div class="lbl">Проходят курс сейчас</div></div>' +
+      '<div class="card stat"><div class="num" data-count="'+completed+'">'+completed+'</div><div class="lbl">Завершили демо-курс</div></div>' +
+      '<div class="card stat"><div class="num"'+(avg===null?'':' data-count="'+avg+'" data-suffix="%"')+'>'+(avg===null?'—':avg+'%')+'</div><div class="lbl">Средний балл теста</div></div>' +
     '</div>'
   );
 }

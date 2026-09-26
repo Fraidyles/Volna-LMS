@@ -11,6 +11,39 @@ Primary target: `public/index.html` (the whole SPA — врач dashboard, cours
 quiz, calendar, messages, certificate — plus curator/admin/super_admin dashboard, students,
 team, audit-log views rendered by `public/app.js`). Visitor mode: **Operate** throughout.
 
+## Direction contract (v4 — supersedes the v3 contract below)
+
+**What changed from v3:** two independent Claude Code sessions worked the same
+branch point in parallel — this session (content/video/font) and a sibling
+session (illustrations → ambient glow animation, on branch
+`claude/busy-allen-qsefoc`) — then merged. Two real deltas from v3, both
+user-driven:
+
+1. **Two-voice type system dropped to one voice.** V3's Unbounded (hero
+   numbers/headlines) read as a chosen accent in isolation but as a foreign,
+   clashing element once seen live on the actual dashboard next to Manrope
+   body text — direct user feedback ("шрифты... слишком выпирающие, сильно
+   отличаются от основного шрифта"). Compared two live variants (drop
+   Unbounded entirely vs. keep it lighter/smaller) via screenshots; user chose
+   dropping it. `var(--display)`, the `@font-face` declarations, and the font
+   files themselves are removed from the codebase — hierarchy is now weight
+   (600/700/800) and size only, same principle v3 already used for Manrope's
+   own non-display text. Do not reintroduce a second display face without a
+   fresh request.
+2. **The sibling session's animation system merged in unchanged**, just
+   re-fonted: `.hero-aurora`/`.side-flow`/`.aurora` ambient glow motifs
+   (drifting bands, `--anim-t`-anchored so they survive the app's frequent
+   full re-renders), `@property --ring-p` + `.ring-fill` progress-ring fill
+   animation, `data-count`/`data-suffix` number count-up
+   (`runEntranceAnimations()`), and the `--mx`/`--my` pointer-tracked glow on
+   `.board-strip > .card` hover — all of it already respects
+   `prefers-reduced-motion` and the "admin is a work tool" density rule (no
+   glow/blur on dense table screens). See that session's own DESIGN.md
+   entries for the full rationale on each motif; nothing here duplicates that.
+
+Everything else in v3's contract below (bento layout, glass scoping, violet+
+teal accent pair, skeuomorphic buttons, radii) is unchanged.
+
 ## Direction contract (v3 — supersedes the v2 contract below)
 
 **THESIS:** V2 was built, audited, and rejected by the user as "a well-executed but
@@ -152,12 +185,17 @@ Fixed: dark `--muted-2` raised to `#86868F` (5.19:1); light `--muted-2` raised t
 hardcoded hex in `index.html`'s pre-JS loading fallback that the CSS variable change didn't
 reach. Re-verified: zero warning/slop findings remain.
 
-## Open follow-up (not built)
+## Open follow-up — auth-screen art: done
 
-Illustrations (the reference's hand-drawn character art) are out of scope for this session: no
-image-generation tool or configured Stitch MCP is available here (checked directly, twice).
-Documented in DESIGN.md's "Open follow-up" section rather than faked with SVG sketch art, which
-craft-floor explicitly bans as reading amateur.
+Previously blocked (no image generation available). Final: a CSS-only abstract "aurora"
+(`.onb-aurora`) replaces the radial glow in the auth left panel — blurred violet/teal bands,
+a soft halo, a thin light ray and SVG-noise grain, edge-faded by a radial mask; token-driven so
+it re-tints in light theme. Chosen by the user after several rounds: FLUX.1-dev character
+illustrations (rejected — wanted abstraction), geometric glass/curve/bento compositions
+(rejected — "not geometric"), and biology motifs (cells, DNA helix). Image-generation route
+notes: Pollinations MCP package is blocked in the sandbox and its paid API ran dry; AI Horde is
+free but soft; the Hugging Face FLUX.1-dev Space works with a user token but has a small daily
+quota. Verified at 1440×900 in both themes and at 390px (panel hidden). Still open: empty states.
 
 ---
 
