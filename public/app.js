@@ -1392,23 +1392,76 @@ function renderStudentSchedule(){
   var upcoming = relevant.filter(function(ev){ return eventEnd(ev) >= now; });
   var past = relevant.filter(function(ev){ return eventEnd(ev) < now; });
 
+  function startOf(ev){ return new Date(ev.event_date+"T"+(ev.event_time||"00:00")+":00"); }
+  var WD = ["вс","пн","вт","ср","чт","пт","сб"];
+  function whenLabel(ev){
+    var d = startOf(ev), today = new Date(); today.setHours(0,0,0,0);
+    var day = new Date(d); day.setHours(0,0,0,0);
+    var diff = Math.round((day - today)/86400000);
+    return diff===0 ? "сегодня" : diff===1 ? "завтра" : diff>1 ? "через "+diff+" дн." : "";
+  }
+  function dateLine(ev){
+    var d = startOf(ev);
+    return WD[d.getDay()]+", "+d.toLocaleDateString("ru-RU",{day:"numeric",month:"long"})+" · "+escapeHtml(ev.event_time||"—");
+  }
+  function actions(ev, live, primary){
+    return '<div class="sched-actions">' +
+      (ev.join_url?'<a class="btn btn-sm '+(live||primary?'btn-primary':'btn-ghost')+'" href="'+escapeHtml(ev.join_url)+'" target="_blank" rel="noopener">Подключиться</a>':'') +
+      '<button class="btn btn-sm btn-ghost" data-action="download-ics" data-id="'+ev.id+'">В календарь</button></div>';
+  }
   function row(ev, isUpcoming){
-    var live = isUpcoming && isLiveNow(ev);
-    return '<div class="card" style="padding:14px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">' +
-      '<div>'+(live?magnet("live","В эфире")+'<br>':'')+'<b style="font-size:14px;display:block;margin-top:'+(live?'6px':'0')+';">'+escapeHtml(ev.title)+'</b>' +
-      '<span style="font-size:12.5px;color:var(--muted);">'+fmtDate(ev.event_date)+' в '+escapeHtml(ev.event_time||"—")+(ev.speaker?(' · '+escapeHtml(ev.speaker)):'')+'</span></div>' +
-      (isUpcoming ? '<div style="display:flex;gap:8px;">' +
-        (ev.join_url?'<a class="btn btn-sm '+(live?'btn-primary':'btn-ghost')+'" href="'+escapeHtml(ev.join_url)+'" target="_blank" rel="noopener">Подключиться</a>':'') +
-        '<button class="btn btn-sm btn-ghost" data-action="download-ics" data-id="'+ev.id+'">В календарь</button></div>' : '') +
+    var live = isUpcoming && isLiveNow(ev), d = startOf(ev);
+    return '<div class="sched-row">' +
+      '<div class="sched-date"><b>'+d.getDate()+'</b><span>'+d.toLocaleDateString("ru-RU",{month:"short"}).replace(".","")+'</span></div>' +
+      '<div class="sched-info">'+(live?magnet("live","В эфире"):'')+'<b>'+escapeHtml(ev.title)+'</b>' +
+      '<span>'+dateLine(ev)+(ev.speaker?' · '+escapeHtml(ev.speaker):'')+'</span></div>' +
+      (isUpcoming ? actions(ev, live, false) : '') +
     '</div>';
   }
 
-  var html = '<div style="margin-top:6px;max-width:760px;"><b style="font-size:14.5px;display:block;margin-bottom:12px;">Ближайшие эфиры</b>';
-  if(!upcoming.length) html += '<div class="card empty-state" style="padding:30px 20px;">Пока эфиры не запланированы.</div>';
-  else upcoming.forEach(function(ev){ html += row(ev, true); });
+  // Мини-календарь месяца: месяц ближайшего эфира (или текущий), дни с эфирами отмечены.
+  function monthCalendar(){
+    var base = upcoming.length ? startOf(upcoming[0]) : new Date();
+    var y = base.getFullYear(), m = base.getMonth();
+    var marked = {};
+    relevant.forEach(function(ev){ var d = startOf(ev); if(d.getFullYear()===y && d.getMonth()===m) marked[d.getDate()] = true; });
+    var todayD = new Date(), isThisMonth = todayD.getFullYear()===y && todayD.getMonth()===m;
+    var first = (new Date(y, m, 1).getDay()+6)%7, days = new Date(y, m+1, 0).getDate();
+    var title = new Date(y, m, 1).toLocaleDateString("ru-RU",{month:"long",year:"numeric"}).replace(" г.","");
+    var h = '<div class="card sched-cal"><b class="sched-cal-title">'+title.charAt(0).toUpperCase()+title.slice(1)+'</b><div class="sched-cal-grid">';
+    ["пн","вт","ср","чт","пт","сб","вс"].forEach(function(w){ h += '<span class="wd">'+w+'</span>'; });
+    for(var i=0;i<first;i++) h += '<span></span>';
+    for(var dd=1; dd<=days; dd++){
+      h += '<span class="d'+(marked[dd]?' ev':'')+(isThisMonth && dd===todayD.getDate()?' today':'')+'">'+dd+'</span>';
+    }
+    h += '</div><div class="sched-cal-legend"><i></i>день эфира</div></div>';
+    return h;
+  }
+
+  var html = '<div class="page-wide"><b class="page-h">Ближайшие эфиры</b>';
+  if(!upcoming.length){
+    html += '<div class="sched-top"><div class="card empty-state" style="padding:40px 20px;">Пока эфиры не запланированы.</div>'+monthCalendar()+'</div>';
+  } else {
+    var nx = upcoming[0], nxLive = isLiveNow(nx);
+    html += '<div class="sched-top">' +
+      '<div class="card sched-hero">' +
+        (nxLive ? magnet("live","Идёт сейчас") : magnet("attention","Ближайший эфир"+(whenLabel(nx)?' · '+whenLabel(nx):''))) +
+        '<h2>'+escapeHtml(nx.title)+'</h2>' +
+        '<div class="sched-hero-meta"><span>'+dateLine(nx)+'</span><span>'+(nx.duration_min||60)+' мин</span>'+(nx.speaker?'<span>'+escapeHtml(nx.speaker)+'</span>':'')+'</div>' +
+        actions(nx, nxLive, true) +
+      '</div>' +
+      monthCalendar() +
+    '</div>';
+    if(upcoming.length>1){
+      html += '<b class="page-h" style="margin-top:24px;">Дальше</b><div class="card sched-list">';
+      upcoming.slice(1).forEach(function(ev){ html += row(ev, true); });
+      html += '</div>';
+    }
+  }
   if(past.length){
-    html += '<b style="font-size:14.5px;display:block;margin:22px 0 12px;">Прошедшие</b>';
+    html += '<b class="page-h" style="margin-top:24px;">Прошедшие</b><div class="card sched-list">';
     past.slice(-5).reverse().forEach(function(ev){ html += row(ev, false); });
+    html += '</div>';
   }
   html += '</div>';
   return el(html);
@@ -2120,51 +2173,80 @@ function renderMyProgressPage(){
   var maxedOut = points >= POINTS_MAX;
   var anyDiscountUnlocked = points >= POINT_TIERS[0].points;
 
-  var html = '<div style="margin-top:6px;max-width:760px;">' +
-    '<div class="card" style="padding:22px 24px;margin-bottom:14px;">' +
-      '<div style="display:flex;align-items:center;gap:16px;">' +
-        '<div class="progress-ring" data-anim="ring" style="--ring-p:'+pct+'%;"><div class="progress-ring-inner"><span data-count="'+pct+'" data-suffix="%">'+pct+'%</span></div></div>' +
-        '<div><b style="font-size:15px;display:block;">Прогресс по курсу</b>' +
-        '<span style="font-size:13px;color:var(--muted);">'+done+' из '+total+' уроков'+(quizDone?' · тест сдан ('+pr.quiz_score+'%)':' · итоговый тест ещё впереди')+'</span></div>' +
-      '</div>' +
+  var certsOn = course.course && course.course.certificatesEnabled;
+  var nextIdx = -1;
+  course.lessons.forEach(function(l,i){ if(nextIdx<0 && doneIds.indexOf(l.id)===-1 && !l.hiddenForMe && !l.dripLockedForMe) nextIdx = i; });
+
+  // Левая колонка: общий прогресс + серия, очки с «лестницей» скидок.
+  var left = '<div class="pp-col">' +
+    '<div class="card pp-summary">' +
+      '<div class="progress-ring" data-anim="ring" style="--ring-p:'+pct+'%;"><div class="progress-ring-inner"><span data-count="'+pct+'" data-suffix="%">'+pct+'%</span></div></div>' +
+      '<div style="flex:1;min-width:0;"><b style="font-size:15px;display:block;">Прогресс по курсу</b>' +
+      '<span style="font-size:13px;color:var(--muted);">'+done+' из '+total+' уроков'+(quizDone?' · тест сдан':'')+'</span></div>' +
+      '<div class="pp-streak">'+icon("flame","ic-sm streak-flame")+'<b data-count="'+(gam.currentStreak||0)+'">'+(gam.currentStreak||0)+'</b>' +
+        '<span>'+(gam.currentStreak===1?"день подряд":"дней подряд")+'<br>рекорд: '+(gam.longestStreak||0)+'</span></div>' +
     '</div>' +
-    '<div class="board-strip" style="margin-top:0;">' +
-      '<div class="card" style="padding:18px;">'+magnet("neutral","Серия дней") +
-        '<div style="display:flex;align-items:baseline;gap:6px;margin-top:10px;">'+icon("flame","ic-sm streak-flame") +
-        '<span style="font-family:var(--sans);font-weight:800;font-size:22px;letter-spacing:-.02em;" data-count="'+(gam.currentStreak||0)+'">'+(gam.currentStreak||0)+'</span>' +
-        '<span style="font-size:12px;color:var(--muted);">'+(gam.currentStreak===1?"день подряд":"дней подряд")+'</span></div>' +
-        '<span style="font-size:12px;color:var(--muted);display:block;margin-top:2px;">рекорд: '+(gam.longestStreak||0)+'</span></div>' +
-      '<div class="card" style="padding:18px;">'+magnet(anyDiscountUnlocked?"done":"neutral","Очки") +
-        '<div style="font-family:var(--sans);font-weight:800;font-size:22px;margin-top:10px;letter-spacing:-.02em;"><span data-count="'+points+'">'+points+'</span> <span style="font-size:13px;font-weight:500;color:var(--muted);">/ '+POINTS_MAX+'</span></div>' +
-        '<div style="position:relative;height:5px;border-radius:100px;background:var(--line-2);margin-top:12px;overflow:visible;">' +
-          '<div style="height:100%;width:'+pointsPct+'%;background:var(--primary);border-radius:100px;"></div>' +
-          POINT_TIERS.map(function(t){ return '<span style="position:absolute;top:-3px;left:'+(t.points/POINTS_MAX*100)+'%;width:11px;height:11px;margin-left:-5.5px;border-radius:50%;background:'+(points>=t.points?'var(--primary)':'var(--surface)')+';border:2px solid '+(points>=t.points?'var(--primary)':'var(--line)')+';"></span>'; }).join("") +
-        '</div>' +
+    '<div class="card pp-points'+(maxedOut?' maxed':'')+'">' +
+      '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;">' +
+        magnet(anyDiscountUnlocked?"done":"neutral","Очки") +
+        '<div class="pp-points-num"><b data-count="'+points+'">'+points+'</b> / '+POINTS_MAX+'</div>' +
       '</div>' +
-      (quizDone
-        ? '<div class="card" style="padding:18px;">' +
-            magnet(pr.certificate_status==="issued"?"done":"attention", pr.certificate_status==="issued"?"Сертификат выдан":"На проверке") +
-            '<div style="font-family:var(--sans);font-weight:800;font-size:22px;margin-top:10px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
-          '</div>'
-        : '') +
-    '</div>' +
-    '<div class="card" style="padding:20px 22px;margin-top:14px;'+(maxedOut?'background:var(--primary-tint);border-color:transparent;':'')+'">' +
-      '<b style="font-size:14.5px;display:block;margin-bottom:10px;">Что такое очки и зачем они нужны</b>' +
-      '<p style="font-size:13px;color:var(--muted);line-height:1.6;margin:0 0 14px;">Очки начисляются за вашу активность в курсе: <b style="color:var(--ink);">+20</b> за каждый пройденный урок, столько же процентов, сколько результат теста — за итоговый тест, <b style="color:var(--ink);">+100</b> — за полученный сертификат, и <b style="color:var(--ink);">+5</b> за каждый день серии подряд.</p>' +
-      renderPointTiers(points) +
+      renderPointsLadder(points, POINTS_MAX) +
+      '<p class="pp-points-how">Очки начисляются за активность: <b>+20</b> за каждый пройденный урок, столько же процентов, сколько результат теста — за итоговый тест, <b>+100</b> — за сертификат, <b>+5</b> за каждый день серии подряд.</p>' +
       renderPointTiersCta(points) +
     '</div>' +
-    '<div class="card" style="padding:18px 20px;margin-top:14px;">' +
-      '<b style="font-size:14px;display:block;margin-bottom:12px;">Уроки</b>';
+    '%%FINAL%%' +
+  '</div>';
+
+  // Правая колонка: уроки (со статусом и длительностью) + итоговый тест/сертификат.
+  var right = '<div class="pp-col"><div class="card pp-lessons"><b class="pp-h">Уроки</b>';
   course.lessons.forEach(function(l,i){
-    var isDone = doneIds.indexOf(l.id)!==-1;
-    html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;'+(i<course.lessons.length-1?'border-bottom:1px solid var(--line-2);':'')+'">' +
-      '<span style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;background:'+(isDone?'var(--status-done)':'var(--line-2)')+';">'+(isDone?icon("check","ic-sm"):'')+'</span>' +
-      '<span style="font-size:13.5px;flex:1;'+(isDone?'':'color:var(--muted);')+'">'+(i+1)+'. '+escapeHtml(l.title)+'</span>' +
+    var isDone = doneIds.indexOf(l.id)!==-1, isLocked = !isDone && (l.hiddenForMe || l.dripLockedForMe), isNext = i===nextIdx;
+    var meta = l.hiddenForMe ? 'временно недоступен' : (l.dripLockedForMe ? 'откроется '+fmtDate(l.availableAt) : escapeHtml(l.duration||""));
+    right += '<div class="pp-lesson'+(isDone?' done':'')+(isNext?' next':'')+(isLocked?' locked':'')+'"'+(isLocked?'':' data-action="open-lesson-at" data-idx="'+i+'"')+'>' +
+      '<span class="pp-dot">'+(isDone?icon("check","ic-sm"):(isLocked?icon("lock","ic-sm"):''))+'</span>' +
+      '<span class="pp-title">'+(i+1)+'. '+escapeHtml(l.title)+'</span>' +
+      (isNext ? '<button class="btn btn-sm btn-primary" data-action="open-lesson-at" data-idx="'+i+'">'+(done?'Продолжить':'Начать')+'</button>' : '<span class="pp-meta">'+meta+'</span>') +
     '</div>';
   });
-  html += '</div></div>';
-  return el(html);
+  right += '</div>';
+
+  right += '</div>';
+  var left_lessons = total - done, fin = '<div class="card pp-final">';
+  if(!quizDone){
+    fin += magnet(left_lessons? "neutral" : "attention", "Итоговый тест") +
+      (left_lessons
+        ? '<p>Откроется после всех уроков — осталось <b>'+left_lessons+'</b> '+(left_lessons===1?'урок':(left_lessons<5?'урока':'уроков'))+'.</p>' +
+          '<div class="pp-final-bar"><i style="width:'+Math.round(done/Math.max(1,total)*100)+'%"></i></div>'
+        : '<p>Все уроки пройдены — можно сдавать.'+(course.quiz?' '+course.quiz.length+' вопросов.':'')+'</p>' +
+          '<button class="btn btn-primary" data-action="open-final-quiz">Пройти тест</button>') +
+      '<p class="pp-final-after">'+(certsOn ? 'После теста куратор проверит результат и выдаст сертификат.' : 'После теста — скидка 10% на полное обучение.')+'</p>';
+  } else {
+    var issued = pr.certificate_status==="issued";
+    fin += magnet(certsOn ? (issued?"done":"attention") : "done", certsOn ? (issued?"Сертификат выдан":"Сертификат на проверке") : "Демо-курс пройден") +
+      '<div class="pp-final-score"><b data-count="'+pr.quiz_score+'" data-suffix="%">'+pr.quiz_score+'%</b><span>результат итогового теста</span></div>' +
+      (certsOn && issued ? '<a class="btn btn-sm btn-primary" href="api/course/certificate/download?courseId='+encodeURIComponent(activeCourseId)+'" target="_blank" rel="noopener">'+icon("download")+' Скачать сертификат</a>' : '');
+  }
+  fin += '</div>';
+  left = left.replace('%%FINAL%%', function(){ return fin; });
+
+  return el('<div class="page-wide pp-grid">'+left+right+'</div>');
+}
+
+// «Лестница» скидок: полоса очков с отметками ступеней и подписями под ними.
+function renderPointsLadder(points, max){
+  var pctNow = Math.min(100, Math.round(points/max*100));
+  var h = '<div class="ladder"><div class="ladder-track"><div class="ladder-fill" style="width:'+pctNow+'%"></div>';
+  POINT_TIERS.forEach(function(t){
+    var on = points >= t.points, x = t.points/max*100;
+    h += '<span class="ladder-tick'+(on?' on':'')+'" style="left:'+x+'%"></span>';
+  });
+  h += '<span class="ladder-you" style="left:'+pctNow+'%"></span></div><div class="ladder-labels">';
+  POINT_TIERS.forEach(function(t){
+    var on = points >= t.points, x = t.points/max*100;
+    h += '<span class="'+(on?'on':'')+(x>=100?' end':'')+'" style="left:'+x+'%"><b>−'+t.discount+'%</b>'+t.points+'</span>';
+  });
+  return h + '</div></div>';
 }
 
 function renderNotificationsPage(){
@@ -4077,6 +4159,15 @@ function wireEvents(root){
     }
     if(action==="goto-lesson-from-materials"){
       studentState.tab="lesson"; studentState.lessonIndex=parseInt(t.getAttribute("data-idx"),10); studentState.quizMode=false; resetLessonStageState(); render(); return;
+    }
+    if(action==="open-lesson-at"){
+      var oi=parseInt(t.getAttribute("data-idx"),10), ol=course.lessons[oi];
+      if(ol.hiddenForMe || ol.dripLockedForMe) return;
+      studentState.tab="lesson"; studentState.lessonIndex=oi; studentState.quizMode=false; resetLessonStageState(); render(); return;
+    }
+    if(action==="open-final-quiz"){
+      if(course.quizHiddenForMe){ showToast("Тест временно недоступен"); return; }
+      studentState.tab="lesson"; studentState.quizMode=true; studentState.quizSubmitted=false; render(); return;
     }
     if(action==="goto-quiz"){
       if(course.quizHiddenForMe){ showToast("Тест временно недоступен"); return; }

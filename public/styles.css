@@ -725,3 +725,88 @@ table.roster tbody tr:hover{background:var(--surface-2);}
 .video-wrap{position:relative;width:100%;aspect-ratio:16/9;margin:20px 0;border-radius:var(--radius-m);overflow:hidden;background:#000;box-shadow:var(--shadow);}
 .video-wrap iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:0;display:block;}
 @media (max-width:480px){.video-wrap{border-radius:10px;margin:14px 0;}}
+
+/* ---------------- Внутренние страницы врача на всю ширину ---------------- */
+.page-wide{margin-top:6px;}
+.page-h{font-size:14.5px;font-weight:600;display:block;margin-bottom:12px;}
+
+/* Расписание: крупная плитка ближайшего эфира + мини-календарь месяца, ниже списки. */
+.sched-top{display:grid;grid-template-columns:minmax(0,2fr) minmax(260px,1fr);gap:14px;align-items:stretch;}
+.sched-hero{padding:26px 28px;display:flex;flex-direction:column;align-items:flex-start;gap:12px;}
+.sched-hero h2{font-size:24px;font-weight:700;line-height:1.25;letter-spacing:-.01em;margin:4px 0 0;}
+.sched-hero-meta{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13.5px;color:var(--muted);}
+.sched-hero .sched-actions{margin-top:auto;padding-top:8px;}
+.sched-actions{display:flex;gap:8px;flex-shrink:0;}
+.sched-cal{padding:20px 20px 16px;}
+.sched-cal-title{font-size:14px;font-weight:600;display:block;margin-bottom:12px;}
+.sched-cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center;}
+.sched-cal-grid span{font-size:12.5px;line-height:30px;border-radius:9px;color:var(--muted);}
+.sched-cal-grid .wd{font-size:11px;color:var(--muted-2);line-height:22px;}
+.sched-cal-grid .d.ev{background:var(--primary-tint);color:var(--ink);font-weight:600;position:relative;}
+.sched-cal-grid .d.ev::after{content:"";position:absolute;left:50%;bottom:3px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:var(--primary);}
+.sched-cal-grid .d.today{box-shadow:inset 0 0 0 1px var(--muted-2);color:var(--ink);}
+.sched-cal-legend{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted-2);margin-top:12px;}
+.sched-cal-legend i{width:12px;height:12px;border-radius:4px;background:var(--primary-tint);}
+.sched-list{padding:6px 20px;}
+.sched-row{display:flex;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--line-2);}
+.sched-row:last-child{border-bottom:none;}
+.sched-date{width:44px;flex-shrink:0;text-align:center;line-height:1.1;}
+.sched-date b{display:block;font-size:19px;font-weight:700;}
+.sched-date span{font-size:11.5px;color:var(--muted);}
+.sched-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;align-items:flex-start;}
+.sched-info b{font-size:14px;font-weight:600;}
+.sched-info span{font-size:12.5px;color:var(--muted);}
+@media (max-width:900px){.sched-top{grid-template-columns:1fr;}}
+.sched-actions .btn{white-space:nowrap;}
+@media (max-width:600px){.sched-row{flex-wrap:wrap;}.sched-row .sched-info{flex:1 1 calc(100% - 60px);}.sched-row .sched-actions{margin-left:60px;}}
+
+/* Мой прогресс: слева сводка и очки, справа уроки и итоговый тест. */
+.pp-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px 18px;align-items:start;}
+.pp-col{display:flex;flex-direction:column;gap:14px;min-width:0;}
+.pp-summary{padding:22px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+.pp-streak{display:flex;align-items:center;gap:8px;padding-left:16px;border-left:1px solid var(--line-2);}
+.pp-streak b{font-size:22px;font-weight:800;letter-spacing:-.02em;}
+.pp-streak span{font-size:11.5px;color:var(--muted);line-height:1.35;}
+.pp-points{padding:20px 22px;}
+.pp-points.maxed{background:var(--primary-tint);}
+.pp-points-num{font-size:13px;color:var(--muted);}
+.pp-points-num b{font-size:22px;font-weight:800;letter-spacing:-.02em;color:var(--ink);}
+.pp-points-how{font-size:12.5px;color:var(--muted);line-height:1.6;margin:18px 0 12px;}
+.pp-points-how b{color:var(--ink);}
+.ladder{margin-top:16px;}
+.ladder-track{position:relative;height:6px;border-radius:100px;background:var(--line-2);}
+.ladder-fill{height:100%;border-radius:100px;background:linear-gradient(90deg,var(--primary),var(--teal));}
+.ladder-tick{position:absolute;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;background:var(--surface);border:2px solid var(--line);}
+.ladder-tick.on{background:var(--primary);border-color:var(--primary);}
+.ladder-you{position:absolute;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:var(--ink);box-shadow:0 0 0 4px color-mix(in srgb,var(--primary) 30%,transparent);}
+.ladder-labels{position:relative;height:34px;margin-top:10px;}
+.ladder-labels span{position:absolute;transform:translateX(-50%);font-size:11.5px;color:var(--muted-2);text-align:center;line-height:1.3;white-space:nowrap;}
+.ladder-labels span.end{transform:translateX(-100%);text-align:right;}
+.ladder-labels span b{display:block;font-size:13px;color:var(--muted);font-weight:600;}
+.ladder-labels span.on b{color:var(--ink);}
+.pp-lessons{padding:18px 12px 12px;}
+.pp-h{font-size:14px;font-weight:600;display:block;margin:0 10px 8px;}
+.pp-lesson{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--radius-s);cursor:pointer;transition:background .15s;}
+.pp-lesson:hover{background:var(--surface-2);}
+.pp-lesson.locked{cursor:default;}
+.pp-lesson.locked:hover{background:none;}
+.pp-lesson.next{background:var(--primary-tint);}
+.pp-dot{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--line-2);color:var(--muted);}
+.pp-lesson.done .pp-dot{background:var(--status-done);color:#fff;}
+.pp-lesson.next .pp-dot{background:none;box-shadow:inset 0 0 0 2px var(--primary);}
+.pp-title{flex:1;min-width:0;font-size:13.5px;color:var(--muted);}
+.pp-lesson.done .pp-title,.pp-lesson.next .pp-title{color:var(--ink);}
+.pp-lesson.next .pp-title{font-weight:600;}
+.pp-meta{font-size:12px;color:var(--muted-2);white-space:nowrap;}
+.pp-final{padding:20px 22px;display:flex;flex-direction:column;align-items:flex-start;gap:10px;}
+.pp-final p{font-size:13.5px;color:var(--muted);margin:0;line-height:1.55;}
+.pp-final p b{color:var(--ink);}
+.pp-final .pp-final-after{font-size:12.5px;color:var(--muted-2);}
+.pp-final-bar{width:100%;height:5px;border-radius:100px;background:var(--line-2);overflow:hidden;}
+.pp-final-bar i{display:block;height:100%;background:var(--primary);border-radius:100px;}
+.pp-final-score{display:flex;align-items:baseline;gap:8px;}
+.pp-final-score b{font-size:26px;font-weight:800;letter-spacing:-.02em;}
+.pp-final-score span{font-size:12.5px;color:var(--muted);}
+@media (max-width:900px){.pp-grid{grid-template-columns:1fr;}}
+.sched-actions a.btn{text-decoration:none;}
+.pp-points > div:first-child{align-items:center !important;}
