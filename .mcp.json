@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "mcpollinations": {
+      "command": "npx",
+      "args": ["-y", "@pinkpixel/mcpollinations"],
+      "env": {
+        "IMAGE_MODEL": "flux",
+        "OUTPUT_DIR": "./public/generated-images",
+        "POLLINATIONS_API_KEY": ""
+      }
+    }
+  }
+}
