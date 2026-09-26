@@ -1016,7 +1016,7 @@ select.input,select{-webkit-appearance:none;appearance:none;cursor:pointer;paddi
 .co-card{padding:18px 20px;}
 .co-card-title{font-size:14px;font-weight:600;display:block;margin-bottom:14px;}
 .co-stats{display:grid;grid-template-columns:1fr 1fr;gap:16px 12px;}
-.co-stats div{display:flex;flex-direction:column;}
+.co-stats div{display:flex;flex-direction:row;align-items:baseline;gap:8px;}
 .co-stats b{font-size:24px;font-weight:800;letter-spacing:-.02em;}
 .co-stats span{font-size:12px;color:var(--muted);}
 .co-stack{display:flex;gap:3px;height:10px;border-radius:6px;overflow:hidden;}
