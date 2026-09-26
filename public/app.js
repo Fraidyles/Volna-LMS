@@ -1024,6 +1024,9 @@ function specPickerArrayFor(pickerId){
   return [];
 }
 
+// Слои абстрактного «сияния» (стили — .aurora в styles.css): экран входа и плитка курса.
+var AURORA_BANDS = '<span class="band b3"></span><span class="band b1"></span><span class="band b2"></span><span class="band b4"></span><span class="grain"></span>';
+
 function renderAuthScreen(mode){
   var isLogin = mode === "login";
   var left =
@@ -1031,7 +1034,7 @@ function renderAuthScreen(mode){
       '<div><div class="brand">'+brandMark()+'Медицина Долголетия</div>' +
       '<h1 style="margin-top:56px;">'+(isLogin ? "С возвращением" : "Регистрация на демо-курс")+'</h1>' +
       '<p>'+(isLogin ? "Войдите, чтобы продолжить обучение или открыть панель куратора." : "Пара полей — и вы сразу в первом уроке.")+'</p></div>' +
-      '<div class="onb-aurora" aria-hidden="true"><span class="band b3"></span><span class="band b1"></span><span class="band b2"></span><span class="band b4"></span><span class="grain"></span></div>' +
+      '<div class="onb-aurora aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
     '</div>';
 
   var right;
@@ -1343,6 +1346,7 @@ function renderStudentHome(){
 
     var pct = Math.round((done + (quizDone?1:0)) / (total+1) * 100);
     html += '<div class="card course-hero">' +
+      '<div class="hero-aurora aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
       '<div class="course-hero-top">' +
         '<div class="progress-ring" style="background:conic-gradient(var(--primary) '+pct+'%, var(--line-2) 0);"><div class="progress-ring-inner">'+pct+'%</div></div>' +
         '<div><h2 style="margin:0;">'+escapeHtml(course.course.title)+'</h2>' +

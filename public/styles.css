@@ -289,26 +289,28 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
 /* ---------------- Вход / приглашение ---------------- */
 .onb-shell{min-height:100vh;display:grid;grid-template-columns:1.05fr 1fr;background:var(--bg);}
 .onb-left{background:var(--surface);padding:56px;display:flex;flex-direction:column;justify-content:center;gap:40px;border-right:var(--border-hairline);}
-/* Абстрактное «сияние» вместо прежнего радиального свечения: несколько размытых
-   лент в --primary/--teal с лёгким зерном, края растворяются маской. Всё на CSS,
-   без картинок — поэтому само перекрашивается в светлой теме (там ленты
-   смешиваются multiply и бледнее). Чисто декоративное (aria-hidden). */
+/* «Сияние» — общий абстрактный мотив (экран входа + плитка курса на главной врача):
+   несколько размытых лент в --primary/--teal с лёгким зерном. Всё на CSS, без
+   картинок — поэтому само перекрашивается в светлой теме (там ленты смешиваются
+   multiply и бледнее). Чисто декоративное (aria-hidden). Геометрия лент ниже —
+   базовая (экран входа); .hero-aurora переопределяет её под свою площадку. */
+.aurora .band{position:absolute;border-radius:50%;filter:blur(20px);mix-blend-mode:var(--aurora-blend,screen);animation:auroraDrift 14s ease-in-out infinite alternate;}
+.aurora .b1{width:92%;height:16%;left:4%;top:36%;transform:rotate(-16deg);border-radius:100% 30% 100% 30%;
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--primary) 85%,transparent) 35%,color-mix(in srgb,var(--teal) 80%,transparent) 75%,transparent);}
+.aurora .b2{width:74%;height:10%;left:18%;top:54%;transform:rotate(-9deg);border-radius:30% 100% 30% 100%;animation-delay:-5s;
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--teal) 70%,transparent),transparent);}
+.aurora .b3{width:44%;height:44%;left:14%;top:10%;filter:blur(40px);opacity:.7;animation-delay:-9s;
+  background:radial-gradient(closest-side,color-mix(in srgb,var(--primary) 60%,transparent),transparent);}
+.aurora .b4{width:10%;height:62%;left:58%;top:14%;transform:rotate(18deg);filter:blur(22px);opacity:.55;animation-delay:-3s;
+  background:linear-gradient(180deg,transparent,color-mix(in srgb,#fff 55%,var(--teal)),transparent);}
+.aurora .grain{position:absolute;inset:0;opacity:.22;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
+:root[data-theme="light"] .aurora{--aurora-blend:multiply;}
+:root[data-theme="light"] .aurora .band{opacity:.55;}
+@keyframes auroraDrift{from{translate:-10px 4px;}to{translate:12px -6px;}}
+
 .onb-aurora{position:relative;width:100%;max-width:540px;aspect-ratio:3/2;animation:fadeUp .8s cubic-bezier(.16,1,.3,1) both;
   -webkit-mask-image:radial-gradient(ellipse 50% 46% at 50% 50%,#000 40%,transparent 100%);mask-image:radial-gradient(ellipse 50% 46% at 50% 50%,#000 40%,transparent 100%);}
-.onb-aurora .band{position:absolute;border-radius:50%;filter:blur(20px);mix-blend-mode:var(--aurora-blend,screen);animation:auroraDrift 14s ease-in-out infinite alternate;}
-.onb-aurora .b1{width:92%;height:16%;left:4%;top:36%;transform:rotate(-16deg);border-radius:100% 30% 100% 30%;
-  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--primary) 85%,transparent) 35%,color-mix(in srgb,var(--teal) 80%,transparent) 75%,transparent);}
-.onb-aurora .b2{width:74%;height:10%;left:18%;top:54%;transform:rotate(-9deg);border-radius:30% 100% 30% 100%;animation-delay:-5s;
-  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--teal) 70%,transparent),transparent);}
-.onb-aurora .b3{width:44%;height:44%;left:14%;top:10%;filter:blur(40px);opacity:.7;animation-delay:-9s;
-  background:radial-gradient(closest-side,color-mix(in srgb,var(--primary) 60%,transparent),transparent);}
-.onb-aurora .b4{width:10%;height:62%;left:58%;top:14%;transform:rotate(18deg);filter:blur(22px);opacity:.55;animation-delay:-3s;
-  background:linear-gradient(180deg,transparent,color-mix(in srgb,#fff 55%,var(--teal)),transparent);}
-.onb-aurora .grain{position:absolute;inset:0;opacity:.22;mix-blend-mode:overlay;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
-:root[data-theme="light"] .onb-aurora{--aurora-blend:multiply;}
-:root[data-theme="light"] .onb-aurora .band{opacity:.55;}
-@keyframes auroraDrift{from{translate:-10px 4px;}to{translate:12px -6px;}}
 .onb-left h1{font-size:38px;line-height:1.2;max-width:440px;color:var(--ink);font-weight:600;}
 .onb-left p{font-size:16px;color:var(--muted);max-width:400px;line-height:1.6;}
 .onb-right{display:flex;align-items:center;justify-content:center;padding:40px 24px;}
@@ -340,6 +342,26 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
    (--ambient-glow на body), а не плоская заливка var(--surface): это то, что
    реально отличает bento-редизайн v3 от предыдущей плоской карточки. */
 .course-hero{padding:28px 30px;background:var(--glass-bg);border:var(--glass-border);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));}
+/* Сияние в пустой правой части плитки — только там, где справа от текста реально
+   есть свободное место: считаем по ширине самой плитки (container query), а не
+   экрана, поэтому на планшете/телефоне, где текст занимает всю ширину, его нет.
+   Растворяется влево маской, чтобы не залезать под заголовок и кнопку. */
+.course-hero{position:relative;overflow:hidden;isolation:isolate;container-type:inline-size;}
+.course-hero > *{position:relative;z-index:1;}
+.course-hero > .hero-aurora{display:none;position:absolute;z-index:0;top:-10%;right:-4%;width:62%;height:120%;pointer-events:none;
+  -webkit-mask-image:linear-gradient(90deg,transparent 0%,#000 38%),radial-gradient(ellipse 70% 70% at 60% 50%,#000 40%,transparent 100%);-webkit-mask-composite:source-in;
+  mask-image:linear-gradient(90deg,transparent 0%,#000 38%),radial-gradient(ellipse 70% 70% at 60% 50%,#000 40%,transparent 100%);mask-composite:intersect;}
+@container (min-width:860px){.course-hero > .hero-aurora{display:block;}}
+.hero-aurora .band{filter:blur(22px);}
+.hero-aurora .b1{width:95%;height:18%;left:6%;top:40%;transform:rotate(-18deg);}
+.hero-aurora .b2{width:70%;height:11%;left:26%;top:60%;transform:rotate(-10deg);}
+.hero-aurora .b3{width:42%;height:60%;left:30%;top:6%;filter:blur(44px);}
+.hero-aurora .b4{width:8%;height:80%;left:66%;top:8%;filter:blur(20px);opacity:.5;}
+.hero-aurora .grain{opacity:.2;}
+/* В светлой теме на белой плитке сияние читалось слишком плотным пятном — тише и без луча. */
+:root[data-theme="light"] .hero-aurora{opacity:.55;filter:saturate(.8);}
+:root[data-theme="light"] .hero-aurora .band{opacity:.45;filter:blur(30px);}
+:root[data-theme="light"] .hero-aurora .b4{display:none;}
 .course-hero h2{font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-.01em;margin:0 0 8px;}
 .course-hero p{color:var(--muted);font-size:14.5px;max-width:480px;line-height:1.55;margin:0 0 22px;}
 .course-hero-top{display:flex;align-items:center;gap:16px;}
