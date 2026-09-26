@@ -2060,8 +2060,10 @@ function roleCapabilities(role){
 function renderMyProfilePage(){
   var isStudent = me.role==="student";
   var caps = roleCapabilities(me.role);
-  var html = '<div style="margin-top:6px;max-width:640px;">';
+  var html = '<div style="margin-top:6px;" class="grid-2">';
 
+  // Левая колонка (шире) — форма профиля и то, что доступно роли.
+  html += '<div>';
   html += '<div class="card" style="padding:18px 20px;margin-bottom:14px;">' +
     '<b style="font-size:14.5px;display:block;margin-bottom:14px;">Основная информация</b>' +
     '<form id="profileEditorForm">' +
@@ -2076,7 +2078,7 @@ function renderMyProfilePage(){
     (isStudent ? renderMyProductBlock() : '') +
   '</div>';
 
-  html += '<div class="card" style="padding:18px 20px;margin-bottom:14px;">' +
+  html += '<div class="card" style="padding:18px 20px;">' +
     '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Доступы</b>' +
     '<p class="hint" style="margin:0 0 12px;">Что вам доступно на платформе при роли «'+escapeHtml(roleLabel(me.role))+'», а что нет.</p>';
   caps.forEach(function(c){
@@ -2086,7 +2088,10 @@ function renderMyProfilePage(){
     '</div>';
   });
   html += '</div>';
+  html += '</div>';
 
+  // Правая колонка (уже) — безопасность и сеансы, не привязаны к ширине формы.
+  html += '<div>';
   html += '<div class="card" style="padding:18px 20px;margin-bottom:14px;">' +
     '<b style="font-size:14.5px;display:block;margin-bottom:14px;">Безопасность</b>' +
     '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line-2);">' +
@@ -2099,8 +2104,8 @@ function renderMyProfilePage(){
     '</div>' +
   '</div>';
 
-  html += '<div class="card" style="padding:18px 20px;margin-top:14px;">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
+  html += '<div class="card" style="padding:18px 20px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:8px;">' +
       '<b style="font-size:14.5px;">Текущие сеансы</b>' +
       '<button class="btn btn-sm btn-ghost" data-action="logout-everywhere">Выйти со всех устройств</button>' +
     '</div>' +
@@ -2111,12 +2116,13 @@ function renderMyProfilePage(){
     html += '<p style="font-size:12.5px;color:var(--muted);">Сеансов пока нет.</p>';
   } else {
     mySessionsList.forEach(function(s){
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line-2);flex-wrap:wrap;gap:6px;">' +
-        '<span style="font-size:13px;">'+escapeHtml(s.device)+'</span>' +
-        '<span style="font-size:12px;color:var(--muted);font-family:var(--mono);">'+escapeHtml(s.ip||"—")+' · '+fmtDate(s.createdAt)+' '+fmtTime(s.createdAt)+'</span>' +
+      html += '<div style="padding:8px 0;border-bottom:1px solid var(--line-2);">' +
+        '<div style="font-size:13px;">'+escapeHtml(s.device)+'</div>' +
+        '<div style="font-size:12px;color:var(--muted);font-family:var(--mono);margin-top:2px;">'+escapeHtml(s.ip||"—")+' · '+fmtDate(s.createdAt)+' '+fmtTime(s.createdAt)+'</div>' +
       '</div>';
     });
   }
+  html += '</div>';
   html += '</div>';
 
   html += '</div>';

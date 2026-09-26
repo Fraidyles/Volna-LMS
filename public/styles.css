@@ -415,8 +415,13 @@ table.roster tbody tr:hover{background:var(--surface-2);}
    всеми ~20 модалками приложения, так что анимация подхватывается везде сама. */
 @keyframes overlayFadeIn{0%{opacity:0;}100%{opacity:1;}}
 @keyframes drawerSlideIn{0%{opacity:0;transform:translateX(28px);}100%{opacity:1;transform:translateX(0);}}
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;display:flex;justify-content:flex-end;animation:overlayFadeIn .18s ease both;}
-.drawer{width:min(560px,100%);background:var(--bg);height:100%;overflow-y:auto;box-shadow:var(--shadow-lift);border-left:var(--border-hairline);animation:drawerSlideIn .28s cubic-bezier(.16,1,.3,1) both;}
+/* align-items:flex-start (не stretch по умолчанию) — панель прижимается к
+   содержимому и не растягивается на весь экран пустым фоном, когда контента
+   на пару строк (например карточка одного эфира в календаре). max-height
+   вместо height на .drawer при этом сохраняет прежнее поведение для длинных
+   форм — упираются в высоту экрана и скроллятся внутри, как и раньше. */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;display:flex;justify-content:flex-end;align-items:flex-start;animation:overlayFadeIn .18s ease both;}
+.drawer{width:min(560px,100%);background:var(--bg);max-height:100%;overflow-y:auto;box-shadow:var(--shadow-lift);border-left:var(--border-hairline);animation:drawerSlideIn .28s cubic-bezier(.16,1,.3,1) both;}
 .drawer-head{padding:22px 24px;border-bottom:var(--border-hairline);display:flex;justify-content:space-between;align-items:flex-start;position:sticky;top:0;background:var(--bg);}
 .drawer-body{padding:22px 24px;}
 
