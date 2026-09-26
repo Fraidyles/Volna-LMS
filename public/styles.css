@@ -949,3 +949,48 @@ tr.row-link{cursor:pointer;}
 table.roster .row-open{opacity:0;transition:opacity .15s;}
 table.roster tr:hover .row-open,table.roster .row-open:focus-visible{opacity:1;}
 @media (hover:none){table.roster .row-open{opacity:1;}}
+
+/* ---------------- Курсы: плитки ---------------- */
+.courses-head{display:flex;align-items:baseline;gap:10px;margin-bottom:12px;}
+.courses-count{font-size:12.5px;color:var(--muted-2);}
+.courses-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;align-items:stretch;}
+.course-tile{padding:18px 20px;display:flex;flex-direction:column;gap:10px;min-height:190px;}
+.course-tile-top{display:flex;align-items:center;gap:10px;}
+.course-tile-icon{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;background:var(--primary-tint);color:var(--primary);flex-shrink:0;}
+.course-tile-badge{font-size:11.5px;color:var(--muted);padding:3px 9px;border-radius:999px;border:var(--border-hairline);background:var(--surface-2);}
+.course-tile-actions{margin-left:auto;display:flex;gap:4px;opacity:0;transition:opacity .15s;}
+.course-tile-actions .btn{padding:4px 9px;font-size:12px;}
+.course-tile:hover .course-tile-actions,.course-tile:focus-within .course-tile-actions{opacity:1;}
+@media (hover:none){.course-tile-actions{opacity:1;}}
+.course-tile-title{font-size:16px;font-weight:700;line-height:1.3;}
+.course-tile-stats{display:flex;gap:28px;}
+.course-tile-stats div{display:flex;flex-direction:column;}
+.course-tile-stats b{font-size:20px;font-weight:800;letter-spacing:-.02em;}
+.course-tile-stats span{font-size:12px;color:var(--muted);}
+.course-tile-foot{margin-top:auto;padding-top:10px;border-top:1px solid var(--line-2);}
+.course-cert{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted-2);}
+.course-cert.on{color:var(--ink);}
+.course-cert.on .ic{color:var(--status-done);}
+.course-check{display:flex;align-items:center;gap:8px;font-size:13px;margin:0 0 4px;}
+.course-tile-btns{display:flex;gap:8px;margin-top:auto;}
+.course-tile-warn{font-size:13px;color:var(--muted);line-height:1.55;margin:0;}
+.course-tile-new{min-height:190px;border:1.5px dashed var(--line);border-radius:var(--radius-m);background:transparent;color:var(--muted);
+  font:600 14px var(--sans);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;transition:border-color .15s,color .15s,background .15s;}
+.course-tile-new span{width:40px;height:40px;border-radius:50%;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:400;}
+.course-tile-new:hover{border-color:color-mix(in srgb,var(--primary) 55%,transparent);color:var(--ink);background:color-mix(in srgb,var(--primary) 5%,transparent);}
+
+/* ---------------- Выпадающие списки (вместо системного списка опций) ---------------- */
+select.input,select{-webkit-appearance:none;appearance:none;cursor:pointer;padding-right:34px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239E9EA8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 10l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;background-size:16px;}
+.sel-pop{position:fixed;z-index:210;max-height:min(320px,60vh);overflow-y:auto;padding:6px;background:var(--surface);border:var(--border-hairline);
+  border-radius:var(--radius-m);box-shadow:var(--shadow-lift);font-family:var(--sans);animation:fadeUp .16s cubic-bezier(.16,1,.3,1);}
+:root:not([data-theme="light"]) .sel-pop{background-image:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,0) 40%);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),var(--shadow-lift);}
+.sel-opt{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border:none;border-radius:10px;background:transparent;color:var(--ink);
+  font:500 13.5px var(--sans);text-align:left;cursor:pointer;white-space:nowrap;}
+.sel-opt span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;}
+.sel-opt:hover{background:var(--surface-2);}
+.sel-opt.on{background:var(--primary-tint);font-weight:600;}
+.sel-opt .ic{color:var(--primary);width:15px;height:15px;flex-shrink:0;}
+.sel-opt:disabled{opacity:.4;cursor:default;background:none;}
+.sel-group{font-size:11px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--muted-2);padding:8px 12px 4px;}

@@ -683,9 +683,66 @@ document.addEventListener("keydown", function(e){
 window.addEventListener("resize", function(){ if(datePop) placeDatePicker(); });
 window.addEventListener("scroll", function(){ if(datePop) placeDatePicker(); }, true);
 
+
+/* ============================= ВЫПАДАЮЩИЕ СПИСКИ ============================= */
+// Системный список опций <select> стилями не перекрасить (синяя подсветка,
+// системный шрифт), поэтому по клику открываем свой — в стиле платформы. Сам
+// <select> остаётся нативным: значение, формы, клавиатура (стрелки) и
+// обработчики change работают как раньше; список лишь выставляет value и шлёт
+// те же события. Закрывается при перерисовке приложения (см. render()).
+var selPop = null;
+function closeSelectPop(){ if(selPop){ selPop.el.remove(); selPop = null; } }
+function placeSelectPop(){
+  var r = selPop.sel.getBoundingClientRect(), el = selPop.el;
+  el.style.minWidth = r.width+"px";
+  var h = el.offsetHeight, w = el.offsetWidth;
+  var top = r.bottom + 6; if(top + h > window.innerHeight - 8 && r.top - h - 6 > 8) top = r.top - h - 6;
+  el.style.top = top+"px"; el.style.left = Math.min(Math.max(8, r.left), window.innerWidth - w - 8)+"px";
+}
+function openSelectPop(sel){
+  if(selPop && selPop.sel === sel){ closeSelectPop(); return; }
+  closeSelectPop(); closeDatePicker();
+  var el = document.createElement("div"); el.className = "sel-pop"; el.setAttribute("role","listbox");
+  function opt(o){
+    if(o.hidden) return '';
+    return '<button type="button" class="sel-opt'+(o.selected?' on':'')+'"'+(o.disabled?' disabled':'')+' data-i="'+o.index+'">' +
+      '<span>'+escapeHtml(o.textContent)+'</span>'+(o.selected?icon("check","ic-sm"):'')+'</button>';
+  }
+  var h = '';
+  Array.prototype.forEach.call(sel.children, function(node){
+    if(node.tagName==="OPTGROUP"){ h += '<div class="sel-group">'+escapeHtml(node.label)+'</div>'; Array.prototype.forEach.call(node.children, function(o){ h += opt(o); }); }
+    else h += opt(node);
+  });
+  el.innerHTML = h;
+  document.body.appendChild(el);
+  selPop = { el:el, sel:sel };
+  placeSelectPop();
+  var cur = el.querySelector(".sel-opt.on"); if(cur) cur.scrollIntoView({ block:"nearest" });
+  el.addEventListener("mousedown", function(e){ e.preventDefault(); });
+  el.addEventListener("click", function(e){
+    var b = e.target.closest(".sel-opt"); if(!b || b.disabled || !selPop) return;
+    var target = selPop.sel, i = +b.getAttribute("data-i");
+    closeSelectPop();
+    if(target.selectedIndex !== i){
+      target.selectedIndex = i;
+      target.dispatchEvent(new Event("input", { bubbles:true }));
+      target.dispatchEvent(new Event("change", { bubbles:true }));
+    }
+  });
+}
+document.addEventListener("mousedown", function(e){
+  var sel = e.target.closest && e.target.closest("select");
+  if(sel && !sel.multiple && !(sel.size>1) && !sel.disabled && e.button===0){ e.preventDefault(); sel.focus(); openSelectPop(sel); return; }
+  if(selPop && !e.target.closest(".sel-pop")) closeSelectPop();
+}, true);
+document.addEventListener("keydown", function(e){ if(selPop && (e.key==="Escape" || e.key==="Tab")) closeSelectPop(); }, true);
+window.addEventListener("resize", function(){ if(selPop) placeSelectPop(); });
+window.addEventListener("scroll", function(e){ if(selPop && !(e.target.closest && e.target.closest(".sel-pop"))) placeSelectPop(); }, true);
+
 function render(){
   var app = document.getElementById("app");
   closeDatePicker();
+  closeSelectPop();
   // render() полностью пересобирает DOM (app.innerHTML="") и вызывается очень часто
   // по совершенно не связанным с уроком причинам — например, поллинг уведомлений
   // каждые 30с (см. startNotificationPolling). Без этого видео на шаге "Видео"
@@ -3945,51 +4002,53 @@ function renderStaffCourseSwitcher(){
 }
 
 function renderCoursesTab(){
-  var html = '<div class="grid-2" style="align-items:flex-start;">';
-
-  html += '<div class="card" style="padding:18px 20px;">' +
-    '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Курсы</b>';
-  if(!staffState.coursesList.length){
-    html += '<div class="empty-state" style="padding:30px 10px;">Курсов пока нет.</div>';
-  }
-  staffState.coursesList.forEach(function(c){
+  // Плитки курсов на всю ширину (как потоки): название, врачи, дата создания,
+  // статус сертификатов; «Изменить»/«Удалить» — по наведению. Создание курса —
+  // пунктирная плитка «+ Новый курс», раскрывающаяся в форму.
+  var list = staffState.coursesList;
+  var html = '<div class="page-wide"><div class="courses-head"><b class="page-h" style="margin:0;">Курсы</b>' +
+    '<span class="courses-count">'+list.length+' '+ruPluralClient(list.length,"курс","курса","курсов")+'</span></div>' +
+    '<div class="courses-grid">';
+  list.forEach(function(c){
     var isEditing = staffState.courseEditorId === c.id;
     var isDeleting = staffState.courseDeleteConfirmId === c.id;
-    html += '<div style="padding:12px 0;border-bottom:1px solid var(--line-2);">';
+    var isActive = staffState.activeCourseId === c.id;
+    html += '<div class="card course-tile'+(isEditing||isDeleting?' busy':'')+'">';
     if(isEditing){
-      html += '<div class="field"><label>Название</label><input class="input" id="courseEditTitleInput" value="'+escapeHtml(staffState.courseEditorTitle)+'"></div>' +
-        '<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:8px 0;">' +
-          '<input type="checkbox" id="courseEditCertsInput"'+(staffState.courseEditorCertsEnabled?' checked':'')+'> Выдавать сертификаты по этому курсу</label>' +
-        '<div style="display:flex;gap:8px;">' +
-          '<button class="btn btn-sm btn-primary" data-action="save-course">Сохранить</button>' +
-          '<button class="btn btn-sm btn-ghost" data-action="cancel-edit-course">Отмена</button>' +
-        '</div>';
+      html += '<b class="course-tile-title">Изменить курс</b>' +
+        '<div class="field" style="margin:10px 0 8px;"><label>Название</label><input class="input" id="courseEditTitleInput" value="'+escapeHtml(staffState.courseEditorTitle)+'"></div>' +
+        '<label class="course-check"><input type="checkbox" id="courseEditCertsInput"'+(staffState.courseEditorCertsEnabled?' checked':'')+'> Выдавать сертификаты по этому курсу</label>' +
+        '<div class="course-tile-btns"><button class="btn btn-sm btn-primary" data-action="save-course">Сохранить</button>' +
+          '<button class="btn btn-sm btn-ghost" data-action="cancel-edit-course">Отмена</button></div>';
     } else if(isDeleting){
-      html += '<p style="font-size:13px;margin:0 0 8px;">Удалить курс «'+escapeHtml(c.title)+'» безвозвратно вместе со всеми уроками, тестами и прогрессом '+c.enrolledCount+' врачей? Наберите название курса, чтобы подтвердить.</p>' +
-        '<input class="input" id="courseDeleteConfirmInput" placeholder="'+escapeHtml(c.title)+'" style="margin-bottom:8px;">' +
-        '<div style="display:flex;gap:8px;">' +
-          '<button class="btn btn-sm btn-ghost" style="color:var(--danger);" data-action="confirm-delete-course" data-id="'+c.id+'">Удалить курс</button>' +
-          '<button class="btn btn-sm btn-ghost" data-action="cancel-delete-course">Отмена</button>' +
-        '</div>';
+      html += '<b class="course-tile-title">Удалить курс?</b>' +
+        '<p class="course-tile-warn">Вы уверены, что хотите удалить «'+escapeHtml(c.title)+'» безвозвратно вместе со всеми уроками, тестами и прогрессом '+c.enrolledCount+' '+ruPluralClient(c.enrolledCount,"врача","врачей","врачей")+'? Для подтверждения наберите название курса.</p>' +
+        '<input class="input" id="courseDeleteConfirmInput" placeholder="'+escapeHtml(c.title)+'" style="margin-bottom:10px;">' +
+        '<div class="course-tile-btns"><button class="btn btn-sm btn-danger" data-action="confirm-delete-course" data-id="'+c.id+'">Удалить курс</button>' +
+          '<button class="btn btn-sm btn-ghost" data-action="cancel-delete-course">Отмена</button></div>';
     } else {
-      html += '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
-        '<div style="flex:1;min-width:160px;"><b style="font-size:13.8px;display:block;">'+escapeHtml(c.title)+'</b>' +
-          '<span style="font-size:12px;color:var(--muted);">'+c.enrolledCount+' '+ruPluralClient(c.enrolledCount,"врач","врача","врачей")+' · сертификаты: '+(c.certificatesEnabled?"включены":"выключены")+'</span></div>' +
-        '<button class="btn btn-sm btn-ghost" data-action="edit-course-open" data-id="'+c.id+'">Изменить</button>' +
-        '<button class="btn btn-sm btn-ghost" data-action="delete-course-open" data-id="'+c.id+'">Удалить</button>' +
-      '</div>';
+      html += '<div class="course-tile-top"><span class="course-tile-icon">'+icon("folder")+'</span>' +
+          (isActive ? '<span class="course-tile-badge">выбран сейчас</span>' : '') +
+          '<div class="course-tile-actions"><button class="btn btn-sm btn-ghost" data-action="edit-course-open" data-id="'+c.id+'">Изменить</button>' +
+          '<button class="btn btn-sm btn-ghost" data-action="delete-course-open" data-id="'+c.id+'">Удалить</button></div></div>' +
+        '<b class="course-tile-title">'+escapeHtml(c.title)+'</b>' +
+        '<div class="course-tile-stats">' +
+          '<div><b data-count="'+c.enrolledCount+'">'+c.enrolledCount+'</b><span>'+ruPluralClient(c.enrolledCount,"врач","врача","врачей")+'</span></div>' +
+          '<div><b>'+(c.createdAt?fmtDateShort(c.createdAt):"—")+'</b><span>создан</span></div>' +
+        '</div>' +
+        '<div class="course-tile-foot"><span class="course-cert'+(c.certificatesEnabled?' on':'')+'">'+icon("badge","ic-sm")+'Сертификаты '+(c.certificatesEnabled?"выдаются":"выключены")+'</span></div>';
     }
     html += '</div>';
   });
-  html += '</div>';
-
-  html += '<div class="card" style="padding:18px 20px;">' +
-    '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Новый курс</b>' +
-    '<form id="createCourseForm">' +
-      '<div class="field"><label>Название</label><input class="input" name="title" required></div>' +
-      '<button class="btn btn-primary btn-block" type="submit">Создать</button>' +
-    '</form>' +
-  '</div></div>';
+  if(staffState.showCreateCourse){
+    html += '<div class="card course-tile busy"><b class="course-tile-title">Новый курс</b>' +
+      '<form id="createCourseForm" style="margin-top:10px;"><div class="field"><label>Название</label><input class="input" name="title" required placeholder="Например, «Пептидная терапия»"></div>' +
+      '<div class="course-tile-btns"><button class="btn btn-sm btn-primary" type="submit">Создать</button>' +
+      '<button class="btn btn-sm btn-ghost" type="button" data-action="toggle-create-course">Отмена</button></div></form></div>';
+  } else {
+    html += '<button type="button" class="course-tile-new" data-action="toggle-create-course"><span>+</span>Новый курс</button>';
+  }
+  html += '</div></div>';
   return el(html);
 }
 
@@ -4614,6 +4673,7 @@ function wireEvents(root){
       }
       return;
     }
+    if(action==="toggle-create-course"){ staffState.showCreateCourse=!staffState.showCreateCourse; render(); if(staffState.showCreateCourse){ var ci=document.querySelector('#createCourseForm input'); if(ci) ci.focus(); } return; }
     if(action==="edit-course-open"){
       var ecId=t.getAttribute("data-id");
       var ecCourse=staffState.coursesList.find(function(c){return c.id===ecId;});
@@ -5664,7 +5724,7 @@ function wireEvents(root){
       var fdcc=new FormData(e.target); var btncc=e.target.querySelector("button[type=submit]"); btncc.disabled=true; btncc.textContent="Создаём…";
       try{
         var newC=await api("/courses", { method:"POST", body: JSON.stringify({ title:fdcc.get("title") }) });
-        staffState.activeCourseId=newC.id;
+        staffState.activeCourseId=newC.id; staffState.showCreateCourse=false;
         await loadStaffData();
         showToast("Курс создан — теперь добавьте уроки на странице «Учебные материалы»");
       }
