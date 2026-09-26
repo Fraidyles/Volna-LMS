@@ -810,3 +810,11 @@ table.roster tbody tr:hover{background:var(--surface-2);}
 @media (max-width:900px){.pp-grid{grid-template-columns:1fr;}}
 .sched-actions a.btn{text-decoration:none;}
 .pp-points > div:first-child{align-items:center !important;}
+
+/* Спираль ДНК внизу «Моего прогресса» (startDnaDecor в app.js): закреплена у
+   нижнего края окна, лежит под контентом, сверху растворяется. */
+.dna-decor{position:fixed;left:64px;right:0;bottom:0;height:34vh;z-index:0;pointer-events:none;opacity:.85;
+  -webkit-mask-image:linear-gradient(180deg,transparent,#000 35%);mask-image:linear-gradient(180deg,transparent,#000 35%);}
+.dna-decor canvas{width:100%;height:100%;display:block;}
+.dna-decor ~ .shell{position:relative;z-index:1;}
+@media (max-width:640px){.dna-decor{left:52px;}}

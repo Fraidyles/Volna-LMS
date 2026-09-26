@@ -1316,6 +1316,64 @@ function addSideFlow(main){
   });
 }
 
+// Спираль ДНК (два витка по центру): медленно вращается, звенья по одному плавно
+// меняются цветами (фиолет ↔ бирюза), вдоль проходит мягкая волна подсветки.
+// Canvas в родном разрешении экрана. Состояние звеньев живёт вне функции, чтобы
+// 30-секундная перерисовка приложения не перетасовывала узор скачком; фаза
+// вращения берётся от времени страницы — тоже без скачков.
+var dnaPairs = [];
+function startDnaDecor(host){
+  var cv = document.createElement("canvas"); host.appendChild(cv);
+  var ctx = cv.getContext("2d");
+  var cs = getComputedStyle(document.documentElement);
+  var light = document.documentElement.getAttribute("data-theme") === "light";
+  function toRgb(h){ h = h.trim().replace("#",""); if(h.length===3) h = h.split("").map(function(c){ return c+c; }).join(""); var n = parseInt(h,16); return [n>>16&255, n>>8&255, n&255]; }
+  var V = toRgb(cs.getPropertyValue("--primary")), T = toRgb(cs.getPropertyValue("--teal"));
+  function mix(a,b,k){ return a.map(function(x,i){ return Math.round(x+(b[i]-x)*k); }); }
+  function rgba(c,a){ return "rgba("+c[0]+","+c[1]+","+c[2]+","+a+")"; }
+  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var W = 0, H = 0;
+  function size(){ var dpr = Math.min(2, window.devicePixelRatio||1); W = host.clientWidth; H = host.clientHeight; cv.width = W*dpr; cv.height = H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
+  size();
+  var TURNS = 2, PERIOD = 300, STEP = 20, LEN = TURNS*PERIOD, last = 0;
+  function pair(i){ return dnaPairs[i] || (dnaPairs[i] = { k: Math.random()<.5?0:1, to:null, from:0, t0:0 }); }
+  function env(u){ return Math.pow(Math.sin(Math.PI*u), .7); }
+  function fade(u){ return Math.min(1, Math.sin(Math.PI*u)*1.6); }
+  function frame(ts){
+    if(!host.isConnected) return;
+    if(host.clientWidth !== W || host.clientHeight !== H) size();
+    var t = ts/1000;
+    ctx.clearRect(0,0,W,H);
+    var x0 = (W-LEN)/2, mid = H*.56, A = Math.min(52, H*.24), k = Math.PI*2/PERIOD;
+    var spin = reduce ? 0 : t*.35, wave = ((t*70) % (LEN+500)) - 250, n = Math.floor(LEN/STEP);
+    if(!reduce && ts-last > 700){ last = ts; var pr = pair(1+Math.floor(Math.random()*(n-1))); if(pr.to===null){ pr.from = pr.k; pr.to = 1-pr.k; pr.t0 = t; } }
+    [1,-1].forEach(function(sg){ [0,1].forEach(function(pass){
+      ctx.beginPath();
+      for(var u=0; u<=1.0001; u+=1/240){ var x = x0+u*LEN, y = mid+sg*Math.sin(u*LEN*k+spin)*A*env(u); if(u) ctx.lineTo(x,y); else ctx.moveTo(x,y); }
+      var g = ctx.createLinearGradient(x0,0,x0+LEN,0), cA = sg>0?V:T, cB = sg>0?T:V, al = pass ? (light?.5:.7) : (light?.12:.18);
+      g.addColorStop(0, rgba(cA,0)); g.addColorStop(.18, rgba(cA,al)); g.addColorStop(.82, rgba(cB,al)); g.addColorStop(1, rgba(cB,0));
+      ctx.strokeStyle = g; ctx.lineWidth = pass?2:9; ctx.lineCap = "round"; ctx.stroke();
+    }); });
+    for(var i=1; i<n; i++){
+      var u = i/n, x = x0+u*LEN, ph = u*LEN*k+spin;
+      var y1 = mid+Math.sin(ph)*A*env(u), y2 = mid-Math.sin(ph)*A*env(u), ym = (y1+y2)/2, depth = (Math.cos(ph)+1)/2;
+      var p = pair(i);
+      if(p.to!==null){ var q = Math.min(1,(t-p.t0)/2); p.k = p.from+(p.to-p.from)*(q*q*(3-2*q)); if(q>=1){ p.k = p.to; p.to = null; } }
+      var glow = Math.max(0, 1-Math.abs(u*LEN-wave)/140);
+      var a = fade(u)*((light?.16:.2)+depth*(light?.3:.42)+glow*.3);
+      var c1 = mix(V,T,p.k), c2 = mix(V,T,1-p.k);
+      ctx.lineWidth = 1.6+depth*1.4; ctx.lineCap = "round";
+      ctx.strokeStyle = rgba(c1,a); ctx.beginPath(); ctx.moveTo(x,y1); ctx.lineTo(x,ym); ctx.stroke();
+      ctx.strokeStyle = rgba(c2,a); ctx.beginPath(); ctx.moveTo(x,ym); ctx.lineTo(x,y2); ctx.stroke();
+      ctx.shadowBlur = 8+glow*10;
+      [[y1,c1],[y2,c2]].forEach(function(d){ ctx.shadowColor = rgba(d[1],.8); ctx.fillStyle = rgba(d[1], Math.min(1,a+.15)); ctx.beginPath(); ctx.arc(x, d[0], 1.8+depth*1.8, 0, 7); ctx.fill(); });
+      ctx.shadowBlur = 0;
+    }
+    if(!reduce) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
 function renderStudentShell(){
   var wrap = el('<div></div>');
   var mobNavBackdrop = renderMobileNavBackdrop();
@@ -1327,6 +1385,12 @@ function renderStudentShell(){
     main.appendChild(el('<div style="background:var(--accent);color:#1B1A14;text-align:center;padding:10px 16px;font-size:13.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;">'+icon("eye")+' Режим просмотра «глазами врача» — изменения не сохраняются</div>'));
   }
   if(course && studentState.tab === "lesson") addSideFlow(main);
+  // Внизу «Моего прогресса» под карточками — анимированная спираль ДНК (декор).
+  if(course && studentState.tab === "progress"){
+    var dnaHost = el('<div class="dna-decor" aria-hidden="true"></div>');
+    main.appendChild(dnaHost);
+    startDnaDecor(dnaHost);
+  }
   var shell = el('<div class="shell"><div class="wrap" id="studentContent"></div></div>');
   main.appendChild(shell);
   var content = shell.querySelector("#studentContent");
