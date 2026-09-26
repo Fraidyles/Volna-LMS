@@ -818,3 +818,25 @@ table.roster tbody tr:hover{background:var(--surface-2);}
 .dna-decor canvas{width:100%;height:100%;display:block;}
 .dna-decor ~ .shell{position:relative;z-index:1;}
 @media (max-width:640px){.dna-decor{left:52px;}}
+
+/* Материалы обучения: плитки в две колонки, вся плитка кликабельна. */
+.mat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+.mat-item{display:flex;flex-direction:column;gap:8px;padding:16px 18px;border-radius:var(--radius-m);border:var(--border-hairline);background:var(--surface-2);cursor:pointer;transition:border-color .15s,background .15s;}
+.mat-item:hover{border-color:color-mix(in srgb,var(--primary) 45%,transparent);}
+.mat-item.locked{cursor:default;opacity:.7;}
+.mat-item.locked:hover{border-color:var(--line);}
+.mat-item.next{border-color:color-mix(in srgb,var(--primary) 35%,transparent);}
+.mat-head{display:flex;align-items:flex-start;gap:10px;}
+.mat-head b{flex:1;font-size:14px;font-weight:600;line-height:1.35;}
+.mat-star{padding:4px 8px;flex-shrink:0;margin:-4px -6px 0 0;}
+.mat-item p{margin:0;font-size:12.5px;color:var(--muted);line-height:1.55;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.mat-foot{display:flex;align-items:center;gap:14px;margin-top:auto;padding-top:4px;font-size:12px;color:var(--muted-2);}
+.mat-status,.mat-dur{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;}
+.mat-status .ic,.mat-dur .ic{width:13px;height:13px;}
+.mat-status.done{color:var(--muted);}
+.mat-status.done .ic{color:var(--status-done);}
+.mat-status.next{color:var(--primary);font-weight:600;}
+.mat-open{margin-left:auto;font-size:12.5px;font-weight:600;color:var(--ink);opacity:0;transition:opacity .15s;}
+.mat-item:hover .mat-open,.mat-item:focus-within .mat-open{opacity:1;}
+@media (hover:none){.mat-open{opacity:1;}}
+@media (max-width:800px){.mat-grid{grid-template-columns:1fr;}}

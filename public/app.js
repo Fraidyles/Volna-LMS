@@ -1759,7 +1759,10 @@ function renderStudentMaterials(){
     items = items.filter(function(it){ return it.lesson.title.toLowerCase().indexOf(qLower)!==-1 || it.text.toLowerCase().indexOf(qLower)!==-1; });
   }
 
-  var html = '<div style="margin-top:6px;max-width:720px;">' +
+  var doneIds = (course.progress && course.progress.completed_lessons) || [];
+  var nextIdx = -1;
+  course.lessons.forEach(function(l,i){ if(nextIdx<0 && doneIds.indexOf(l.id)===-1 && !l.hiddenForMe && !l.dripLockedForMe) nextIdx = i; });
+  var html = '<div class="page-wide">' +
     '<div class="card" style="padding:18px 20px;">' +
       '<b style="font-size:14.5px;display:block;margin-bottom:12px;">Материалы обучения</b>' +
       '<input class="input" id="materialsSearchInput" placeholder="Искать по названию или тексту урока…" value="'+escapeHtml(studentState.materialsSearch)+'" style="margin-bottom:12px;">' +
@@ -1771,18 +1774,27 @@ function renderStudentMaterials(){
   if(!items.length){
     html += '<div class="empty-state" style="padding:30px 10px;">'+(q?'Ничего не нашлось по запросу «'+escapeHtml(q)+'».':(studentState.materialsFilter==="bookmarked"?'Вы ещё ничего не сохранили. Откройте урок и нажмите на закладку.':'Материалов пока нет.'))+'</div>';
   } else {
+    // Плитки в две колонки: вся плитка кликабельна, «Открыть» — по наведению
+    // (девять одинаковых кнопок подряд рябили); спокойная пометка статуса и длительность.
+    html += '<div class="mat-grid">';
     items.forEach(function(it){
       var l = it.lesson;
       var isLocked = l.hiddenForMe || l.dripLockedForMe;
-      html += '<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--line-2);">' +
-        '<button class="btn btn-sm btn-ghost" style="padding:6px 9px;flex-shrink:0;" data-action="toggle-bookmark" data-id="'+l.id+'" data-bookmarked="'+(it.isBookmarked?"1":"0")+'" title="'+(it.isBookmarked?"Убрать из моих материалов":"Сохранить в мои материалы")+'">'+(it.isBookmarked?"★":"☆")+'</button>' +
-        '<div style="flex:1;min-width:0;">' +
-          '<b style="font-size:13.5px;display:block;">'+(it.idx+1)+'. '+escapeHtml(l.title)+(isLocked?' '+magnet("neutral","недоступен"):'')+'</b>' +
-          '<span style="font-size:12.5px;color:var(--muted);line-height:1.5;">'+escapeHtml(snippetAround(it.text,q))+'</span>' +
+      var isDone = doneIds.indexOf(l.id)!==-1, isNext = it.idx===nextIdx;
+      var status = isDone ? '<span class="mat-status done">'+icon("check","ic-sm")+'пройден</span>'
+        : isLocked ? '<span class="mat-status">'+icon("lock","ic-sm")+(l.hiddenForMe?'недоступен':'откроется '+fmtDate(l.availableAt))+'</span>'
+        : isNext ? '<span class="mat-status next">текущий</span>' : '';
+      html += '<div class="mat-item'+(isLocked?' locked':'')+(isNext?' next':'')+'"'+(isLocked?'':' data-action="goto-lesson-from-materials" data-idx="'+it.idx+'"')+'>' +
+        '<div class="mat-head">' +
+          '<b>'+(it.idx+1)+'. '+escapeHtml(l.title)+'</b>' +
+          '<button class="btn btn-sm btn-ghost mat-star" data-action="toggle-bookmark" data-id="'+l.id+'" data-bookmarked="'+(it.isBookmarked?"1":"0")+'" title="'+(it.isBookmarked?"Убрать из моих материалов":"Сохранить в мои материалы")+'">'+(it.isBookmarked?"★":"☆")+'</button>' +
         '</div>' +
-        (isLocked ? '' : '<button class="btn btn-sm btn-ghost" style="flex-shrink:0;" data-action="goto-lesson-from-materials" data-idx="'+it.idx+'">Открыть →</button>') +
+        '<p>'+escapeHtml(snippetAround(it.text,q))+'</p>' +
+        '<div class="mat-foot">'+status+(l.duration?'<span class="mat-dur">'+icon("clock","ic-sm")+escapeHtml(l.duration)+'</span>':'')+
+          (isLocked ? '' : '<span class="mat-open">Открыть →</span>')+'</div>' +
       '</div>';
     });
+    html += '</div>';
   }
   html += '</div></div>';
   return el(html);
