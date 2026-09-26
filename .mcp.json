@@ -6,7 +6,7 @@
       "env": {
         "IMAGE_MODEL": "flux",
         "OUTPUT_DIR": "./public/generated-images",
-        "POLLINATIONS_API_KEY": ""
+        "POLLINATIONS_API_KEY": "${POLLINATIONS_API_KEY}"
       }
     }
   }
