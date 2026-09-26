@@ -3218,6 +3218,14 @@ function renderDashboardTab(){
   return el(html);
 }
 
+// Мягкий оттенок аватарки по имени — чтобы строки подряд не сливались в одинаковые
+// фиолетовые кружки. Только приглушённые тинты из палитры (без красного).
+var AVATAR_TONES = ["--primary","--teal","--status-attention","--status-done","--status-active"];
+function avatarTone(name){
+  var h = 0; String(name||"").split("").forEach(function(c){ h = (h*31 + c.charCodeAt(0)) >>> 0; });
+  var v = AVATAR_TONES[h % AVATAR_TONES.length];
+  return "background:color-mix(in srgb,var("+v+") 18%,transparent);color:var("+v+");";
+}
 function daysSince(iso){ if(!iso) return 0; return Math.floor((Date.now()-new Date(iso).getTime())/86400000); }
 
 // Два разных сигнала «пора обратить внимание», сведённые в одну карточку сверху
@@ -3232,10 +3240,16 @@ function renderInboxCard(){
 
   if(inbox.inactive.length){
     html += '<div class="inbox-group">'+magnet("attention","Неактивны 7+ дней");
+    // Вся строка кликабельна, «Открыть» проявляется при наведении — семь одинаковых
+    // кнопок подряд рябили. Дни без входа — нейтральная «таблетка» справа (без
+    // красного/жёлтого: сортировка и так от самых давних).
     inbox.inactive.forEach(function(r){
-      html += '<div class="inbox-row">' +
-        '<div class="avatar">'+initials(r.name)+'</div>' +
-        '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(r.name)+'</b><span style="font-size:12px;color:var(--muted);">не заходил(а) '+daysSince(r.last_seen)+' дн.</span></div>' +
+      var st = (staffState.students||[]).find(function(x){ return x.id===r.id; });
+      var stream = st && st.stream_id ? calendarState.streams.find(function(x){ return x.id===st.stream_id; }) : null;
+      html += '<div class="inbox-row inbox-row-link" data-action="open-student" data-id="'+r.id+'">' +
+        '<div class="avatar" style="'+avatarTone(r.name)+'">'+initials(r.name)+'</div>' +
+        '<div class="inbox-who"><b>'+escapeHtml(r.name)+'</b><small>'+escapeHtml(stream ? stream.name : "Без потока")+'</small></div>' +
+        '<span class="days-pill"><b>'+daysSince(r.last_seen)+'</b> дн. без входа</span>' +
         '<button class="btn btn-sm btn-ghost" data-action="open-student" data-id="'+r.id+'">Открыть</button>' +
       '</div>';
     });
@@ -3265,12 +3279,15 @@ function renderStaffStats(){
     if(typeof s.quiz_score==="number"){ scoreSum+=s.quiz_score; scoreCount++; }
   });
   var avg = scoreCount ? Math.round(scoreSum/scoreCount) : null;
+  // Полоса-доля под каждой цифрой — чтобы было видно, много это или мало.
+  function share(n){ return total ? Math.round(n/total*100) : 0; }
+  function bar(pct){ return '<div class="stat-bar"><i style="width:'+pct+'%"></i></div>'; }
   return el(
     '<div class="stat-row">' +
-      '<div class="card stat"><div class="num" data-count="'+total+'">'+total+'</div><div class="lbl">Врачей зарегистрировано</div></div>' +
-      '<div class="card stat"><div class="num" data-count="'+inProgress+'">'+inProgress+'</div><div class="lbl">Проходят курс сейчас</div></div>' +
-      '<div class="card stat"><div class="num" data-count="'+completed+'">'+completed+'</div><div class="lbl">Завершили демо-курс</div></div>' +
-      '<div class="card stat"><div class="num"'+(avg===null?'':' data-count="'+avg+'" data-suffix="%"')+'>'+(avg===null?'—':avg+'%')+'</div><div class="lbl">Средний балл теста</div></div>' +
+      '<div class="card stat"><div class="num" data-count="'+total+'">'+total+'</div><div class="lbl">Врачей зарегистрировано</div>'+bar(total?100:0)+'</div>' +
+      '<div class="card stat"><div class="num" data-count="'+inProgress+'">'+inProgress+'</div><div class="lbl">Проходят курс сейчас'+(total?' · <b>'+share(inProgress)+'%</b>':'')+'</div>'+bar(share(inProgress))+'</div>' +
+      '<div class="card stat"><div class="num" data-count="'+completed+'">'+completed+'</div><div class="lbl">Завершили демо-курс'+(total?' · <b>'+share(completed)+'%</b>':'')+'</div>'+bar(share(completed))+'</div>' +
+      '<div class="card stat"><div class="num"'+(avg===null?'':' data-count="'+avg+'" data-suffix="%"')+'>'+(avg===null?'—':avg+'%')+'</div><div class="lbl">Средний балл теста</div>'+bar(avg||0)+'</div>' +
     '</div>'
   );
 }
