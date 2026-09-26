@@ -1084,3 +1084,55 @@ select.input,select{-webkit-appearance:none;appearance:none;cursor:pointer;paddi
 .team-side .courses-head,.team-main .courses-head{margin-bottom:-2px;}
 .co-grid > .co-lessons{height:100%;}
 a.btn{text-decoration:none;}
+
+/* ---------------- Настройки ---------------- */
+.theme-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.theme-card{border:1.5px solid var(--line);border-radius:var(--radius-m);background:transparent;padding:10px;cursor:pointer;display:flex;flex-direction:column;gap:10px;text-align:left;font-family:var(--sans);transition:border-color .15s;}
+.theme-card:hover{border-color:color-mix(in srgb,var(--primary) 45%,transparent);}
+.theme-card.on{border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 18%,transparent);}
+.theme-prev{height:78px;border-radius:12px;padding:10px;display:grid;grid-template-columns:22px 1fr;grid-template-rows:1fr 1fr;gap:6px;}
+.theme-prev.dark{background:#121214;}
+.theme-prev.light{background:#F6F6F8;border:1px solid #E5E5EA;}
+.theme-prev i{border-radius:6px;}
+.theme-prev i:first-child{grid-row:span 2;}
+.theme-prev.dark i{background:#1B1B1F;} .theme-prev.dark i:nth-child(2){background:linear-gradient(90deg,#8B6BFF,#3FD0C9);opacity:.8;}
+.theme-prev.light i{background:#fff;border:1px solid #EDEDF1;} .theme-prev.light i:nth-child(2){background:linear-gradient(90deg,#6F52E0,#17A398);opacity:.75;border:none;}
+.theme-label{display:flex;align-items:center;gap:6px;font-size:13.5px;font-weight:600;color:var(--ink);}
+.theme-label em{margin-left:auto;font-style:normal;font-size:11.5px;font-weight:500;color:var(--primary);}
+.set-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;border-bottom:1px solid var(--line-2);}
+.set-row b{display:block;font-size:13.5px;font-weight:600;}
+.set-row span{font-size:12.5px;color:var(--muted);}
+.set-sessions{display:flex;flex-direction:column;gap:2px;}
+.set-session{display:flex;align-items:center;gap:12px;padding:8px 0;}
+.set-dev{width:32px;height:32px;border-radius:10px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;color:var(--muted);flex-shrink:0;}
+.set-session b{display:block;font-size:13px;font-weight:600;}
+.set-session b em{font-style:normal;font-weight:500;font-size:11px;color:var(--status-active);margin-left:6px;}
+.set-session span{font-size:12px;color:var(--muted);}
+.set-muted{font-size:12.5px;color:var(--muted);margin:0;}
+.set-account{display:flex;flex-direction:column;align-items:center;text-align:center;gap:2px;}
+.set-av{width:72px;height:72px;font-size:24px;margin:6px 0 10px;}
+.set-name{font-size:17px;font-weight:700;}
+.set-mail{font-size:13px;color:var(--muted);}
+.set-facts{width:100%;margin:16px 0;border-top:1px solid var(--line-2);}
+.set-facts div{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);font-size:13px;}
+.set-facts span{color:var(--muted);}
+.set-facts b{font-weight:600;text-align:right;}
+
+/* ---------------- Уведомления куратора: лента ---------------- */
+.feed-day{font-size:11.5px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--muted-2);margin:16px 0 4px;}
+.feed-row{display:flex;align-items:center;gap:12px;padding:8px 8px;margin:0 -8px;border-radius:var(--radius-s);}
+.feed-link{cursor:pointer;}
+.feed-link:hover{background:var(--surface-2);}
+.feed-ic{width:30px;height:30px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--surface-2);color:var(--muted);}
+.feed-ic.reg{background:var(--primary-tint);color:var(--primary);}
+.feed-ic.crt{background:var(--status-done-tint);color:var(--status-done);}
+.feed-ic.live{background:var(--teal-tint);color:var(--teal);}
+.feed-text{flex:1;min-width:0;font-size:13.5px;color:var(--muted);}
+.feed-text b{color:var(--ink);font-weight:600;}
+.feed-time{font-size:12px;color:var(--muted-2);white-space:nowrap;}
+.att-row{display:flex;align-items:center;gap:12px;padding:12px 10px;margin:0 -10px;border-radius:var(--radius-s);cursor:pointer;border-bottom:1px solid var(--line-2);}
+.att-row:last-child{border-bottom:none;}
+.att-row:hover{background:var(--surface-2);}
+.att-row b{font-size:20px;font-weight:800;min-width:34px;letter-spacing:-.02em;}
+.att-row span{flex:1;font-size:13px;color:var(--muted);}
+.att-row em{font-style:normal;color:var(--muted-2);}

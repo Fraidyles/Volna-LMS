@@ -59,7 +59,7 @@ var scheduleModal = { open:false, lessonId:null, lessonTitle:"", search:"", sele
 var telegramModal = { open:false };
 var notifState = { items:[], unreadCount:0 };
 var mySessionsList = [];
-var mySessionsLoaded = false;
+var mySessionsLoaded = false, mySessionsLoading = false;
 var studentProtocols = { forYou:[], additional:[] };
 var protocolExpanded = {}; // id протокола -> открыта ли карточка гайда
 var protocolGuideTab = {}; // id протокола -> id специализации выбранного гайда (переключатель "показать другие")
@@ -2620,25 +2620,41 @@ function renderMyProfilePage(){
 }
 
 function renderSettingsPage(){
+  // Слева — внешний вид (превью тем) и безопасность (пароль, сеансы с устройствами),
+  // справа — карточка аккаунта. Сеансы подгружаются лениво при первом открытии.
   var isDark = getTheme()==="dark";
-  var html = '<div style="margin-top:6px;max-width:520px;">' +
-    '<div class="card" style="padding:18px 20px;">' +
-      '<b style="font-size:14.5px;display:block;margin-bottom:14px;">Настройки</b>' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line-2);">' +
-        '<span style="font-size:13.5px;">Тема оформления</span>' +
-        '<button class="btn btn-sm btn-ghost" data-action="toggle-theme">'+icon(isDark?"sun":"moon")+(isDark?"Светлая":"Тёмная")+'</button>' +
-      '</div>' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line-2);">' +
-        '<span style="font-size:13.5px;">Пароль</span>' +
-        '<button class="btn btn-sm btn-ghost" data-action="open-change-password">Сменить пароль</button>' +
-      '</div>' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;">' +
-        '<span style="font-size:13.5px;">Активные сеансы</span>' +
-        '<button class="btn btn-sm btn-ghost" data-action="logout-everywhere">Выйти со всех устройств</button>' +
-      '</div>' +
-    '</div>';
-  html += '</div>';
-  return el(html);
+  if(!mySessionsLoaded && !mySessionsLoading){ mySessionsLoading = true; loadMySessions().then(function(){ mySessionsLoading = false; render(); }); }
+  function themeCard(key, label){
+    var on = (key==="dark") === isDark;
+    return '<button type="button" class="theme-card'+(on?' on':'')+'" data-action="set-theme" data-theme="'+key+'">' +
+      '<span class="theme-prev '+key+'"><i></i><i></i><i></i></span>' +
+      '<span class="theme-label">'+icon(key==="dark"?"moon":"sun","ic-sm")+label+(on?'<em>выбрана</em>':'')+'</span></button>';
+  }
+  var left = '<div class="pp-col">' +
+    '<div class="card co-card"><b class="co-card-title">Внешний вид</b><div class="theme-cards">'+themeCard("dark","Тёмная")+themeCard("light","Светлая")+'</div></div>' +
+    '<div class="card co-card"><b class="co-card-title">Безопасность</b>' +
+      '<div class="set-row"><div><b>Пароль</b><span>Меняйте пароль, если входили с чужого устройства.</span></div><button class="btn btn-sm btn-ghost" data-action="open-change-password">Сменить пароль</button></div>' +
+      '<div class="set-row" style="border-bottom:none;"><div><b>Активные сеансы</b><span>С каких устройств входили в аккаунт.</span></div><button class="btn btn-sm btn-ghost" data-action="logout-everywhere">Выйти со всех устройств</button></div>' +
+      '<div class="set-sessions">';
+  if(!mySessionsLoaded) left += '<p class="set-muted">Загрузка…</p>';
+  else if(!mySessionsList.length) left += '<p class="set-muted">Сеансов пока нет.</p>';
+  else mySessionsList.slice(0,6).forEach(function(se, i){
+    left += '<div class="set-session"><span class="set-dev">'+icon("user","ic-sm")+'</span><div><b>'+escapeHtml(se.device||"Устройство")+(i===0?' <em>это устройство</em>':'')+'</b>' +
+      '<span>'+escapeHtml(se.ip||"—")+' · '+fmtDateShort(se.createdAt)+', '+fmtTime(se.createdAt)+'</span></div></div>';
+  });
+  left += '</div></div></div>';
+  var right = '<div class="pp-col"><div class="card co-card set-account">' +
+    '<div class="avatar set-av" style="'+avatarTone(me.name)+'">'+initials(me.name)+'</div>' +
+    '<b class="set-name">'+escapeHtml(me.name||"")+'</b><span class="set-mail">'+escapeHtml(me.email||"")+'</span>' +
+    '<span class="team-role" style="margin-top:6px;">'+escapeHtml(roleLabel(me.role))+'</span>' +
+    '<div class="set-facts">' +
+      (me.phone?'<div><span>Телефон</span><b>'+escapeHtml(me.phone)+'</b></div>':'') +
+      (me.workplace?'<div><span>Место работы</span><b>'+escapeHtml(me.workplace)+'</b></div>':'') +
+      (me.created_at?'<div><span>На платформе с</span><b>'+fmtDateShort(me.created_at)+'</b></div>':'') +
+    '</div>' +
+    '<button class="btn btn-sm btn-ghost btn-block" style="margin-top:auto;" data-action="sidebar-nav" data-key="profile">Открыть профиль →</button>' +
+  '</div></div>';
+  return el('<div class="page-wide pp-grid">'+left+right+'</div>');
 }
 
 /* ============================= РЕНДЕР: ПЕРСОНАЛ ============================= */
@@ -2708,17 +2724,50 @@ function renderStaffShell(){
 // показываем то немногое, что уже можно посчитать на лету (напоминания об эфирах),
 // и пустое состояние вместо выдуманной ленты.
 function renderStaffNotificationsPage(){
-  var reminders = upcomingEventReminders();
-  var html = '<div style="margin-top:6px;max-width:760px;"><div class="card" style="padding:18px 20px;">' +
-    '<b style="font-size:14.5px;display:block;margin-bottom:14px;">Уведомления</b>';
-  if(!reminders.length){
-    html += '<div class="empty-state" style="padding:30px 10px;">У вас нет новых уведомлений.</div>';
+  // Лента событий за 14 дней, собранная из уже загруженных данных: регистрации,
+  // заявки на полную программу, завершение демо-курса, выданные сертификаты,
+  // напоминания об эфирах. Справа — что требует внимания и ближайшие эфиры.
+  var students = staffState.students || [];
+  var since = Date.now() - 14*86400000;
+  var feed = upcomingEventReminders().map(function(r){ return { t:Date.now(), kind:"live", icon:"calendar", text:escapeHtml(r.title) }; });
+  students.forEach(function(st){
+    var nm = '<b>'+escapeHtml(st.name)+'</b>';
+    if(st.created_at && new Date(st.created_at).getTime()>=since) feed.push({ t:new Date(st.created_at).getTime(), kind:"reg", icon:"user", text:nm+' зарегистрировался(-ась)'+(specNames(st)?' · '+escapeHtml(specNames(st)):''), id:st.id });
+    if(st.certificate_issued_at && new Date(st.certificate_issued_at).getTime()>=since) feed.push({ t:new Date(st.certificate_issued_at).getTime(), kind:"crt", icon:"badge", text:nm+' получил(-а) сертификат', id:st.id });
+  });
+  feed.sort(function(a,b){ return b.t-a.t; });
+  var html = '<div class="page-wide pp-grid"><div class="pp-col"><div class="card co-card"><div class="co-head"><b>Лента событий</b><span class="courses-count">за 14 дней</span></div>';
+  if(!feed.length){
+    html += '<div class="empty-state" style="padding:40px 10px;">За две недели событий не было.</div>';
   } else {
-    reminders.forEach(function(n){
-      html += '<div style="padding:12px 0;border-bottom:1px solid var(--line-2);"><b style="font-size:13.5px;">'+escapeHtml(n.title)+'</b></div>';
+    var lastDay = "";
+    feed.slice(0,40).forEach(function(f){
+      var d = new Date(f.t), day = d.toDateString()===new Date().toDateString() ? "Сегодня" : d.toLocaleDateString("ru-RU",{weekday:"long",day:"numeric",month:"long"});
+      if(day!==lastDay){ html += '<div class="feed-day">'+day+'</div>'; lastDay = day; }
+      html += '<div class="feed-row'+(f.id?' feed-link':'')+'"'+(f.id?' data-action="open-student" data-id="'+f.id+'"':'')+'>' +
+        '<span class="feed-ic '+f.kind+'">'+icon(f.icon,"ic-sm")+'</span><span class="feed-text">'+f.text+'</span>' +
+        '<span class="feed-time">'+(f.kind==="live"?"скоро":fmtTime(d.toISOString()))+'</span></div>';
     });
   }
   html += '</div></div>';
+  // Справа
+  var inbox = staffState.inbox || {inactive:[],pendingCertificates:[]};
+  var reqFull = students.filter(function(st){ return st.requested_full_access; });
+  html += '<div class="pp-col"><div class="card co-card"><b class="co-card-title">Требует внимания</b>' +
+    '<div class="att-row" data-action="sidebar-nav" data-key="students"><b>'+inbox.inactive.length+'</b><span>не заходили 7+ дней</span><em>→</em></div>' +
+    '<div class="att-row" data-action="sidebar-nav" data-key="students"><b>'+inbox.pendingCertificates.length+'</b><span>ждут сертификат</span><em>→</em></div>' +
+    '<div class="att-row" data-action="sidebar-nav" data-key="students"><b>'+reqFull.length+'</b><span>'+ruPluralClient(reqFull.length,"заявка","заявки","заявок")+' на полную программу</span><em>→</em></div></div>';
+  var now = new Date();
+  var evs = (calendarState.events||[]).filter(function(ev){ return new Date(ev.event_date+"T"+(ev.event_time||"00:00"))>=now; })
+    .sort(function(a,b){ return (a.event_date+a.event_time).localeCompare(b.event_date+b.event_time); }).slice(0,4);
+  html += '<div class="card co-card"><div class="co-head"><b>Ближайшие эфиры</b><button class="btn btn-sm btn-ghost" data-action="sidebar-nav" data-key="calendar">Расписание →</button></div>';
+  if(!evs.length) html += '<p class="set-muted" style="margin-top:12px;">Эфиры не запланированы.</p>';
+  evs.forEach(function(ev){
+    var d = new Date(ev.event_date+"T00:00:00"), st = ev.stream_id ? calendarState.streams.find(function(x){ return x.id===ev.stream_id; }) : null;
+    html += '<div class="sched-row"><div class="sched-date"><b>'+d.getDate()+'</b><span>'+d.toLocaleDateString("ru-RU",{month:"short"}).replace(".","")+'</span></div>' +
+      '<div class="sched-info"><b>'+escapeHtml(ev.title)+'</b><span>'+escapeHtml(ev.event_time||"")+' · '+escapeHtml(st?st.name:"все потоки")+'</span></div></div>';
+  });
+  html += '</div></div></div>';
   return el(html);
 }
 
@@ -4341,6 +4390,7 @@ function wireEvents(root){
     if(action==="go-register"){ view="register"; registerDraft={name:"",email:"",phone:"",password:"",staffInviteCode:"",specializationIds:[],interestIds:[]}; specPickerOpen=null; render(); return; }
     if(action==="go-login"){ view="login"; render(); return; }
     if(action==="logout"){ stopNotificationPolling(); stopHeartbeat(); sendOfflineBeacon(); await api("/auth/logout", { method:"POST" }); me=null; course=null; view="login"; mySessionsList=[]; mySessionsLoaded=false; studentProtocols={forYou:[],additional:[]}; protocolExpanded={}; protocolGuideTab={}; render(); return; }
+    if(action==="set-theme"){ var nt=t.getAttribute("data-theme"); if(nt!==getTheme()){ localStorage.setItem("lms-theme", nt); applyTheme(); } render(); return; }
     if(action==="toggle-theme"){ toggleTheme(); render(); return; }
     if(action==="mark-notif-read"){
       var nid=t.getAttribute("data-id");
