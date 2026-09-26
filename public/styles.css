@@ -723,7 +723,24 @@ table.roster tbody tr:hover{background:var(--surface-2);}
 .cal-chip.live::before{background:var(--status-live);animation:pulse-ring 1.8s ease-in-out infinite;}
 .cal-more{font-size:10px;color:var(--muted-2);padding-left:2px;flex-shrink:0;}
 @media (max-width:700px){.cal-grid{grid-auto-rows:78px;}.cal-cell{height:78px;padding:5px;gap:2px;}.cal-daynum{width:18px;height:18px;font-size:11px;}.cal-chip{font-size:9.5px;}}
-.stream-card{border:var(--border-hairline);border-radius:var(--radius-s);padding:10px 14px;min-width:170px;}
+.streams-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;}
+.stream-card{border:var(--border-hairline);border-radius:var(--radius-m);padding:14px 16px;background:var(--surface-2);display:flex;flex-direction:column;gap:6px;min-width:0;}
+.stream-name{font-size:14px;font-weight:600;line-height:1.35;}
+.stream-foot{display:flex;align-items:center;gap:8px;min-height:30px;}
+.stream-actions{display:flex;gap:4px;margin-left:auto;flex-shrink:0;opacity:0;transition:opacity .15s;}
+.stream-actions .btn{padding:4px 9px;font-size:12px;}
+.stream-card:hover .stream-actions,.stream-card:focus-within .stream-actions,.stream-card.editing .stream-actions{opacity:1;}
+@media (hover:none){.stream-actions{opacity:1;}}
+.stream-meta{font-size:12.5px;color:var(--muted);}
+.stream-tg{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink);text-decoration:none;min-width:0;margin-top:2px;}
+.stream-tg span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.stream-tg .ic{color:var(--teal);width:14px;height:14px;flex-shrink:0;}
+a.stream-tg:hover span{text-decoration:underline;}
+.stream-tg.off{color:var(--muted-2);}
+.stream-tg.off .ic{color:var(--muted-2);}
+.stream-edit{display:flex;flex-direction:column;gap:8px;margin-top:4px;}
+.stream-edit .input{width:100%;padding:8px 11px;font-size:13px;}
+.stream-edit-btns{display:flex;gap:6px;align-items:center;}
 
 /* ---------------- Журнал действий ---------------- */
 .audit-when{color:var(--muted);white-space:nowrap;font-size:12.5px;}
@@ -893,3 +910,6 @@ input[type="date"]:invalid::-webkit-datetime-edit,input[type="date"]:not(:focus)
 .dp-foot{display:flex;justify-content:space-between;margin-top:8px;padding-top:8px;border-top:1px solid var(--line-2);}
 .dp-link{border:none;background:none;color:var(--muted);font:600 12.5px var(--sans);padding:6px 8px;border-radius:8px;cursor:pointer;}
 .dp-link:hover{color:var(--ink);background:var(--surface-2);}
+.stream-foot{position:relative;}
+.stream-foot .stream-actions{position:absolute;right:0;top:50%;transform:translateY(-50%);background:var(--surface-2);padding-left:10px;box-shadow:-14px 0 12px var(--surface-2);}
+.stream-card:not(:hover):not(:focus-within) .stream-foot .stream-actions{pointer-events:none;}

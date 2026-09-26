@@ -1161,7 +1161,7 @@ function renderTelegramModal(){
   } else {
     var streams = calendarState.streams || [];
     if(!streams.length){
-      body += '<div class="empty-state" style="padding:30px 10px;">Потоков пока нет — создайте их на странице «Расписание».</div>';
+      body += '<div class="empty-state" style="padding:30px 10px;">Потоков пока нет — создайте их на странице «Ученики».</div>';
     } else {
       body += '<p style="font-size:13.5px;color:var(--muted);margin:0 0 14px;">Общение с врачами — в Telegram-группах их потоков.</p>';
       streams.forEach(function(s){
@@ -1172,7 +1172,7 @@ function renderTelegramModal(){
             : '<span style="font-size:12px;color:var(--muted);">ссылка не добавлена</span>') +
         '</div>';
       });
-      body += '<p class="hint" style="margin-top:12px;">Добавить или изменить ссылку — на странице «Расписание».</p>';
+      body += '<p class="hint" style="margin-top:12px;">Добавить или изменить ссылку — на странице «Ученики», блок «Потоки».</p>';
     }
   }
   body += '</div>';
@@ -2623,6 +2623,7 @@ function renderStaffShell(){
     content.appendChild(renderInboxCard());
     content.appendChild(renderStaffStats());
     content.appendChild(renderCertificateQueue());
+    content.appendChild(el(renderStreamsPanel()));
     content.appendChild(renderRoster());
   } else {
     addSideFlow(main);
@@ -2770,7 +2771,7 @@ function renderStaffHome(container){
 }
 
 function renderCalendarTab(){
-  return el('<div style="margin-top:6px;">' + renderStreamsPanel() + renderMonthCalendar() + '</div>');
+  return el('<div style="margin-top:6px;">' + renderMonthCalendar() + '</div>');
 }
 
 function renderStreamsPanel(){
@@ -2793,20 +2794,26 @@ function renderStreamsPanel(){
   if(!streams.length){
     html += '<p style="font-size:13px;color:var(--muted);margin:0;">Пока нет ни одного потока.</p>';
   } else {
-    html += '<div style="display:flex;flex-wrap:wrap;gap:10px;">';
+    // Компактная карточка: название, старт, число врачей, Telegram одной строкой.
+    // Поле ссылки открывается по «Изменить», «Изменить»/«Удалить» — по наведению.
+    html += '<div class="streams-grid">';
     streams.forEach(function(s){
-      html += '<div class="stream-card"><b style="font-size:13.5px;display:block;">'+escapeHtml(s.name)+'</b>' +
-        '<span style="font-size:12px;color:var(--muted);">старт: '+(s.start_date?fmtDate(s.start_date):"—")+' · '+(countsByStream[s.id]||0)+' врачей</span><br>' +
-        (s.telegram_url
-          ? '<a class="btn btn-sm btn-primary" style="margin-top:8px;display:inline-block;" href="'+escapeHtml(s.telegram_url)+'" target="_blank" rel="noopener">Открыть Telegram-группу →</a>'
-          : '') +
-        '<div style="display:flex;gap:6px;margin-top:8px;">' +
-          '<input class="input" style="flex:1;" data-stream-telegram-input data-id="'+s.id+'" value="'+escapeHtml(s.telegram_url||"")+'" placeholder="Ссылка на Telegram-группу">' +
-          '<button class="btn btn-sm btn-ghost" data-action="save-stream-telegram" data-id="'+s.id+'">Сохранить</button>' +
-        '</div>' +
-        '<div style="margin-top:8px;">' +
-          '<button class="btn btn-sm btn-ghost" data-action="delete-stream" data-id="'+s.id+'">Удалить поток</button>' +
-        '</div></div>';
+      var editing = calendarState.editingStreamId === s.id;
+      var tg = s.telegram_url ? String(s.telegram_url).replace(/^https?:\/\//,"") : "";
+      var actions = '<div class="stream-actions">' +
+            (editing ? '' : '<button class="btn btn-sm btn-ghost" data-action="edit-stream" data-id="'+s.id+'">Изменить</button>') +
+            '<button class="btn btn-sm btn-ghost" data-action="delete-stream" data-id="'+s.id+'">Удалить</button></div>';
+      html += '<div class="stream-card'+(editing?' editing':'')+'">' +
+        '<b class="stream-name">'+escapeHtml(s.name)+'</b>' +
+        '<span class="stream-meta">старт: '+(s.start_date?fmtDate(s.start_date):"—")+' · '+(countsByStream[s.id]||0)+' врачей</span>' +
+        (editing
+          ? '<div class="stream-edit"><input class="input" data-stream-telegram-input data-id="'+s.id+'" value="'+escapeHtml(s.telegram_url||"")+'" placeholder="Ссылка на Telegram-группу, https://t.me/…">' +
+              '<div class="stream-edit-btns"><button class="btn btn-sm btn-primary" data-action="save-stream-telegram" data-id="'+s.id+'">Сохранить</button>' +
+              '<button class="btn btn-sm btn-ghost" data-action="cancel-edit-stream">Отмена</button>'+actions+'</div></div>'
+          : '<div class="stream-foot">' + (s.telegram_url
+              ? '<a class="stream-tg" href="'+escapeHtml(s.telegram_url)+'" target="_blank" rel="noopener">'+icon("message","ic-sm")+'<span>'+escapeHtml(tg)+'</span> ↗</a>'
+              : '<span class="stream-tg off">'+icon("message","ic-sm")+'Telegram не подключён</span>') + actions + '</div>') +
+      '</div>';
     });
     html += '</div>';
   }
@@ -5096,6 +5103,8 @@ function wireEvents(root){
       render(); return;
     }
 
+    if(action==="edit-stream"){ calendarState.editingStreamId=t.getAttribute("data-id"); render(); var ei=document.querySelector('[data-stream-telegram-input]'); if(ei) ei.focus(); return; }
+    if(action==="cancel-edit-stream"){ calendarState.editingStreamId=null; render(); return; }
     if(action==="toggle-stream-form"){ calendarState.showStreamForm=!calendarState.showStreamForm; render(); return; }
     if(action==="delete-stream"){
       try{ await api("/streams/"+t.getAttribute("data-id"), { method:"DELETE" }); await loadCalendarData(); showToast("Поток удалён"); }catch(err){ showToast(err.message); }
@@ -5109,6 +5118,7 @@ function wireEvents(root){
         await api("/streams/"+stId, { method:"PATCH", body: JSON.stringify({ telegramUrl: stUrl }) });
         var stObj=calendarState.streams.find(function(s){ return s.id===stId; });
         if(stObj) stObj.telegram_url = stUrl || null;
+        calendarState.editingStreamId = null;
         showToast("Ссылка сохранена");
       }catch(err){ showToast(err.message); }
       render(); return;
