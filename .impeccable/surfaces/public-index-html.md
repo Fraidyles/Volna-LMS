@@ -152,12 +152,16 @@ Fixed: dark `--muted-2` raised to `#86868F` (5.19:1); light `--muted-2` raised t
 hardcoded hex in `index.html`'s pre-JS loading fallback that the CSS variable change didn't
 reach. Re-verified: zero warning/slop findings remain.
 
-## Open follow-up (not built)
+## Open follow-up — auth illustrations: done
 
-Illustrations (the reference's hand-drawn character art) are out of scope for this session: no
-image-generation tool or configured Stitch MCP is available here (checked directly, twice).
-Documented in DESIGN.md's "Open follow-up" section rather than faked with SVG sketch art, which
-craft-floor explicitly bans as reading amateur.
+Previously blocked (no image generation available). Now built: two FLUX.1-dev illustrations
+(`public/generated-images/auth-login.webp`, `auth-register.webp`) replace the radial glow in the
+auth screen's left panel, framed in a `--radius-l` tile (`.onb-art`). Pollinations (the MCP in
+`.mcp.json`) was tried first but its npm package is blocked in the sandbox and the paid API ran
+out of balance; the free anonymous tier only serves a low-quality model with a watermark. AI
+Horde worked for free but output was visibly soft. Final images came from the Hugging Face
+FLUX.1-dev Space with a user token. The Apple logo FLUX drew on the laptop lid was painted over.
+Verified in both themes at 1440×900. Still open: empty-state illustrations.
 
 ---
 

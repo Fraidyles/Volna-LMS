@@ -288,12 +288,12 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
 
 /* ---------------- Вход / приглашение ---------------- */
 .onb-shell{min-height:100vh;display:grid;grid-template-columns:1.05fr 1fr;background:var(--bg);}
-.onb-left{background:var(--surface);padding:56px;display:flex;flex-direction:column;justify-content:center;gap:24px;border-right:var(--border-hairline);position:relative;overflow:hidden;}
-.onb-left::before{content:"";position:absolute;inset:-20%;
-  background:radial-gradient(ellipse 55% 45% at 78% 18%, color-mix(in srgb, var(--primary) 32%, transparent), transparent 60%),
-             radial-gradient(ellipse 50% 40% at 8% 92%, color-mix(in srgb, var(--status-live) 16%, transparent), transparent 60%);
-  filter:blur(60px);}
-.onb-left > *{position:relative;z-index:1;}
+.onb-left{background:var(--surface);padding:56px;display:flex;flex-direction:column;justify-content:center;gap:40px;border-right:var(--border-hairline);}
+/* Иллюстрация вместо прежнего радиального свечения. Картинка нарисована на своём
+   тёмном фоне, поэтому она всегда в скруглённой плитке — в светлой теме это
+   читается как тёмная bento-карточка, а не как вырезанный кусок фона. */
+.onb-art{margin:0;max-width:520px;border-radius:var(--radius-l);overflow:hidden;border:var(--border-hairline);background:#44444e;box-shadow:var(--shadow);animation:fadeUp .5s cubic-bezier(.16,1,.3,1) both;}
+.onb-art img{display:block;width:100%;height:auto;}
 .onb-left h1{font-size:38px;line-height:1.2;max-width:440px;color:var(--ink);font-weight:600;}
 .onb-left p{font-size:16px;color:var(--muted);max-width:400px;line-height:1.6;}
 .onb-right{display:flex;align-items:center;justify-content:center;padding:40px 24px;}
