@@ -529,6 +529,7 @@ function applyGlow(){
 // экран + порядковый номер элемента; при переходе на другой экран сбрасывается.
 // Разметка уже содержит итоговое значение, так что без JS/при reduced-motion
 // просто показывается результат.
+var lastRenderScreen = null;
 var animSeen = {}, animScreen = "", animTimers = [], animRun = 0;
 // Поочерёдно: следующий элемент стартует, когда закончился предыдущий (порядок —
 // как на экране). Пока ждёт очереди, стоит на нуле. Процент внутри кольца идёт
@@ -609,8 +610,80 @@ document.addEventListener("pointermove", function(e){
   c.style.setProperty("--my", (e.clientY - r.top)+"px");
 }, { passive:true });
 
+
+/* ============================= КАЛЕНДАРЬ ДЛЯ ПОЛЕЙ ДАТЫ ============================= */
+// Системный выпадающий календарь браузера стилями не перекрасить, поэтому для всех
+// <input type="date"> открываем свой — в стиле платформы. Само поле остаётся
+// нативным (значение YYYY-MM-DD, ввод с клавиатуры, отправка форм, обработчики
+// change/input работают как раньше): календарь лишь подставляет дату и шлёт те же
+// события. Закрывается при перерисовке приложения (см. render()).
+var datePop = null;
+var DP_MONTHS = ["Январь","Февраль","Март","Апрель","Май","Июнь","Июль","Август","Сентябрь","Октябрь","Ноябрь","Декабрь"];
+function dpIso(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function dpParse(v){ var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v||""); return m ? new Date(+m[1], +m[2]-1, +m[3]) : null; }
+function closeDatePicker(){ if(datePop){ datePop.el.remove(); datePop = null; } }
+function setDateValue(input, v){
+  input.value = v;
+  input.dispatchEvent(new Event("input", { bubbles:true }));
+  input.dispatchEvent(new Event("change", { bubbles:true }));
+}
+function renderDatePicker(){
+  var st = datePop, input = st.input, sel = dpParse(input.value), today = new Date(); today.setHours(0,0,0,0);
+  var min = dpParse(input.min), max = dpParse(input.max);
+  var y = st.view.getFullYear(), m = st.view.getMonth();
+  var first = new Date(y, m, 1), shift = (first.getDay()+6)%7, start = new Date(y, m, 1-shift);
+  var h = '<div class="dp-head"><button type="button" class="dp-nav" data-dp="prev" aria-label="Предыдущий месяц">‹</button>' +
+    '<b>'+DP_MONTHS[m]+' '+y+'</b><button type="button" class="dp-nav" data-dp="next" aria-label="Следующий месяц">›</button></div><div class="dp-grid">';
+  ["Пн","Вт","Ср","Чт","Пт","Сб","Вс"].forEach(function(w){ h += '<span class="dp-wd">'+w+'</span>'; });
+  for(var i=0;i<42;i++){
+    var d = new Date(start); d.setDate(start.getDate()+i);
+    var off = (min && d<min) || (max && d>max);
+    h += '<button type="button" class="dp-day'+(d.getMonth()!==m?' out':'')+(+d===+today?' today':'')+(sel && +d===+sel?' sel':'')+'"'+(off?' disabled':'')+' data-dp="day" data-v="'+dpIso(d)+'">'+d.getDate()+'</button>';
+  }
+  h += '</div><div class="dp-foot"><button type="button" class="dp-link" data-dp="clear">Очистить</button><button type="button" class="dp-link" data-dp="today">Сегодня</button></div>';
+  st.el.innerHTML = h;
+}
+function placeDatePicker(){
+  var r = datePop.input.getBoundingClientRect(), el = datePop.el, w = el.offsetWidth, hgt = el.offsetHeight;
+  var top = r.bottom + 6; if(top + hgt > window.innerHeight - 8 && r.top - hgt - 6 > 8) top = r.top - hgt - 6;
+  var left = Math.min(Math.max(8, r.left), window.innerWidth - w - 8);
+  el.style.top = top+"px"; el.style.left = left+"px";
+}
+function openDatePicker(input){
+  if(datePop && datePop.input === input){ closeDatePicker(); return; }
+  closeDatePicker();
+  var el = document.createElement("div"); el.className = "dp-pop"; el.setAttribute("role","dialog");
+  document.body.appendChild(el);
+  datePop = { el:el, input:input, view: dpParse(input.value) || new Date() };
+  datePop.view = new Date(datePop.view.getFullYear(), datePop.view.getMonth(), 1);
+  renderDatePicker(); placeDatePicker();
+  el.addEventListener("mousedown", function(e){ e.preventDefault(); });  // фокус остаётся в поле
+  el.addEventListener("click", function(e){
+    var b = e.target.closest("[data-dp]"); if(!b || !datePop) return;
+    var a = b.getAttribute("data-dp"), inp = datePop.input;
+    if(a==="prev" || a==="next"){ datePop.view.setMonth(datePop.view.getMonth() + (a==="prev"?-1:1)); renderDatePicker(); placeDatePicker(); return; }
+    if(a==="day"){ closeDatePicker(); setDateValue(inp, b.getAttribute("data-v")); return; }
+    if(a==="today"){ closeDatePicker(); setDateValue(inp, dpIso(new Date())); return; }
+    if(a==="clear"){ closeDatePicker(); setDateValue(inp, ""); return; }
+  });
+}
+document.addEventListener("click", function(e){
+  var inp = e.target.closest && e.target.closest('input[type="date"]');
+  if(inp && !inp.disabled && !inp.readOnly){ e.preventDefault(); openDatePicker(inp); return; }
+  if(datePop && !e.target.closest(".dp-pop")) closeDatePicker();
+}, true);
+document.addEventListener("keydown", function(e){
+  if(!datePop) return;
+  if(e.key==="Escape"){ closeDatePicker(); }
+  else if(e.target === datePop.input && e.key!=="Tab") { /* ручной ввод — календарь не мешает */ }
+  else if(e.key==="Tab") closeDatePicker();
+}, true);
+window.addEventListener("resize", function(){ if(datePop) placeDatePicker(); });
+window.addEventListener("scroll", function(){ if(datePop) placeDatePicker(); }, true);
+
 function render(){
   var app = document.getElementById("app");
+  closeDatePicker();
   // render() полностью пересобирает DOM (app.innerHTML="") и вызывается очень часто
   // по совершенно не связанным с уроком причинам — например, поллинг уведомлений
   // каждые 30с (см. startNotificationPolling). Без этого видео на шаге "Видео"
@@ -625,6 +698,19 @@ function render(){
   // начинались бы заново — заметный скачок. Отрицательная задержка = время с
   // загрузки страницы, так что после перерисовки они продолжают с того же места.
   document.documentElement.style.setProperty("--anim-t", (-performance.now()/1000).toFixed(2)+"s");
+  // Анимации появления не должны проигрываться заново при перерисовке (а она
+  // случается на каждый клик и каждые 30с по опросу уведомлений) — иначе открытая
+  // карточка врача/модалка заново «выезжает», статусы по всей таблице заново
+  // «всплывают», и экран мигает. Запоминаем, что уже было на экране.
+  var prevOverlays = {};
+  app.querySelectorAll(".overlay").forEach(function(o){
+    var sc = o.querySelector(".drawer") || o.firstElementChild;
+    prevOverlays[o.getAttribute("data-action")||""] = { top: sc ? sc.scrollTop : 0 };
+  });
+  var hadBackdrop = !!app.querySelector(".sidebar-backdrop");
+  var screenKey = view+"|"+(view==="student" ? studentState.tab : (view==="staff" ? staffState.mainTab : ""));
+  var sameScreen = screenKey === lastRenderScreen;
+  lastRenderScreen = screenKey;
   var node;
   applyGlow();
   if(view === "loading") node = el('<div style="min-height:100vh;"></div>');
@@ -681,6 +767,15 @@ function render(){
   if(confirmState && (view==="student"||view==="staff")){
     app.appendChild(renderConfirmModal());
   }
+  app.classList.toggle("rerender", sameScreen);
+  app.querySelectorAll(".overlay").forEach(function(o){
+    var prev = prevOverlays[o.getAttribute("data-action")||""];
+    if(!prev) return;
+    o.classList.add("no-anim");
+    var sc = o.querySelector(".drawer") || o.firstElementChild;   // и прокрутку внутри панели не сбрасываем
+    if(sc && prev.top) sc.scrollTop = prev.top;
+  });
+  if(hadBackdrop){ var bd = app.querySelector(".sidebar-backdrop"); if(bd) bd.classList.add("no-anim"); }
   wireEvents(app);
   runEntranceAnimations();
   if(view==="student" && studentState.tab==="lesson" && !studentState.quizMode && studentState.lessonStage==="video"){
