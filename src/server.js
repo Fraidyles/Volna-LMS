@@ -70,8 +70,10 @@ const cspMiddleware = helmet.contentSecurityPolicy({
     // Разметка урока (см. src/sanitize.js) хранит цвет/отступы в style="..." прямо
     // на div/span — без 'unsafe-inline' весь оформленный контент курса перестал бы
     // применять эти стили.
-    styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-    fontSrc: ["'self'", "https://fonts.gstatic.com"],
+    styleSrc: ["'self'", "'unsafe-inline'"],
+    // Шрифты теперь свои, файлами (public/fonts/) — внешний fonts.gstatic.com
+    // больше не нужен, 'self' достаточно.
+    fontSrc: ["'self'"],
     // img/src урока тоже не ограничен по домену на бэкенде — картинки в уроке могут
     // лежать на любом внешнем хосте.
     imgSrc: ["'self'", "https:", "data:"],
