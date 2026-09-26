@@ -4,7 +4,10 @@
 // только быстрый повторный запуск самого интерфейса.
 
 const CACHE_NAME = "lms-shell-v1";
-const SHELL_FILES = ["/", "/app.js", "/styles.css", "/manifest.json"];
+// Относительные пути — резолвятся от собственного URL service worker'а (self.registration.scope),
+// а не от корня домена: так кэш работает и при монтировании платформы в подпапку (например /lms/),
+// не только при отдельном (под)домене.
+const SHELL_FILES = ["./", "app.js", "styles.css", "manifest.json"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -20,11 +23,15 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+// Путь к API относительно scope этого service worker'а — тоже не хардкодим "/api/",
+// чтобы верно работать и в подпапке (scope тогда "/lms/", а API — "/lms/api/").
+const API_PATH = new URL("api/", self.registration.scope).pathname;
+
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
 
   // API и любые не-GET запросы — всегда напрямую в сеть, никогда не кэшируем
-  if (url.pathname.startsWith("/api/") || event.request.method !== "GET") {
+  if (url.pathname.startsWith(API_PATH) || event.request.method !== "GET") {
     return;
   }
 

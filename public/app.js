@@ -1,7 +1,11 @@
 (function(){
 "use strict";
 
-var API = "/api";
+// Относительный путь — резолвится от текущего URL страницы, а не от корня домена:
+// работает и на отдельном (под)домене, и при монтировании платформы в подпапку
+// (например /lms/, см. BASE_PATH в src/server.js). SPA никогда не меняет
+// window.location (нет pushState/history) — база резолвинга не съезжает при переходах.
+var API = "api";
 var ROLE_LABELS = { super_admin:"Главный администратор", admin:"Администратор", curator:"Куратор обучения", student:"Врач" };
 function roleLabel(r){ return ROLE_LABELS[r] || r || "—"; }
 function isStaffRole(r){ return r==="curator" || r==="admin" || r==="super_admin"; }
@@ -1811,7 +1815,7 @@ function renderCertificate(){
     html += '<p style="font-size:12.5px;color:var(--muted);margin:0 0 24px;">Выдан '+fmtDate(pr.certificate_issued_at)+(pr.certificate_issued_by?(' · '+escapeHtml(pr.certificate_issued_by)):'')+'</p>';
   }
   if(issued){
-    html += '<a class="btn btn-primary" href="/api/course/certificate/download?courseId='+encodeURIComponent(activeCourseId)+'" target="_blank" rel="noopener" style="margin-right:8px;">'+icon("download")+' Скачать сертификат (PDF)</a>';
+    html += '<a class="btn btn-primary" href="api/course/certificate/download?courseId='+encodeURIComponent(activeCourseId)+'" target="_blank" rel="noopener" style="margin-right:8px;">'+icon("download")+' Скачать сертификат (PDF)</a>';
   }
   html += '<button class="btn'+(issued?'':' btn-primary')+'" data-action="close-course">Вернуться к курсу</button></div></div>';
   return el(html);
@@ -2518,7 +2522,7 @@ function auditExportUrl(){
   if(auditFilters.dateFrom) params.set("dateFrom", auditFilters.dateFrom);
   if(auditFilters.dateTo) params.set("dateTo", auditFilters.dateTo);
   var qs = params.toString();
-  return "/api/staff/audit-log/export.csv"+(qs?"?"+qs:"");
+  return "api/staff/audit-log/export.csv"+(qs?"?"+qs:"");
 }
 
 function renderAuditLogTab(){
@@ -3128,8 +3132,8 @@ function renderRoster(){
     '<div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;"><input class="input" id="rosterSearch" placeholder="Поиск по имени, специализации, email или телефону" value="'+escapeHtml(staffState.search)+'" style="max-width:320px;">' +
     '<button class="btn btn-sm btn-ghost" data-action="toggle-invite-student">'+(staffState.showInviteStudent?'Скрыть':'+ Пригласить врача')+'</button>' +
     '<button class="btn btn-sm btn-ghost" data-action="toggle-import-students">'+(staffState.showImportStudents?'Скрыть импорт':'Импорт из CSV')+'</button>' +
-    '<a class="btn btn-sm btn-ghost" href="/api/staff/students/export.csv?courseId='+encodeURIComponent(staffState.activeCourseId||"")+'" target="_blank" rel="noopener">'+icon("download","ic-sm")+' Экспорт CSV</a>' +
-    '<a class="btn btn-sm btn-ghost" href="/api/staff/leads/export.csv?courseId='+encodeURIComponent(staffState.activeCourseId||"")+'" target="_blank" rel="noopener">'+icon("download","ic-sm")+' Экспорт заявок</a>' +
+    '<a class="btn btn-sm btn-ghost" href="api/staff/students/export.csv?courseId='+encodeURIComponent(staffState.activeCourseId||"")+'" target="_blank" rel="noopener">'+icon("download","ic-sm")+' Экспорт CSV</a>' +
+    '<a class="btn btn-sm btn-ghost" href="api/staff/leads/export.csv?courseId='+encodeURIComponent(staffState.activeCourseId||"")+'" target="_blank" rel="noopener">'+icon("download","ic-sm")+' Экспорт заявок</a>' +
     '<button class="btn btn-sm btn-ghost" data-action="open-course-preview">'+icon("eye","ic-sm")+' Просмотреть как врач</button></div>';
 
   if(staffState.showImportStudents){
@@ -3587,7 +3591,7 @@ function renderStudentDrawer(){
         body += '<div class="card" style="padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;">' +
           '<b style="font-size:13.5px;">Сертификат: '+(s.certificate_status==="issued"?"выдан":"ожидает выдачи")+'</b>' +
           (s.certificate_status==="issued"
-            ? '<a class="btn btn-sm btn-ghost" href="/api/staff/students/'+s.id+'/certificate/download?courseId='+encodeURIComponent(staffState.activeCourseId||"")+'" target="_blank" rel="noopener">'+icon("download","ic-sm")+' Скачать PDF</a>'
+            ? '<a class="btn btn-sm btn-ghost" href="api/staff/students/'+s.id+'/certificate/download?courseId='+encodeURIComponent(staffState.activeCourseId||"")+'" target="_blank" rel="noopener">'+icon("download","ic-sm")+' Скачать PDF</a>'
             : '<button class="btn btn-sm btn-primary" data-action="issue-certificate" data-id="'+s.id+'">Выдать сертификат</button>') +
         '</div>';
       } else {
@@ -5174,7 +5178,7 @@ init();
 // инлайновые скрипты (script-src 'self') и не ломать регистрацию service worker.
 if("serviceWorker" in navigator){
   window.addEventListener("load", function(){
-    navigator.serviceWorker.register("/sw.js").catch(function(){});
+    navigator.serviceWorker.register("sw.js").catch(function(){});
   });
 }
 })();

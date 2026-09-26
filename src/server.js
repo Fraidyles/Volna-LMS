@@ -32,6 +32,19 @@ const app = express();
 // это позволило бы обойти лимит подделкой заголовка X-Forwarded-For напрямую.
 app.set("trust proxy", 1);
 
+// Позволяет смонтировать платформу в подпапку существующего сайта (например
+// https://корп-домен/lms/) вместо отдельного (под)домена — актуально, когда
+// нет возможности завести новую DNS-запись, а на сервере уже крутится другой
+// сайт на том же порту 80/443. Пусто по умолчанию — обычный запуск в корне
+// домена (как описано в README) не меняется ни на йоту: без BASE_PATH весь
+// код ниже регистрируется на `app` напрямую, 1:1 как раньше.
+// Фронтенд (public/) все свои ссылки на себя и на API строит ОТНОСИТЕЛЬНО
+// текущей страницы (см. index.html/app.js/manifest.json/sw.js) — благодаря
+// этому ему сама переменная BASE_PATH не нужна, достаточно того, что сервер
+// корректно домонтирует API/статику по этому префиксу.
+const BASE_PATH = (process.env.BASE_PATH || "").replace(/\/+$/, "");
+const mounted = BASE_PATH ? express.Router() : app;
+
 const ALLOWED = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
   .map((s) => s.trim())
@@ -42,7 +55,7 @@ const ALLOWED = (process.env.ALLOWED_ORIGINS || "")
 // загрузку кросс-доменных ресурсов без явного CORP-заголовка от чужого сервера —
 // а урок может содержать честный сторонний iframe (см. CSP frame-src ниже и
 // src/sanitize.js, где домен iframe.src никак не ограничен).
-app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+mounted.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 
 // CSP настраиваем отдельным middleware (не через helmet({contentSecurityPolicy})
 // сразу выше), чтобы явно исключить /api-docs — Swagger UI использует инлайновые
@@ -71,14 +84,14 @@ const cspMiddleware = helmet.contentSecurityPolicy({
     formAction: ["'self'"]
   }
 });
-app.use((req, res, next) => {
+mounted.use((req, res, next) => {
   if (req.path === "/api-docs" || req.path.startsWith("/api-docs/")) return next();
   cspMiddleware(req, res, next);
 });
 
-app.use(express.json());
-app.use(cookieParser());
-app.use(
+mounted.use(express.json());
+mounted.use(cookieParser());
+mounted.use(
   cors({
     // Небезопасно по умолчанию давать true (разрешить все источники), раз тут же
     // ниже стоит credentials:true (кука входа врача уходит вместе с запросом) —
@@ -92,35 +105,35 @@ app.use(
   })
 );
 
-app.use("/api/auth", authRoutes);
-app.use("/api/invites", inviteRoutes);
-app.use("/api/staff", staffRoutes);
-app.use("/api/course", courseRoutes);
-app.use("/api/courses", coursesRoutes);
-app.use("/api/notifications", notificationRoutes);
-app.use("/api/specializations", specializationRoutes);
-app.use("/api/protocols", protocolRoutes);
-app.use("/api", calendarRoutes);
+mounted.use("/api/auth", authRoutes);
+mounted.use("/api/invites", inviteRoutes);
+mounted.use("/api/staff", staffRoutes);
+mounted.use("/api/course", courseRoutes);
+mounted.use("/api/courses", coursesRoutes);
+mounted.use("/api/notifications", notificationRoutes);
+mounted.use("/api/specializations", specializationRoutes);
+mounted.use("/api/protocols", protocolRoutes);
+mounted.use("/api", calendarRoutes);
 
 // Интерактивная документация API — удобно, когда фронтенд и бэкенд начнут жить отдельно
 // друг от друга или появится мобильное приложение.
 try {
   const openapiDoc = YAML.load(path.join(__dirname, "..", "docs", "openapi.yaml"));
-  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(openapiDoc));
+  mounted.use("/api-docs", swaggerUi.serve, swaggerUi.setup(openapiDoc));
 } catch (e) {
   console.error("Не удалось загрузить OpenAPI-документацию:", e.message);
 }
 
-app.get("/health", (req, res) => res.json({ ok: true }));
+mounted.get("/health", (req, res) => res.json({ ok: true }));
 
 // Отдаём собранный фронтенд как статику того же сервера
-app.use(express.static(path.join(__dirname, "..", "public")));
+mounted.use(express.static(path.join(__dirname, "..", "public")));
 
 // Единая ошибка для необработанных сбоев — чтобы не ронять процесс и не светить стек в ответе.
 // Ошибки самого body-parser (битый JSON, слишком большое тело) — это ошибка КЛИЕНТА,
 // а не сервера: до этого места они тоже падали в общий 500 и засоряли лог реальных
 // сбоев обычными опечатками в запросах, плюс сами клиенты получали неверный код ответа.
-app.use((err, req, res, next) => {
+mounted.use((err, req, res, next) => {
   if (err.type === "entity.too.large" || err.status === 413) {
     return res.status(413).json({ error: "payload_too_large", message: "Слишком большой запрос" });
   }
@@ -130,6 +143,20 @@ app.use((err, req, res, next) => {
   console.error("Необработанная ошибка:", err);
   res.status(500).json({ error: "internal_error", message: "Что-то пошло не так на сервере" });
 });
+
+if (BASE_PATH) {
+  // Без хвостового слэша (например /lms) все относительные ссылки на фронтенде
+  // (см. index.html/manifest.json/sw.js) резолвились бы на уровень выше —
+  // редиректим на вариант со слэшем, прежде чем отдавать саму страницу.
+  // Именно middleware с ручной проверкой req.path, а не app.get(BASE_PATH, ...):
+  // у Express по умолчанию выключен strict routing, так что route-паттерн
+  // "/lms" сам по себе матчит и "/lms/" — редирект зацикливался бы сам на себя.
+  app.use((req, res, next) => {
+    if (req.path === BASE_PATH) return res.redirect(301, BASE_PATH + "/");
+    next();
+  });
+  app.use(BASE_PATH, mounted);
+}
 
 const PORT = process.env.PORT || 8790;
 if (require.main === module) {
