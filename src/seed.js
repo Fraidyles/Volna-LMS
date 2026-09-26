@@ -21,6 +21,12 @@ const { COURSE, LESSONS, QUIZ } = require("./content");
   }
   console.log("Уроки загружены:", LESSONS.length);
 
+  // q1..q5 — вопросы старого итогового теста, написанные под плейсхолдерный текст
+  // уроков l1-l5; после замены уроков l1-l5 на реальный контент эти вопросы больше
+  // не соответствуют ничему в курсе — удаляем. Реальный итоговый тест (9 вопросов
+  // по всем урокам) заведён отдельно напрямую в БД и этим сидом не управляется.
+  await pool.query("DELETE FROM quiz_questions WHERE id IN ('q1','q2','q3','q4','q5')");
+
   for (let i = 0; i < QUIZ.length; i++) {
     const q = QUIZ[i];
     await pool.query(
