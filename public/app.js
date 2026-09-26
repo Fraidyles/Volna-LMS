@@ -593,8 +593,22 @@ function render(){
   wireEvents(app);
   if(view==="student" && studentState.tab==="lesson" && !studentState.quizMode && studentState.lessonStage==="video"){
     setTimeout(function(){ wireLessonVideo(savedVideoState); }, 0);
+  } else if(lessonPlyrInstance){
+    // Ушли со стадии "видео" — старую разметку Plyr уже снёс app.innerHTML="",
+    // так что просто отпускаем ссылку на инстанс, а не пытаемся destroy() над
+    // отсутствующими в DOM узлами.
+    lessonPlyrInstance = null;
   }
 }
+
+// Plyr переодевает стандартный <video> в свой интерфейс, но сам элемент с id
+// lessonVideoPlayer остаётся в DOM и продолжает как обычно стрелять timeupdate/
+// ended — весь код ниже (главы, восстановление позиции) написан для нативного
+// <video> и не менялся. render() пересобирает DOM целиком на каждый вызов
+// (в т.ч. на фоновый поллинг уведомлений), поэтому старый экземпляр Plyr нужно
+// явно уничтожать перед созданием нового — иначе на каждый render накапливался
+// бы ещё один живой инстанс поверх уже удалённой из DOM разметки.
+var lessonPlyrInstance = null;
 
 // Подсветка текущей главы под видео обновляется через timeupdate БЕЗ полного
 // render() на каждый тик (десятки раз в секунду) — иначе моргало бы видео и
@@ -608,6 +622,19 @@ function wireLessonVideo(savedVideoState){
   if(savedVideoState && savedVideoState.src && v.currentSrc===savedVideoState.src){
     if(savedVideoState.time>0) v.currentTime = savedVideoState.time;
     if(savedVideoState.playing) v.play().catch(function(){});
+  }
+  if(lessonPlyrInstance){ lessonPlyrInstance.destroy(); lessonPlyrInstance=null; }
+  if(typeof Plyr!=="undefined"){
+    // iconUrl по умолчанию у Plyr указывает на cdn.plyr.io — самохостим вместе с
+    // JS/CSS (см. plyr.svg в public/vendor/plyr), иначе иконки не загрузятся ни
+    // при заблокированном внешнем CDN за корпоративным файрволом, ни из-за CSP
+    // connect-src 'self' на этом сервере (см. src/server.js).
+    lessonPlyrInstance = new Plyr(v, {
+      iconUrl: "vendor/plyr/plyr.svg",
+      controls: ["play-large","play","progress","current-time","duration","mute","volume","settings","fullscreen"],
+      settings: ["speed"],
+      speed: { selected:1, options:[0.75,1,1.25,1.5,2] }
+    });
   }
   var tcs = lesson.videoTimecodes||[];
   var lastChapterId = null;
