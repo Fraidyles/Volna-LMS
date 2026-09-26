@@ -294,14 +294,14 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
    картинок — поэтому само перекрашивается в светлой теме (там ленты смешиваются
    multiply и бледнее). Чисто декоративное (aria-hidden). Геометрия лент ниже —
    базовая (экран входа); .hero-aurora переопределяет её под свою площадку. */
-.aurora .band{position:absolute;border-radius:50%;filter:blur(20px);mix-blend-mode:var(--aurora-blend,screen);animation:auroraDrift 14s ease-in-out infinite alternate;}
+.aurora .band{position:absolute;border-radius:50%;filter:blur(20px);mix-blend-mode:var(--aurora-blend,screen);animation:auroraDrift 14s ease-in-out infinite alternate;animation-delay:var(--anim-t,0s);}
 .aurora .b1{width:92%;height:16%;left:4%;top:36%;transform:rotate(-16deg);border-radius:100% 30% 100% 30%;
   background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--primary) 85%,transparent) 35%,color-mix(in srgb,var(--teal) 80%,transparent) 75%,transparent);}
-.aurora .b2{width:74%;height:10%;left:18%;top:54%;transform:rotate(-9deg);border-radius:30% 100% 30% 100%;animation-delay:-5s;
+.aurora .b2{width:74%;height:10%;left:18%;top:54%;transform:rotate(-9deg);border-radius:30% 100% 30% 100%;animation-delay:calc(var(--anim-t,0s) + -5s);
   background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--teal) 70%,transparent),transparent);}
-.aurora .b3{width:44%;height:44%;left:14%;top:10%;filter:blur(40px);opacity:.7;animation-delay:-9s;
+.aurora .b3{width:44%;height:44%;left:14%;top:10%;filter:blur(40px);opacity:.7;animation-delay:calc(var(--anim-t,0s) + -9s);
   background:radial-gradient(closest-side,color-mix(in srgb,var(--primary) 60%,transparent),transparent);}
-.aurora .b4{width:10%;height:62%;left:58%;top:14%;transform:rotate(18deg);filter:blur(22px);opacity:.55;animation-delay:-3s;
+.aurora .b4{width:10%;height:62%;left:58%;top:14%;transform:rotate(18deg);filter:blur(22px);opacity:.55;animation-delay:calc(var(--anim-t,0s) + -3s);
   background:linear-gradient(180deg,transparent,color-mix(in srgb,#fff 55%,var(--teal)),transparent);}
 .aurora .grain{position:absolute;inset:0;opacity:.22;mix-blend-mode:overlay;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
@@ -415,6 +415,48 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
 .lesson-item.active .lesson-num{border-color:var(--primary);color:var(--primary);font-weight:700;}
 .lesson-item b{font-size:13.5px;display:block;line-height:1.35;font-weight:500;color:var(--ink);}
 .lesson-item span{font-size:11.5px;color:var(--muted-2);}
+/* «Живая» навигация урока: светящаяся нить прогресса между пройденными уроками
+   (по ней медленно течёт градиент) и мягкое «дыхание» текущего урока. На узком
+   экране навигация становится горизонтальной лентой — там нить не рисуем. */
+.lesson-nav{isolation:isolate;}
+.lesson-item{position:relative;}
+.lesson-item:not(:last-child)::after{content:"";position:absolute;left:28px;top:36px;bottom:-12px;width:2px;border-radius:2px;background:var(--line);}
+.lesson-item.done::after{background:linear-gradient(180deg,var(--primary),var(--teal),var(--primary));background-size:100% 300%;
+  animation:riverFlow 6s linear infinite;animation-delay:var(--anim-t,0s);box-shadow:0 0 10px color-mix(in srgb,var(--primary) 60%,transparent);}
+@keyframes riverFlow{to{background-position:0 300%;}}
+.lesson-item.active::before{content:"";position:absolute;inset:-6px -4px;border-radius:var(--radius-m);z-index:-1;filter:blur(18px);opacity:.55;
+  background:linear-gradient(100deg,color-mix(in srgb,var(--primary) 70%,transparent),color-mix(in srgb,var(--teal) 55%,transparent));
+  animation:navBreathe 3.5s ease-in-out infinite alternate;animation-delay:var(--anim-t,0s);}
+.lesson-item.active .lesson-num{box-shadow:0 0 0 4px color-mix(in srgb,var(--primary) 22%,transparent),0 0 16px color-mix(in srgb,var(--primary) 70%,transparent);}
+@keyframes navBreathe{from{opacity:.35;transform:scale(.98);}to{opacity:.65;transform:scale(1.02);}}
+@media (max-width:800px){.lesson-item::after,.lesson-item.active::before{display:none;}}
+
+/* «Растекающийся» свет в полях страницы урока, слева и справа от карточки: мягкие
+   размытые пятна медленно меняют форму и перетекают друг в друга, каждое в своём
+   ритме (11–19с), чтобы движение не читалось как цикл и не мозолило глаз.
+   Закреплены относительно окна и лежат ПОД контентом (.lesson-flow ~ .shell).
+   Только на широком экране, где поля реально свободны. */
+.lesson-flow{position:fixed;top:-5vh;bottom:-5vh;width:300px;z-index:0;pointer-events:none;display:none;filter:blur(34px) saturate(1.05);opacity:.8;}
+@media (min-width:1360px){.lesson-flow{display:block;}}
+.lesson-flow ~ .shell{position:relative;z-index:1;}
+.lesson-flow.l{left:10px;-webkit-mask-image:linear-gradient(90deg,transparent,#000 30%,#000 60%,transparent);mask-image:linear-gradient(90deg,transparent,#000 30%,#000 60%,transparent);}
+.lesson-flow.r{right:-20px;-webkit-mask-image:linear-gradient(90deg,transparent,#000 40%,#000 70%,transparent);mask-image:linear-gradient(90deg,transparent,#000 40%,#000 70%,transparent);}
+.lesson-flow .blob{position:absolute;left:25%;width:50%;border-radius:48% 52% 60% 40% / 55% 45% 55% 45%;mix-blend-mode:var(--aurora-blend,screen);}
+.lesson-flow .f1{top:5%;height:42%;background:radial-gradient(closest-side,color-mix(in srgb,var(--primary) 85%,transparent),transparent);animation:flowA 13s ease-in-out infinite alternate;animation-delay:var(--anim-t,0s);}
+.lesson-flow .f2{top:35%;height:40%;background:radial-gradient(closest-side,color-mix(in srgb,var(--teal) 75%,transparent),transparent);animation:flowB 17s ease-in-out infinite alternate;animation-delay:var(--anim-t,0s);}
+.lesson-flow .f3{top:62%;height:36%;background:radial-gradient(closest-side,color-mix(in srgb,var(--primary) 70%,var(--teal)),transparent);animation:flowC 11s ease-in-out infinite alternate;animation-delay:var(--anim-t,0s);}
+.lesson-flow .f4{top:20%;height:60%;left:40%;width:22%;opacity:.6;background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--teal) 55%,var(--primary)),transparent);animation:flowD 19s ease-in-out infinite alternate;animation-delay:var(--anim-t,0s);}
+.lesson-flow.r .f1{animation-delay:calc(var(--anim-t,0s) + -6s);background:radial-gradient(closest-side,color-mix(in srgb,var(--teal) 75%,transparent),transparent);}
+.lesson-flow.r .f2{animation-delay:calc(var(--anim-t,0s) + -9s);background:radial-gradient(closest-side,color-mix(in srgb,var(--primary) 85%,transparent),transparent);}
+.lesson-flow.r .f3{animation-delay:calc(var(--anim-t,0s) + -4s);}
+.lesson-flow.r .f4{animation-delay:calc(var(--anim-t,0s) + -11s);}
+@keyframes flowA{0%{transform:translate(-10%,0) scale(1,1);border-radius:48% 52% 60% 40% / 55% 45% 55% 45%;}
+  50%{transform:translate(12%,14%) scale(1.25,.85);border-radius:60% 40% 45% 55% / 45% 60% 40% 55%;}
+  100%{transform:translate(-4%,26%) scale(.9,1.2);border-radius:40% 60% 55% 45% / 60% 40% 60% 40%;}}
+@keyframes flowB{0%{transform:translate(8%,-12%) scale(1.1,.9);}50%{transform:translate(-14%,6%) scale(.85,1.3);}100%{transform:translate(6%,18%) scale(1.2,1);}}
+@keyframes flowC{0%{transform:translate(0,10%) scale(.9,1.1);opacity:.7;}100%{transform:translate(-12%,-22%) scale(1.3,.9);opacity:1;}}
+@keyframes flowD{0%{transform:translateY(-12%) scaleY(.8);opacity:.35;}100%{transform:translateY(14%) scaleY(1.2);opacity:.7;}}
+:root[data-theme="light"] .lesson-flow{--aurora-blend:multiply;opacity:.4;}
 .lesson-body{padding:38px 46px;}
 @media (max-width:600px){.lesson-body{padding:26px 20px;}}
 .lesson-body h3{font-size:23px;margin:0 0 4px;}

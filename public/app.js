@@ -534,6 +534,11 @@ function render(){
   // (иначе при переходе на видео другого урока получили бы случайную перемотку).
   var prevVideo = document.getElementById("lessonVideoPlayer");
   var savedVideoState = prevVideo ? { src: prevVideo.currentSrc, time: prevVideo.currentTime, playing: !prevVideo.paused && !prevVideo.ended } : null;
+  // Приложение перерисовывается целиком (в т.ч. каждые 30с по опросу уведомлений),
+  // и без этого все декоративные анимации («сияние», свет у урока, нить прогресса)
+  // начинались бы заново — заметный скачок. Отрицательная задержка = время с
+  // загрузки страницы, так что после перерисовки они продолжают с того же места.
+  document.documentElement.style.setProperty("--anim-t", (-performance.now()/1000).toFixed(2)+"s");
   var node;
   applyGlow();
   if(view === "loading") node = el('<div style="min-height:100vh;"></div>');
@@ -1195,6 +1200,13 @@ function renderStudentShell(){
   wrap.appendChild(main);
   if(previewMode){
     main.appendChild(el('<div style="background:var(--accent);color:#1B1A14;text-align:center;padding:10px 16px;font-size:13.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;">'+icon("eye")+' Режим просмотра «глазами врача» — изменения не сохраняются</div>'));
+  }
+  // «Растекающийся» свет в полях — только на экране урока (стили .lesson-flow).
+  // Кладём ДО .shell: он закреплён относительно окна и должен лежать под контентом.
+  if(course && studentState.tab === "lesson"){
+    var flowBlobs = '<span class="blob f1"></span><span class="blob f2"></span><span class="blob f3"></span><span class="blob f4"></span>';
+    main.appendChild(el('<div class="lesson-flow l" aria-hidden="true">'+flowBlobs+'</div>'));
+    main.appendChild(el('<div class="lesson-flow r" aria-hidden="true">'+flowBlobs+'</div>'));
   }
   var shell = el('<div class="shell"><div class="wrap" id="studentContent"></div></div>');
   main.appendChild(shell);
