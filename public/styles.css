@@ -149,7 +149,19 @@ button{font-family:var(--sans);cursor:pointer;}
 /* ---------------- Боковая навигация: узкая icon-полоса, раскрывается при наведении ---------------- */
 .sidebar{position:fixed;top:0;left:0;bottom:0;width:64px;background:var(--surface);border-right:var(--border-hairline);z-index:40;display:flex;flex-direction:column;overflow:hidden;transition:width .18s cubic-bezier(.16,1,.3,1);}
 .sidebar:hover,.sidebar:focus-within{width:236px;box-shadow:var(--shadow-lift);}
+/* Раскрытый по hover/focus сайдбар — fixed-панель без подложки: без этого сдвига
+   она просто накладывалась на контент страницы и обрезала текст под собой
+   (см. .app-main ниже — margin-left двигается вместе с шириной сайдбара). */
+.app-main{transition:margin-left .18s cubic-bezier(.16,1,.3,1);}
+.sidebar:hover~.app-main,.sidebar:focus-within~.app-main{margin-left:236px;}
+.sidebar-toggle{display:none;margin-left:auto;background:none;border:none;color:var(--muted);cursor:pointer;padding:6px;flex-shrink:0;}
+.sidebar-toggle .ic{display:block;}
+.sidebar-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:39;animation:overlayFadeIn .18s ease both;}
 .sidebar-brand{display:flex;align-items:center;gap:10px;height:64px;padding:0 15px;flex-shrink:0;white-space:nowrap;border-bottom:var(--border-hairline);}
+/* Лейбл в этой строке должен уметь схлопнуться до 0, иначе .sidebar-toggle
+   (margin-left:auto) пытался бы встать через всю "естественную" ширину
+   невидимого текста и оказывался бы за пределами видимой узкой полосы. */
+.sidebar-brand .sidebar-item-label{flex:1;min-width:0;}
 .sidebar-nav{flex:1;overflow-y:auto;overflow-x:hidden;padding:8px;display:flex;flex-direction:column;gap:2px;}
 .sidebar-nav::-webkit-scrollbar{width:0;}
 .sidebar-item{display:flex;align-items:center;gap:14px;padding:11px 13px;border-radius:var(--radius-s);color:var(--muted);white-space:nowrap;position:relative;cursor:pointer;background:none;border:none;width:100%;text-align:left;font-size:13.5px;font-weight:500;font-family:var(--sans);flex-shrink:0;}
@@ -167,9 +179,18 @@ button{font-family:var(--sans);cursor:pointer;}
 .app-main{margin-left:64px;min-height:100vh;}
 @media (max-width:640px){
   .sidebar{width:52px;}
-  .sidebar:hover,.sidebar:focus-within{width:210px;}
+  /* На тач-устройстве :hover не срабатывает никогда, а :focus-within (таб с
+     внешней клавиатуры) раньше расширял сайдбар точно так же без подложки —
+     тот же баг наложения на контент. На этой ширине раскрытие только по
+     явному тапу на .sidebar-toggle (см. .sidebar.mobile-open ниже). */
+  .sidebar:hover,.sidebar:focus-within{width:52px;}
+  .sidebar:hover~.app-main,.sidebar:focus-within~.app-main{margin-left:52px;}
+  .sidebar.mobile-open{width:210px;box-shadow:var(--shadow-lift);}
+  .sidebar.mobile-open .sidebar-item-label,.sidebar.mobile-open .sidebar-item-badge{opacity:1;}
+  .sidebar.mobile-open .sidebar-item-dot{display:none;}
   .app-main{margin-left:52px;}
   .sidebar-item-dot{left:27px;}
+  .sidebar-toggle{display:flex;align-items:center;justify-content:center;}
 }
 .who{display:flex;align-items:center;gap:14px;font-size:13px;color:var(--muted);min-width:0;}
 .who .name{color:var(--ink);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:26vw;min-width:0;flex-shrink:1;}
@@ -191,6 +212,8 @@ button{font-family:var(--sans);cursor:pointer;}
    визуально не отличить от обычного текста абзаца. */
 .btn-ghost{border-color:var(--line-2);background:transparent;}
 .btn-ghost:hover{background:var(--surface-2);}
+.btn-danger{background:var(--danger);border-color:var(--danger);color:#fff;}
+.btn-danger:hover{opacity:.88;}
 .btn-sm{padding:7px 13px;font-size:13px;}
 
 /* Видео урока с главами по таймкодам */
@@ -221,7 +244,6 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
 
 /* ---------------- Вход / приглашение ---------------- */
 .onb-shell{min-height:100vh;display:grid;grid-template-columns:1.05fr 1fr;background:var(--bg);}
-@media (max-width:880px){.onb-shell{grid-template-columns:1fr;}.onb-left{display:none;}}
 .onb-left{background:var(--surface);padding:56px;display:flex;flex-direction:column;justify-content:center;gap:24px;border-right:var(--border-hairline);position:relative;overflow:hidden;}
 .onb-left::before{content:"";position:absolute;inset:-20%;
   background:radial-gradient(ellipse 55% 45% at 78% 18%, color-mix(in srgb, var(--primary) 32%, transparent), transparent 60%),
@@ -231,6 +253,12 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
 .onb-left h1{font-size:38px;line-height:1.2;max-width:440px;color:var(--ink);font-weight:600;}
 .onb-left p{font-size:16px;color:var(--muted);max-width:400px;line-height:1.6;}
 .onb-right{display:flex;align-items:center;justify-content:center;padding:40px 24px;}
+/* Раньше этот блок стоял ДО .onb-left{display:flex;...} выше — та база с
+   display:flex шла позже в файле и при равной специфичности всегда побеждала
+   media-query, так что .onb-left физически никогда не скрывался на мобильном
+   вопреки самому правилу. Порядок здесь важен: этот блок должен идти строго
+   после всех безусловных объявлений .onb-left/.onb-shell. */
+@media (max-width:880px){.onb-shell{grid-template-columns:1fr;}.onb-left{display:none;}}
 .onb-box{width:100%;max-width:400px;}
 .back-link{font-size:13.5px;color:var(--muted);background:none;border:none;padding:0;margin-bottom:18px;display:flex;align-items:center;gap:5px;}
 .back-link:hover{color:var(--ink);}

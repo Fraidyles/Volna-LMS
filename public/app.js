@@ -94,6 +94,18 @@ function accessStatusOf(s){
 }
 var toastTimer = null;
 var changePasswordOpen = false;
+// Мобильный сайдбар (≤640px): раскрывается по тапу на кнопку-гамбургер, а не по
+// :hover/:focus-within (на тач-устройстве hover не срабатывает никогда, а сам
+// сайдбар — position:fixed без подложки, так что раскрытая ширина без этого
+// стейта просто накладывалась на контент страницы, обрезая текст под собой).
+var mobileNavOpen = false;
+// Заменяет window.confirm() — тот не стилизуется (всегда системный вид, вне
+// тёмной темы) и блокирует поток синхронно. {title, body, confirmLabel, danger, onConfirm}.
+var confirmState = null;
+function askConfirm(opts){
+  confirmState = { title: opts.title||"Подтвердите действие", body: opts.body||"", confirmLabel: opts.confirmLabel||"Подтвердить", danger: opts.danger!==false, onConfirm: opts.onConfirm };
+  render();
+}
 var previewMode = false;
 var previewReturnTab = "students";
 var tempPasswordResult = null; // {name, tempPassword} — показать один раз после сброса пароля
@@ -194,7 +206,9 @@ var ICONS = {
   gear: '<circle cx="12" cy="12" r="3.2"/><path d="M12 4v2.4M12 17.6V20M4 12h2.4M17.6 12H20M6.3 6.3l1.7 1.7M16 16l1.7 1.7M17.7 6.3 16 8M8 16l-1.7 1.7"/>',
   logout: '<path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M15 16l4-4-4-4M19 12H9"/>',
   list: '<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="18" r="1.2"/>',
-  download: '<path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/><path d="M8 11l4 4 4-4"/><path d="M12 14.5V4"/>'
+  download: '<path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/><path d="M8 11l4 4 4-4"/><path d="M12 14.5V4"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18"/>'
 };
 function icon(name, cls){ return '<svg class="ic'+(cls?' '+cls:'')+'" viewBox="0 0 24 24">'+(ICONS[name]||'')+'</svg>'; }
 function brandMark(style){ return '<span class="mark"'+(style?' style="'+style+'"':'')+'>'+icon("doctor")+'</span>'; }
@@ -571,6 +585,11 @@ function render(){
   if(unlockCelebration.open && view==="student"){
     app.appendChild(renderUnlockCelebrationModal());
   }
+  // confirmState монтируется последним — может быть открыт поверх любой другой
+  // модалки (например, подтверждение удаления вопроса теста внутри редактора урока).
+  if(confirmState && (view==="student"||view==="staff")){
+    app.appendChild(renderConfirmModal());
+  }
   wireEvents(app);
   if(view==="student" && studentState.tab==="lesson" && !studentState.quizMode && studentState.lessonStage==="video"){
     setTimeout(function(){ wireLessonVideo(savedVideoState); }, 0);
@@ -847,6 +866,18 @@ function renderTempPasswordModal(){
   return el('<div class="overlay" data-action="close-temp-password"><div class="drawer" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
 }
 
+function renderConfirmModal(){
+  var body = '<div class="drawer-head"><b style="font-size:16px;">'+escapeHtml(confirmState.title)+'</b><button class="btn btn-ghost btn-sm" data-action="confirm-modal-no">Закрыть ✕</button></div>' +
+    '<div class="drawer-body">' +
+      (confirmState.body ? '<p style="margin:0 0 18px;color:var(--muted);line-height:1.5;">'+escapeHtml(confirmState.body)+'</p>' : '') +
+      '<div style="display:flex;gap:10px;">' +
+        '<button class="btn btn-ghost btn-block" data-action="confirm-modal-no">Отмена</button>' +
+        '<button class="btn '+(confirmState.danger?'btn-danger':'btn-primary')+' btn-block" data-action="confirm-modal-yes">'+escapeHtml(confirmState.confirmLabel)+'</button>' +
+      '</div>' +
+    '</div>';
+  return el('<div class="overlay" data-action="overlay-close-confirm"><div class="drawer" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
+}
+
 function renderChangePasswordModal(){
   var body = '<div class="drawer-head"><b style="font-size:16px;">Сменить пароль</b><button class="btn btn-ghost btn-sm" data-action="close-change-password">Закрыть ✕</button></div>' +
     '<div class="drawer-body"><form id="changePasswordForm">' +
@@ -997,7 +1028,7 @@ function renderAuthScreen(mode){
   var isLogin = mode === "login";
   var left =
     '<div class="onb-left">' +
-      '<div><div class="brand" style="color:#fff;">'+brandMark("background:rgba(255,255,255,.18);")+'Медицина Долголетия</div>' +
+      '<div><div class="brand">'+brandMark()+'Медицина Долголетия</div>' +
       '<h1 style="margin-top:56px;">'+(isLogin ? "С возвращением" : "Регистрация на демо-курс")+'</h1>' +
       '<p>'+(isLogin ? "Войдите, чтобы продолжить обучение или открыть панель куратора." : "Пара полей — и вы сразу в первом уроке.")+'</p></div>' +
     '</div>';
@@ -1125,12 +1156,21 @@ function renderSidebar(){
   }
 
   return el(
-    '<div class="sidebar">' +
-      '<div class="sidebar-brand">'+brandMark()+'<span class="sidebar-item-label">Медицина Долголетия</span></div>' +
+    '<div class="sidebar'+(mobileNavOpen?' mobile-open':'')+'">' +
+      '<div class="sidebar-brand">'+brandMark()+'<span class="sidebar-item-label">Медицина Долголетия</span>' +
+        '<button type="button" class="sidebar-toggle" data-action="toggle-mobile-nav" title="Меню" aria-label="Меню">'+icon(mobileNavOpen?"close":"menu")+'</button>' +
+      '</div>' +
       '<div class="sidebar-nav">'+items+'</div>' +
       footer +
     '</div>'
   );
+}
+
+// Подложка мобильного меню — отдельный элемент (не вложенный в .sidebar), чтобы
+// не ломать связь .sidebar ~ .app-main в CSS (сдвиг контента под раскрытый
+// сайдбар на десктопе завязан на то, что они прямые соседи).
+function renderMobileNavBackdrop(){
+  return mobileNavOpen ? el('<div class="sidebar-backdrop" data-action="close-mobile-nav"></div>') : null;
 }
 
 // Тёмная тема — дефолт продукта (не только системная), можно переключить вручную.
@@ -1144,6 +1184,8 @@ function toggleTheme(){
 /* ============================= РЕНДЕР: СТУДЕНТ ============================= */
 function renderStudentShell(){
   var wrap = el('<div></div>');
+  var mobNavBackdrop = renderMobileNavBackdrop();
+  if(mobNavBackdrop) wrap.appendChild(mobNavBackdrop);
   wrap.appendChild(renderSidebar());
   var main = el('<div class="app-main"></div>');
   wrap.appendChild(main);
@@ -2154,6 +2196,8 @@ function renderSettingsPage(){
 /* ============================= РЕНДЕР: ПЕРСОНАЛ ============================= */
 function renderStaffShell(){
   var wrap = el('<div></div>');
+  var mobNavBackdrop = renderMobileNavBackdrop();
+  if(mobNavBackdrop) wrap.appendChild(mobNavBackdrop);
   wrap.appendChild(renderSidebar());
   var main = el('<div class="app-main"></div>');
   wrap.appendChild(main);
@@ -3734,25 +3778,48 @@ function wireEvents(root){
       return;
     }
     if(action==="revert-log"){
-      if(!confirm('Откатить действие «'+t.getAttribute("data-label")+'»? Это вернёт состояние к тому, что было до этого изменения.')) return;
-      t.disabled=true; t.textContent="Откатываем…";
-      try{
-        await api("/staff/audit-log/"+t.getAttribute("data-id")+"/revert", { method:"POST" });
-        showToast("Действие откачено");
-        var log = await api("/staff/audit-log"); staffState.auditLog=log.log;
-        await loadStaffData();
-      }catch(err){ showToast(err.message); }
-      render(); return;
+      askConfirm({
+        title: 'Откатить действие «'+t.getAttribute("data-label")+'»?',
+        body: "Это вернёт состояние к тому, что было до этого изменения.",
+        confirmLabel: "Откатить", danger: false,
+        onConfirm: async function(){
+          t.disabled=true; t.textContent="Откатываем…";
+          try{
+            await api("/staff/audit-log/"+t.getAttribute("data-id")+"/revert", { method:"POST" });
+            showToast("Действие откачено");
+            var log = await api("/staff/audit-log"); staffState.auditLog=log.log;
+            await loadStaffData();
+          }catch(err){ showToast(err.message); }
+          render();
+        }
+      });
+      return;
     }
     if(action==="logout-everywhere"){
-      if(!confirm("Выйти со всех устройств? Понадобится войти заново здесь тоже.")) return;
-      stopNotificationPolling(); stopHeartbeat(); sendOfflineBeacon();
-      try{ await api("/auth/logout-everywhere", { method:"POST" }); }catch(err){}
-      me=null; course=null; view="login"; changePasswordOpen=false; render(); return;
+      askConfirm({
+        title: "Выйти со всех устройств?",
+        body: "Понадобится войти заново здесь тоже.",
+        confirmLabel: "Выйти", danger: false,
+        onConfirm: async function(){
+          stopNotificationPolling(); stopHeartbeat(); sendOfflineBeacon();
+          try{ await api("/auth/logout-everywhere", { method:"POST" }); }catch(err){}
+          me=null; course=null; view="login"; changePasswordOpen=false; render();
+        }
+      });
+      return;
     }
     if(action==="open-change-password"){ changePasswordOpen=true; render(); return; }
     if(action==="close-change-password"){ changePasswordOpen=false; render(); return; }
     if(action==="overlay-close-password" && !e.target.closest("[data-stop]")){ changePasswordOpen=false; render(); return; }
+    if(action==="confirm-modal-yes"){
+      var confirmedFn = confirmState && confirmState.onConfirm;
+      confirmState = null;
+      if(confirmedFn) confirmedFn();
+      else render();
+      return;
+    }
+    if(action==="confirm-modal-no"){ confirmState=null; render(); return; }
+    if(action==="overlay-close-confirm" && !e.target.closest("[data-stop]")){ confirmState=null; render(); return; }
     if(action==="open-profile-editor"){
       profileEditor.open=true;
       profileEditor.name=me.name||""; profileEditor.phone=me.phone||""; profileEditor.workplace=me.workplace||"";
@@ -3768,7 +3835,10 @@ function wireEvents(root){
       await applyStudentTab(t.getAttribute("data-tab"));
       return;
     }
+    if(action==="toggle-mobile-nav"){ mobileNavOpen = !mobileNavOpen; render(); return; }
+    if(action==="close-mobile-nav"){ mobileNavOpen = false; render(); return; }
     if(action==="sidebar-nav"){
+      mobileNavOpen = false;
       var navKey = t.getAttribute("data-key");
       if(navKey==="messages" || navKey==="chats"){
         telegramModal.open = true;
@@ -4045,21 +4115,40 @@ function wireEvents(root){
       render(); return;
     }
     if(action==="remove-staff"){
-      if(!confirm("Отозвать доступ у этого человека?")) return;
-      try{ await api("/staff/team/"+t.getAttribute("data-id"), { method:"DELETE" }); await loadStaffData(); showToast("Доступ отозван"); }catch(err){ showToast(err.message); }
-      render(); return;
+      askConfirm({
+        title: "Отозвать доступ у этого человека?", confirmLabel: "Отозвать", danger: true,
+        onConfirm: async function(){
+          try{ await api("/staff/team/"+t.getAttribute("data-id"), { method:"DELETE" }); await loadStaffData(); showToast("Доступ отозван"); }catch(err){ showToast(err.message); }
+          render();
+        }
+      });
+      return;
     }
     if(action==="reset-student-password"){
-      if(!confirm("Создать новый пароль для этого врача? Старый перестанет работать.")) return;
-      try{ var r1=await api("/staff/students/"+t.getAttribute("data-id")+"/reset-password", { method:"POST" }); tempPasswordResult={ name:t.getAttribute("data-name"), tempPassword:r1.tempPassword }; }
-      catch(err){ showToast(err.message); }
-      render(); return;
+      askConfirm({
+        title: "Создать новый пароль для этого врача?",
+        body: "Старый перестанет работать.",
+        confirmLabel: "Создать пароль", danger: false,
+        onConfirm: async function(){
+          try{ var r1=await api("/staff/students/"+t.getAttribute("data-id")+"/reset-password", { method:"POST" }); tempPasswordResult={ name:t.getAttribute("data-name"), tempPassword:r1.tempPassword }; }
+          catch(err){ showToast(err.message); }
+          render();
+        }
+      });
+      return;
     }
     if(action==="reset-staff-password"){
-      if(!confirm("Создать новый пароль для этого сотрудника? Старый перестанет работать.")) return;
-      try{ var r2=await api("/staff/team/"+t.getAttribute("data-id")+"/reset-password", { method:"POST" }); tempPasswordResult={ name:t.getAttribute("data-name"), tempPassword:r2.tempPassword }; }
-      catch(err){ showToast(err.message); }
-      render(); return;
+      askConfirm({
+        title: "Создать новый пароль для этого сотрудника?",
+        body: "Старый перестанет работать.",
+        confirmLabel: "Создать пароль", danger: false,
+        onConfirm: async function(){
+          try{ var r2=await api("/staff/team/"+t.getAttribute("data-id")+"/reset-password", { method:"POST" }); tempPasswordResult={ name:t.getAttribute("data-name"), tempPassword:r2.tempPassword }; }
+          catch(err){ showToast(err.message); }
+          render();
+        }
+      });
+      return;
     }
     if(action==="close-temp-password"){ tempPasswordResult=null; render(); return; }
 
@@ -4167,10 +4256,17 @@ function wireEvents(root){
       return;
     }
     if(action==="delete-lesson"){
-      if(!confirm('Удалить урок «'+t.getAttribute("data-title")+'»? Действие можно откатить в журнале.')) return;
-      try{ await api("/course/lessons/"+t.getAttribute("data-id"), { method:"DELETE" }); showToast("Урок удалён"); await loadStaffData(); }
-      catch(err){ showToast(err.message); }
-      render(); return;
+      askConfirm({
+        title: 'Удалить урок «'+t.getAttribute("data-title")+'»?',
+        body: "Действие можно откатить в журнале.",
+        confirmLabel: "Удалить", danger: true,
+        onConfirm: async function(){
+          try{ await api("/course/lessons/"+t.getAttribute("data-id"), { method:"DELETE" }); showToast("Урок удалён"); await loadStaffData(); }
+          catch(err){ showToast(err.message); }
+          render();
+        }
+      });
+      return;
     }
     if(action==="move-lesson"){
       var mlId=t.getAttribute("data-id"); var mlDir=t.getAttribute("data-dir");
@@ -4199,14 +4295,21 @@ function wireEvents(root){
       render(); return;
     }
     if(action==="restore-lesson-history"){
-      if(!confirm("Восстановить эту версию урока? Текущая опубликованная версия перед этим тоже сохранится в историю.")) return;
+      askConfirm({
+        title: "Восстановить эту версию урока?",
+        body: "Текущая опубликованная версия перед этим тоже сохранится в историю.",
+        confirmLabel: "Восстановить", danger: false,
+        onConfirm: async function(){
       try{
         await api("/course/lessons/"+lessonEditor.id+"/restore/"+t.getAttribute("data-history-id"), { method:"POST" });
         showToast("Версия восстановлена");
         lessonEditor.open=false;
         await loadStaffData();
       }catch(err){ showToast(err.message); }
-      render(); return;
+          render();
+        }
+      });
+      return;
     }
 
     if(action==="open-quiz-editor"){
@@ -4224,7 +4327,11 @@ function wireEvents(root){
     // Общий обработчик и для вопроса итогового теста, и для поурочного —
     // после удаления обновляем тот список, который сейчас реально открыт.
     if(action==="delete-quiz-question"){
-      if(!confirm("Удалить этот вопрос теста? Действие можно откатить в журнале.")) return;
+      askConfirm({
+        title: "Удалить этот вопрос теста?",
+        body: "Действие можно откатить в журнале.",
+        confirmLabel: "Удалить", danger: true,
+        onConfirm: async function(){
       try{
         await api("/course/quiz-admin/"+t.getAttribute("data-id"), { method:"DELETE" });
         showToast("Вопрос удалён");
@@ -4239,7 +4346,10 @@ function wireEvents(root){
           await loadStaffData();
         }
       }catch(err){ showToast(err.message); }
-      render(); return;
+          render();
+        }
+      });
+      return;
     }
     if(action==="move-quiz-question"){
       var mqId=t.getAttribute("data-id"); var mqDir=t.getAttribute("data-dir");
@@ -4342,10 +4452,17 @@ function wireEvents(root){
       render(); return;
     }
     if(action==="delete-module"){
-      if(!confirm('Удалить модуль «'+t.getAttribute("data-title")+'»? Уроки останутся, но перестанут быть в модуле — тест и отзывы модуля удалятся.')) return;
-      try{ await api("/course/modules/"+t.getAttribute("data-id"), { method:"DELETE" }); await loadStaffData(); showToast("Модуль удалён"); }
-      catch(err){ showToast(err.message); }
-      render(); return;
+      askConfirm({
+        title: 'Удалить модуль «'+t.getAttribute("data-title")+'»?',
+        body: "Уроки останутся, но перестанут быть в модуле — тест и отзывы модуля удалятся.",
+        confirmLabel: "Удалить", danger: true,
+        onConfirm: async function(){
+          try{ await api("/course/modules/"+t.getAttribute("data-id"), { method:"DELETE" }); await loadStaffData(); showToast("Модуль удалён"); }
+          catch(err){ showToast(err.message); }
+          render();
+        }
+      });
+      return;
     }
     if(action==="assign-module-lesson"){
       var amModuleId=t.getAttribute("data-module-id");
@@ -4417,10 +4534,17 @@ function wireEvents(root){
     if(action==="close-protocol-editor"){ protocolEditor.open=false; render(); return; }
     if(action==="overlay-close-protocol-editor" && !e.target.closest("[data-stop]")){ protocolEditor.open=false; render(); return; }
     if(action==="delete-protocol"){
-      if(!confirm('Удалить протокол «'+t.getAttribute("data-title")+'»? Вместе с ним удалятся все его гайды и привязки к урокам.')) return;
-      try{ await api("/protocols/"+t.getAttribute("data-id"), { method:"DELETE" }); adminProtocolsState.list=adminProtocolsState.list.filter(function(p){ return p.id!==t.getAttribute("data-id"); }); showToast("Протокол удалён"); }
-      catch(err){ showToast(err.message); }
-      render(); return;
+      askConfirm({
+        title: 'Удалить протокол «'+t.getAttribute("data-title")+'»?',
+        body: "Вместе с ним удалятся все его гайды и привязки к урокам.",
+        confirmLabel: "Удалить", danger: true,
+        onConfirm: async function(){
+          try{ await api("/protocols/"+t.getAttribute("data-id"), { method:"DELETE" }); adminProtocolsState.list=adminProtocolsState.list.filter(function(p){ return p.id!==t.getAttribute("data-id"); }); showToast("Протокол удалён"); }
+          catch(err){ showToast(err.message); }
+          render();
+        }
+      });
+      return;
     }
     if(action==="save-protocol-guide"){
       var gSpec=document.getElementById("newGuideSpec"); var gText=document.getElementById("newGuideText");
@@ -4465,7 +4589,10 @@ function wireEvents(root){
       render(); return;
     }
     if(action==="delete-protocol-guide-file"){
-      if(!confirm('Удалить файл «'+t.getAttribute("data-name")+'»?')) return;
+      askConfirm({
+        title: 'Удалить файл «'+t.getAttribute("data-name")+'»?',
+        confirmLabel: "Удалить", danger: true,
+        onConfirm: async function(){
       var dfSpec = t.getAttribute("data-spec");
       var dfFileId = t.getAttribute("data-file-id");
       try{
@@ -4476,7 +4603,10 @@ function wireEvents(root){
         if(dfIdx!==-1) adminProtocolsState.list[dfIdx].guides = protocolEditor.guides.slice();
         showToast("Файл удалён");
       }catch(err){ showToast(err.message); }
-      render(); return;
+          render();
+        }
+      });
+      return;
     }
     if(action==="toggle-protocol-lesson"){
       var tlId=t.getAttribute("data-id"); var tlIdx=protocolEditor.lessonIds.indexOf(tlId);
@@ -4510,13 +4640,19 @@ function wireEvents(root){
       return;
     }
     if(action==="delete-specialization"){
-      if(!confirm('Удалить специализацию «'+t.getAttribute("data-name")+'»?')) return;
-      try{
-        await api("/specializations/"+t.getAttribute("data-id"), { method:"DELETE" });
-        specializationsList = specializationsList.filter(function(s){ return s.id!==t.getAttribute("data-id"); });
-        showToast("Специализация удалена");
-      }catch(err){ showToast(err.message); }
-      render(); return;
+      askConfirm({
+        title: 'Удалить специализацию «'+t.getAttribute("data-name")+'»?',
+        confirmLabel: "Удалить", danger: true,
+        onConfirm: async function(){
+          try{
+            await api("/specializations/"+t.getAttribute("data-id"), { method:"DELETE" });
+            specializationsList = specializationsList.filter(function(s){ return s.id!==t.getAttribute("data-id"); });
+            showToast("Специализация удалена");
+          }catch(err){ showToast(err.message); }
+          render();
+        }
+      });
+      return;
     }
     if(action==="add-quiz-option" || action==="remove-quiz-option"){
       var qFrm=document.getElementById("quizEditorForm");
@@ -4567,9 +4703,15 @@ function wireEvents(root){
       calendarState.eventModalMode=null; render(); return;
     }
     if(action==="delete-event-series"){
-      if(!confirm("Удалить все эфиры этой серии повторов?")) return;
-      try{ await api("/events/"+t.getAttribute("data-id")+"?series=true", { method:"DELETE" }); await loadCalendarData(); showToast("Серия удалена"); }catch(err){ showToast(err.message); }
-      calendarState.eventModalMode=null; render(); return;
+      askConfirm({
+        title: "Удалить все эфиры этой серии повторов?",
+        confirmLabel: "Удалить", danger: true,
+        onConfirm: async function(){
+          try{ await api("/events/"+t.getAttribute("data-id")+"?series=true", { method:"DELETE" }); await loadCalendarData(); showToast("Серия удалена"); }catch(err){ showToast(err.message); }
+          calendarState.eventModalMode=null; render();
+        }
+      });
+      return;
     }
 
     if(action==="select-student"){
