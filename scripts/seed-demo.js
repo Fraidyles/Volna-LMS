@@ -1,5 +1,8 @@
 // Демо-данные для показа функционала: 3 «входа» (врач/куратор/админ) + 30 обычных
-// врачей с разным прогрессом, курсами, сертификатами, лидами, потоками и т.д.
+// врачей на демо-курсе с разным прогрессом, лидами, реферальными связями и потоками.
+// Второй курс/мультикурс и сертификаты сюда специально не заводятся — это уже
+// готовые функции платформы (админка → «Курсы»), их проще показать вживую, создав
+// курс через интерфейс и включив у него сертификаты, чем подделывать в сиде.
 //
 //   node scripts/seed-demo.js
 //
@@ -15,10 +18,9 @@ require("dotenv").config();
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const pool = require("../src/db");
-const { generateReferralCode, generateCertificateNumber } = require("../src/util");
+const { generateReferralCode } = require("../src/util");
 
 const COURSE_A_ID = "longevity-demo"; // существующий демо-курс из src/content.js
-const COURSE_B_ID = "demo-peptide-course";
 const CURATOR_ID = "demo-curator";
 const ADMIN_ID = "demo-admin";
 const STUDENT_ID = "demo-student";
@@ -96,39 +98,8 @@ async function upsertProgress(userId, courseId, opts) {
 (async () => {
   console.log("Засеиваю демо-данные...");
 
-  // ---------- Курс Б: «Пептидная терапия» (сертификаты включены — второй курс для демонстрации мультикурса) ----------
-  await pool.query(
-    `INSERT INTO courses (id, title, certificates_enabled, created_at) VALUES ($1,$2,true,now() - interval '30 days')
-     ON CONFLICT (id) DO UPDATE SET title=$2, certificates_enabled=true`,
-    [COURSE_B_ID, "Пептидная терапия"]
-  );
-  const bLessons = [
-    { id: "b1", title: "Введение в пептидную терапию", html: "<p>Что такое пептиды и почему это отдельное направление в медицине долголетия.</p>" },
-    { id: "b2", title: "Показания и противопоказания", html: "<p>Кому подходит пептидная терапия, а кому нет — разбор клинических случаев.</p>" },
-    { id: "b3", title: "Протоколы применения", html: "<p>Базовые схемы назначения и что важно объяснить пациенту перед началом курса.</p>" }
-  ];
-  for (let i = 0; i < bLessons.length; i++) {
-    const l = bLessons[i];
-    await pool.query(
-      `INSERT INTO lessons (id, course_id, idx, title, duration, html) VALUES ($1,$2,$3,$4,$5,$6)
-       ON CONFLICT (id) DO UPDATE SET idx=$3, title=$4, duration=$5, html=$6`,
-      [l.id, COURSE_B_ID, i, l.title, "6 мин", l.html]
-    );
-  }
-  const bQuiz = [
-    { id: "bq1", q: "Что из перечисленного — основной принцип пептидной терапии?", opts: ["Замещение дефицита сигнальных молекул", "Подавление иммунитета", "Замена гормональной терапии всегда"], correct: 0 },
-    { id: "bq2", q: "Что нужно оценить перед назначением пептидной терапии?", opts: ["Только возраст пациента", "Анамнез, противопоказания и цели пациента", "Ничего, протокол универсален"], correct: 1 },
-    { id: "bq3", q: "Как правильно вести пациента на пептидной терапии?", opts: ["Без контроля до конца курса", "С регулярным контролем и корректировкой протокола", "Разово проконсультировать и больше не наблюдать"], correct: 1 }
-  ];
-  for (let i = 0; i < bQuiz.length; i++) {
-    const q = bQuiz[i];
-    await pool.query(
-      `INSERT INTO quiz_questions (id, course_id, idx, question, options, correct) VALUES ($1,$2,$3,$4,$5,$6)
-       ON CONFLICT (id) DO UPDATE SET idx=$3, question=$4, options=$5, correct=$6`,
-      [q.id, COURSE_B_ID, i, q.q, JSON.stringify(q.opts), q.correct]
-    );
-  }
-  console.log("Курс «Пептидная терапия» готов (3 урока, 3 вопроса, сертификаты включены).");
+  // Второй курс сюда специально не заводим: создание курса — уже готовая функция
+  // (админка → «Курсы»), удобнее показать её вживую, чем засеивать за администратора.
 
   // ---------- Специализации ----------
   const specs = (await pool.query("SELECT id FROM specializations")).rows.map((r) => r.id);
@@ -141,17 +112,13 @@ async function upsertProgress(userId, courseId, opts) {
   await upsertUser(CURATOR_ID, { email: CURATOR_EMAIL, name: "Демо Куратор", role: "curator", product: "longevity", payment: "paid", createdAt: daysAgo(60), phoneNum: "+7 900-000-0001" });
   await upsertUser(ADMIN_ID, { email: ADMIN_EMAIL, name: "Демо Администратор", role: "admin", product: "longevity", payment: "paid", createdAt: daysAgo(60), phoneNum: "+7 900-000-0002" });
   await upsertUser(STUDENT_ID, {
-    email: STUDENT_EMAIL, name: "Демо Врач", role: "student", curatorId: CURATOR_ID, product: "peptide",
+    email: STUDENT_EMAIL, name: "Демо Врач", role: "student", curatorId: CURATOR_ID, product: "longevity",
     payment: "paid", createdAt: daysAgo(14), phoneNum: "+7 900-000-0003", workplace: "Клиника «Здоровье+»"
   });
   await pool.query("INSERT INTO user_specializations (user_id, specialization_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [STUDENT_ID, specs[0]]);
   await pool.query("INSERT INTO progress (user_id, course_id) VALUES ($1,$2) ON CONFLICT (user_id, course_id) DO NOTHING", [STUDENT_ID, COURSE_A_ID]);
   await upsertProgress(STUDENT_ID, COURSE_A_ID, {
     completedLessons: ["l1", "l2", "l3", "l4"], lastActiveAt: daysAgo(1), streak: 4, longestStreak: 6, createdAt: daysAgo(14)
-  });
-  await pool.query("INSERT INTO progress (user_id, course_id) VALUES ($1,$2) ON CONFLICT (user_id, course_id) DO NOTHING", [STUDENT_ID, COURSE_B_ID]);
-  await upsertProgress(STUDENT_ID, COURSE_B_ID, {
-    completedLessons: ["b1", "b2"], lastActiveAt: daysAgo(1), streak: 4, longestStreak: 6, createdAt: daysAgo(10)
   });
   console.log("Три «входа» готовы:");
   console.log("  Врач:    " + STUDENT_EMAIL + " / " + STUDENT_PASSWORD);
@@ -163,7 +130,7 @@ async function upsertProgress(userId, courseId, opts) {
   const notifs = [
     ["welcome", "Добро пожаловать на платформу!", "Начните с первого урока курса «Медицина Долголетия»."],
     ["new_lesson", "Открылся новый урок", "«Четыре опоры программы долголетия» — уже доступен."],
-    ["certificate_issued", "Напоминание", "Пройдите итоговый тест курса «Пептидная терапия», чтобы получить сертификат."]
+    ["certificate_issued", "Напоминание", "Пройдите итоговый тест демо-курса, чтобы завершить обучение."]
   ];
   for (let i = 0; i < notifs.length; i++) {
     const [type, title, body] = notifs[i];
@@ -202,9 +169,8 @@ async function upsertProgress(userId, courseId, opts) {
   const buckets = [
     ...Array(7).fill("inactive"),
     ...Array(5).fill("new"),
-    ...Array(8).fill("in_progress"),
-    ...Array(4).fill("completed_a"),
-    ...Array(6).fill("multi_course")
+    ...Array(10).fill("in_progress"),
+    ...Array(8).fill("completed_a")
   ]; // 30 штук
 
   const requestedFullAccessIdx = new Set(pickN([...Array(30).keys()], 5));
@@ -221,8 +187,7 @@ async function upsertProgress(userId, courseId, opts) {
     const bucket = buckets[i];
     const curatorId = i % 2 === 0 ? CURATOR_ID : null; // половина — «мои» у демо-куратора, половина без куратора (видна любому)
     const spec1 = pick(specs);
-    const onCourseB = bucket === "multi_course";
-    const product = onCourseB ? "peptide" : pick(["longevity", "longevity", "longevity", "personal_brand"]);
+    const product = pick(["longevity", "longevity", "longevity", "personal_brand"]);
     const payment = pick(["paid", "paid", "partial", "unpaid"]);
 
     let createdAt, completedLessonsA, lastActiveA, completedA, quizScoreA, streak;
@@ -241,18 +206,11 @@ async function upsertProgress(userId, courseId, opts) {
       completedLessonsA = ["l1", "l2", "l3", "l4", "l5"].slice(0, 1 + (idx % 4));
       lastActiveA = daysAgo(Math.floor(Math.random() * 3));
       completedA = false; quizScoreA = Math.random() < 0.4 ? 40 + (idx % 3) * 10 : null; streak = 1 + (idx % 4);
-    } else if (bucket === "completed_a") {
+    } else { // completed_a
       createdAt = daysAgo(20 + idx);
       completedLessonsA = ["l1", "l2", "l3", "l4", "l5"];
       lastActiveA = daysAgo(Math.floor(Math.random() * 5));
       completedA = true; quizScoreA = 70 + (idx % 3) * 10; streak = 3 + (idx % 4);
-    } else { // multi_course
-      createdAt = daysAgo(15 + idx);
-      completedLessonsA = ["l1", "l2", "l3", "l4", "l5"].slice(0, 3 + (idx % 4));
-      lastActiveA = daysAgo(Math.floor(Math.random() * 4));
-      completedA = idx % 3 === 0;
-      quizScoreA = completedA ? 80 : null;
-      streak = 2 + (idx % 5);
     }
 
     await upsertUser(id, {
@@ -271,32 +229,9 @@ async function upsertProgress(userId, courseId, opts) {
       certStatus: completedA ? "pending" : "none", lastActiveAt: lastActiveA, streak, createdAt,
       requestedFullAccess: requested, requestedAt: requested ? daysAgo(Math.floor(Math.random() * 10)) : null
     });
-
-    if (onCourseB) {
-      const bCompletedCount = idx % 3; // 0,1,2 из шести multi_course врачей — по кругу
-      const bLessonsDone = ["b1", "b2", "b3"].slice(0, 1 + (idx % 3));
-      const bCompleted = bLessonsDone.length === 3;
-      let certStatus = "none", certNumber = null, certIssuedAt = null, certIssuedBy = null;
-      if (bCompleted) {
-        // Из завершивших курс Б — половине уже выдан сертификат, половине ещё нет (демонстрирует оба состояния инбокса куратора).
-        if (idx % 2 === 0) {
-          certStatus = "issued";
-          certNumber = generateCertificateNumber();
-          certIssuedAt = daysAgo(2);
-          certIssuedBy = CURATOR_ID;
-        } else {
-          certStatus = "pending";
-        }
-      }
-      await pool.query("INSERT INTO progress (user_id, course_id) VALUES ($1,$2) ON CONFLICT (user_id, course_id) DO NOTHING", [id, COURSE_B_ID]);
-      await upsertProgress(id, COURSE_B_ID, {
-        completedLessons: bLessonsDone, quizScore: bCompleted ? 85 : null, completed: bCompleted,
-        certStatus, certNumber, certIssuedAt, certIssuedBy, lastActiveAt: lastActiveA, streak, createdAt: daysAgo(10 + idx)
-      });
-    }
   }
 
-  console.log("30 демо-врачей готовы: 7 неактивных, 5 новых, 8 в процессе, 4 завершили курс А, 6 на двух курсах (из них 3 с выданным сертификатом, 3 ждут выдачи).");
+  console.log("30 демо-врачей готовы: 7 неактивных (для инбокса куратора), 5 новых, 10 в процессе, 8 завершили демо-курс.");
   console.log("Общий пароль для всех 30: " + BULK_PASSWORD + " (email вида doctor01@demo.local .. doctor30@demo.local)");
   console.log("Готово.");
   await pool.end();
