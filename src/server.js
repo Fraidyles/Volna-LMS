@@ -23,6 +23,15 @@ const calendarRoutes = require("./routes/calendar");
 
 const app = express();
 
+// Продакшен-схема из README всегда ставит Nginx перед этим процессом (см. «6. Домен
+// и HTTPS»), поэтому доверяем ровно одному хопу X-Forwarded-For. Без этого Express
+// берёт req.ip из TCP-соединения — то есть IP самого Nginx, один и тот же для всех
+// пользователей, — и rate limiting (auth.js) считает попытки входа всех врачей как
+// одного человека: несколько неудачных попыток одного пользователя блокируют вход
+// всем остальным. Ставить больше 1 без реального второго прокси перед Nginx нельзя —
+// это позволило бы обойти лимит подделкой заголовка X-Forwarded-For напрямую.
+app.set("trust proxy", 1);
+
 const ALLOWED = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
   .map((s) => s.trim())
