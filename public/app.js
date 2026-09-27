@@ -4368,10 +4368,18 @@ function renderTeamTab(){
         var mine = students.filter(function(st){ return st.assigned_curator_id===c.id; });
         var act = mine.filter(function(st){ return st.last_seen_at && new Date(st.last_seen_at).getTime()>=weekAgo; }).length;
         var fin = mine.filter(function(st){ return st.completed; }).length;
-        tiles += '<div class="team-stats"><div><b>'+mine.length+'</b><span>'+ruPluralClient(mine.length,"врач","врача","врачей")+'</span></div>' +
-          '<div><b>'+act+'</b><span>активны за 7 дн.</span></div><div><b>'+fin+'</b><span>завершили</span></div></div>';
+        tiles += '<div class="team-stats">' +
+          '<div><span>Врачей закреплено</span><b>'+mine.length+'</b></div>' +
+          '<div><span>Активны за 7 дней</span><b>'+act+'</b></div>' +
+          '<div><span>Завершили курс</span><b>'+fin+'</b></div></div>';
       } else {
-        tiles += '<p class="team-note">Управляет курсами, материалами и командой.</p>';
+        // Те же строки «подпись — число», что у куратора, — карточки в ряду
+        // устроены одинаково и не гуляют по высоте и выравниванию.
+        var curCount = (staffState.staff||[]).filter(function(x){ return x.role==="curator"; }).length;
+        tiles += '<div class="team-stats">' +
+          '<div><span>Курсов на платформе</span><b>'+(staffState.coursesList||[]).length+'</b></div>' +
+          '<div><span>Врачей на курсе</span><b>'+students.length+'</b></div>' +
+          '<div><span>Кураторов в команде</span><b>'+curCount+'</b></div></div>';
       }
       if(canManage){
         tiles += '<div class="team-actions">' +
@@ -4390,7 +4398,7 @@ function renderTeamTab(){
     code = '<div class="card co-card team-code-card"><b class="co-card-title" style="margin-bottom:6px;">Код сотрудника</b>' +
       '<div class="team-code">'+escapeHtml(staffState.inviteCode.code)+'</div>' +
       '<p class="team-hint">Продиктуйте его отдельно (не тем же письмом, где email) тому, кого приглашаете куратором или администратором — без кода регистрация по приглашению останется обычным врачом.</p>' +
-      '<p class="team-hint" style="margin-top:auto;">Действует до '+fmtDateShort(staffState.inviteCode.expiresAt)+', '+fmtTime(staffState.inviteCode.expiresAt)+' — потом перевыпустится сам.</p></div>';
+      '<p class="team-hint team-code-foot">Сменится сам '+fmtDateShort(staffState.inviteCode.expiresAt)+' в '+fmtTime(staffState.inviteCode.expiresAt)+'</p></div>';
   } else if(!myOptions.length){
     code = '<div class="card co-card"><p style="font-size:13px;color:var(--muted);margin:0;">Назначать роли может главный администратор или администратор.</p></div>';
   }
