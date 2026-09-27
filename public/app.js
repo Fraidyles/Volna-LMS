@@ -2418,8 +2418,7 @@ function renderCoursePlayer(){
     var stageLabels = { intro:"Материал", video:"Видео", quiz:"Тест", task:"Задание" };
     body += '<div class="tabs" style="margin:14px 0 4px;">';
     stages.forEach(function(sKey){
-      var locked = sKey==="quiz" && !isDoneAlready && stages.indexOf("video")!==-1 && !studentState.videoEnded;
-      body += '<button type="button" class="tab'+(stage===sKey?' active':'')+'"'+(locked?' disabled title="Сначала досмотрите видео"':'')+' data-action="lesson-stage" data-stage="'+sKey+'">'+stageLabels[sKey]+(locked?' '+icon("lock","ic-sm"):'')+'</button>';
+      body += '<button type="button" class="tab'+(stage===sKey?' active':'')+'" data-action="lesson-stage" data-stage="'+sKey+'">'+stageLabels[sKey]+'</button>';
     });
     body += '</div>';
   }
@@ -2472,7 +2471,7 @@ function renderLessonVideoStage(lesson, stages, isDoneAlready){
   html += '<div class="lesson-footer">' +
     '<button class="btn btn-ghost" data-action="lesson-stage" data-stage="intro">← К материалу</button>';
   if(hasQuiz){
-    html += '<button class="btn btn-primary" data-action="lesson-stage" data-stage="quiz"'+(canProceed?'':' disabled title="Досмотрите видео до конца"')+'>Пройти тест →</button>';
+    html += '<button class="btn btn-primary" data-action="lesson-stage" data-stage="quiz">Пройти тест →</button>';
   } else if(stages.indexOf("task")!==-1){
     html += '<button class="btn btn-primary" data-action="lesson-stage" data-stage="task"'+(canProceed?'':' disabled title="Досмотрите видео до конца"')+'>К заданию →</button>';
   } else {
