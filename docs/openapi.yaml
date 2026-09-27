@@ -540,6 +540,69 @@ paths:
         - { name: series, in: query, schema: { type: boolean } }
       responses: { "200": { description: OK } }
 
+  /assignments/lessons/{lessonId}:
+    post:
+      tags: [Assignments]
+      summary: Врач отправляет (или правит) ответ на задание урока
+      parameters: [ { name: lessonId, in: path, required: true, schema: { type: string } } ]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { answer: { type: string } } } } } }
+      responses: { "200": { description: OK }, "409": { description: Ответ уже принят } }
+  /assignments/lessons/{lessonId}/config:
+    put:
+      tags: [Assignments]
+      summary: Администратор задаёт формулировку задания и флаг «стоп-урок»
+      parameters: [ { name: lessonId, in: path, required: true, schema: { type: string } } ]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { prompt: { type: string }, required: { type: boolean } } } } } }
+      responses: { "200": { description: OK } }
+  /assignments:
+    get:
+      tags: [Assignments]
+      summary: Очередь проверки (?status=pending|returned|accepted|all, courseId, lessonId, studentId)
+      responses: { "200": { description: "{ submissions, counts }" } }
+  /assignments/{id}/review:
+    post:
+      tags: [Assignments]
+      summary: Принять ответ или вернуть на доработку (комментарий обязателен при возврате)
+      parameters: [ { name: id, in: path, required: true, schema: { type: string } } ]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { decision: { type: string, enum: [accept, return] }, comment: { type: string } } } } } }
+      responses: { "200": { description: OK }, "409": { description: Уже проверен } }
+  /assignments/feed:
+    get:
+      tags: [Assignments]
+      summary: Лента ответов — задания, отзывы о модулях, анкеты (?type=all|assignment|feedback|survey)
+      responses: { "200": { description: "{ items }" } }
+  /orders/products:
+    get: { tags: [Orders], summary: Список продуктов, responses: { "200": { description: OK } } }
+    post: { tags: [Orders], summary: Создать продукт (цена, рассрочка, курс), responses: { "200": { description: OK } } }
+  /orders/products/{id}:
+    put: { tags: [Orders], summary: Изменить продукт, parameters: [ { name: id, in: path, required: true, schema: { type: string } } ], responses: { "200": { description: OK } } }
+    delete: { tags: [Orders], summary: Удалить продукт без заказов, parameters: [ { name: id, in: path, required: true, schema: { type: string } } ], responses: { "200": { description: OK }, "409": { description: Есть заказы } } }
+  /orders:
+    get: { tags: [Orders], summary: "Заказы и сводка (получено, ожидается, просрочено)", responses: { "200": { description: "{ orders, summary }" } } }
+    post: { tags: [Orders], summary: "Создать заказ: userId, productId|title, amount, installments, firstDueDate, paidNow", responses: { "200": { description: OK } } }
+  /orders/mine:
+    get: { tags: [Orders], summary: Заказы и график платежей текущего врача, responses: { "200": { description: OK } } }
+  /orders/{id}:
+    get: { tags: [Orders], summary: Заказ с графиком платежей, parameters: [ { name: id, in: path, required: true, schema: { type: string } } ], responses: { "200": { description: OK } } }
+  /orders/{id}/payments/{paymentId}/pay:
+    post: { tags: [Orders], summary: Отметить платёж оплаченным (полная оплата открывает курс продукта), parameters: [ { name: id, in: path, required: true, schema: { type: string } }, { name: paymentId, in: path, required: true, schema: { type: string } } ], responses: { "200": { description: OK } } }
+  /orders/{id}/payments/{paymentId}/unpay:
+    post: { tags: [Orders], summary: Снять отметку об оплате, parameters: [ { name: id, in: path, required: true, schema: { type: string } }, { name: paymentId, in: path, required: true, schema: { type: string } } ], responses: { "200": { description: OK } } }
+  /orders/{id}/cancel:
+    post: { tags: [Orders], summary: Отменить заказ, parameters: [ { name: id, in: path, required: true, schema: { type: string } } ], responses: { "200": { description: OK } } }
+  /surveys:
+    get: { tags: [Surveys], summary: Анкеты с числом ответов, responses: { "200": { description: OK } } }
+    post: { tags: [Surveys], summary: "Создать анкету (questions: single|multi|scale|text) и уведомить аудиторию", responses: { "200": { description: OK } } }
+  /surveys/{id}:
+    put: { tags: [Surveys], summary: Изменить / закрыть анкету, parameters: [ { name: id, in: path, required: true, schema: { type: string } } ], responses: { "200": { description: OK } } }
+    delete: { tags: [Surveys], summary: Удалить анкету вместе с ответами, parameters: [ { name: id, in: path, required: true, schema: { type: string } } ], responses: { "200": { description: OK } } }
+  /surveys/{id}/results:
+    get: { tags: [Surveys], summary: Сводка по вопросам и ответы поимённо, parameters: [ { name: id, in: path, required: true, schema: { type: string } } ], responses: { "200": { description: OK } } }
+  /surveys/mine:
+    get: { tags: [Surveys], summary: Анкеты для текущего врача (с его ответами), responses: { "200": { description: OK } } }
+  /surveys/{id}/respond:
+    post: { tags: [Surveys], summary: Врач отправляет ответы анкеты, parameters: [ { name: id, in: path, required: true, schema: { type: string } } ], responses: { "200": { description: OK }, "400": { description: Не заполнен обязательный вопрос } } }
+
   /health:
     get:
       tags: [System]

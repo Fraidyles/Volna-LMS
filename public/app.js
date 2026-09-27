@@ -221,6 +221,10 @@ var ICONS = {
   message: '<path d="M4 5.5A2 2 0 0 1 6 3.5h12a2 2 0 0 1 2 2V15a2 2 0 0 1-2 2H9l-4.5 4V5.5Z"/>',
   gear: '<circle cx="12" cy="12" r="3.2"/><path d="M12 4v2.4M12 17.6V20M4 12h2.4M17.6 12H20M6.3 6.3l1.7 1.7M16 16l1.7 1.7M17.7 6.3 16 8M8 16l-1.7 1.7"/>',
   logout: '<path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M15 16l4-4-4-4M19 12H9"/>',
+  task: '<rect x="4.5" y="3.5" width="15" height="17" rx="2"/><path d="M8.5 12.2l2.3 2.3 4.7-4.9"/><path d="M8.5 7.5h7"/>',
+  wallet: '<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="4" y="8" width="16.5" height="11.5" rx="2"/><path d="M16 13.8h1.5"/>',
+  poll: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 16v-3.5M12 16V8M16 16v-5.5"/>',
+  feed: '<path d="M5 5.5h14M5 10h9M5 14.5h14M5 19h9"/>',
   list: '<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="18" r="1.2"/>',
   download: '<path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/><path d="M8 11l4 4 4-4"/><path d="M12 14.5V4"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
@@ -283,6 +287,7 @@ async function api(path, opts){
   if(!res.ok){
     var err = new Error((data && data.message) || "Ошибка запроса");
     err.code = data && data.error;
+    err.data = data;
     throw err;
   }
   return data;
@@ -353,6 +358,7 @@ async function routeAfterLogin(){
     view = "student";
     await loadCourse();
     await loadCalendarData();
+    await loadStudentTools();
     await loadNotifications();
     startNotificationPolling();
     startHeartbeat();
@@ -360,6 +366,8 @@ async function routeAfterLogin(){
     view = "staff";
     await loadStaffData();
     await loadCalendarData();
+    await loadNotifications();
+    startNotificationPolling();
   }
   render();
 }
@@ -389,7 +397,19 @@ async function loadMySessions(){
 
 function startNotificationPolling(){
   stopNotificationPolling();
-  notifPollTimer = setInterval(async function(){ await loadNotifications(); render(); }, 30000);
+  notifPollTimer = setInterval(async function(){
+    var before = (notifState.items||[]).map(function(n){ return n.id; });
+    await loadNotifications();
+    var fresh = (notifState.items||[]).filter(function(n){ return before.indexOf(n.id)===-1; });
+    if(view==="staff") await loadAssignCounts();
+    if(view==="student" && fresh.length){
+      // Куратор проверил задание или открылся курс — подтягиваем уроки заново,
+      // чтобы статус в уроке сменился без перезагрузки страницы.
+      if(fresh.some(function(n){ return /^assignment_|^course_opened/.test(n.type); })) await loadCourse();
+      if(fresh.some(function(n){ return n.type==="survey_new"; })) await loadStudentTools();
+    }
+    if(!isTypingNow()) render();
+  }, 30000);
 }
 
 // «Онлайн сейчас» у куратора держится на этом пинге — раз в 45с, пока у врача
@@ -475,6 +495,8 @@ async function loadStaffData(){
   try{
     staffState.digest = await api("/staff/daily-digest");
   }catch(e){}
+  await loadAssignCounts();
+  await loadOrders();
   try{
     var pr = await api("/protocols");
     adminProtocolsState.list = pr.protocols;
@@ -840,6 +862,14 @@ function render(){
   if(unlockCelebration.open && view==="student"){
     app.appendChild(renderUnlockCelebrationModal());
   }
+  if(view==="staff"){
+    if(toolsState.orders.open) app.appendChild(renderOrderDrawer());
+    if(toolsState.orders.draft) app.appendChild(renderOrderCreateModal());
+    if(toolsState.products.editing) app.appendChild(renderProductModal());
+    if(toolsState.surveys.editing) app.appendChild(renderSurveyBuilder());
+    if(toolsState.assignEditor) app.appendChild(renderAssignEditorModal());
+  }
+  if(view==="student" && studentTools.fillId) app.appendChild(renderSurveyFillModal());
   // confirmState монтируется последним — может быть открыт поверх любой другой
   // модалки (например, подтверждение удаления вопроса теста внутри редактора урока).
   if(confirmState && (view==="student"||view==="staff")){
@@ -1199,7 +1229,7 @@ function renderMyProductBlock(){
       '<span style="font-size:13px;color:var(--muted);">Оплата</span>' +
       magnet(payKind, PAYMENT_LABELS[payStatus]||payStatus) +
     '</div>' +
-    '<p class="hint" style="margin-top:10px;">Вопрос по оплате — обратитесь к куратору в Telegram-группе потока.</p>' +
+    ((studentTools.orders||[]).length ? '' : '<p class="hint" style="margin-top:10px;">Вопрос по оплате — обратитесь к куратору в Telegram-группе потока.</p>') +
   '</div>';
 }
 
@@ -1437,11 +1467,15 @@ var sidebarGroupsOpen = (function(){ try{ return JSON.parse(localStorage.getItem
 function sidebarGroup(id, iconName, label, activeKey, children){
   var hasActive = children.some(function(c){ return c[0]===activeKey; });
   var open = hasActive || !!sidebarGroupsOpen[id];
+  // Бейдж пункта (например, непроверенные задания) виден и на свёрнутой группе.
+  var badgeSum = children.reduce(function(n,c){ return n + (c[3]||0); }, 0);
   var h = '<div class="nav-group'+(open?' open':'')+(hasActive?' has-active':'')+'">' +
     '<button type="button" class="sidebar-item nav-group-head" data-action="sidebar-group" data-group="'+id+'" title="'+escapeHtml(label)+'" aria-expanded="'+open+'">' +
-      icon(iconName)+'<span class="sidebar-item-label">'+escapeHtml(label)+'</span><span class="nav-chev">'+icon("chevron","ic-sm")+'</span></button>' +
+      icon(iconName)+'<span class="sidebar-item-label">'+escapeHtml(label)+'</span>' +
+      (badgeSum>0 && !open ? '<span class="sidebar-item-badge">'+(badgeSum>9?"9+":badgeSum)+'</span><span class="sidebar-item-dot"></span>' : '') +
+      '<span class="nav-chev">'+icon("chevron","ic-sm")+'</span></button>' +
     '<div class="nav-sub">';
-  children.forEach(function(c){ h += sidebarItem(c[0], c[1], c[2], c[0]===activeKey); });
+  children.forEach(function(c){ h += sidebarItem(c[0], c[1], c[2], c[0]===activeKey, c[3]); });
   return h + '</div></div>';
 }
 function sidebarItem(key, iconName, label, active, badge){
@@ -1478,7 +1512,7 @@ function renderSidebar(){
   } else {
     var snavKey = staffState.navKey || "students";
     var isAdmin = me.role==="admin" || me.role==="super_admin";
-    var staffNotifBadge = upcomingEventReminders().length;
+    var staffNotifBadge = upcomingEventReminders().length + (notifState.unreadCount||0);
     items += sidebarItem("profile","user","Мой профиль", snavKey==="profile");
     items += sidebarItem("home","home","Главная", snavKey==="home");
     // Разделы сгруппированы, как в GetCourse: заголовок группы раскрывает
@@ -1490,6 +1524,11 @@ function renderSidebar(){
     items += sidebarItem("calendar","calendar","Расписание", snavKey==="calendar");
     items += sidebarGroup("learning","book","Обучение", snavKey, (isAdmin?[["courses","folder","Курсы"]]:[]).concat([
       ["materials","folder","Учебные материалы"]], isAdmin?[["modules","clipboard","Модули"]]:[], [["protocols","doctor","Протоколы"]]));
+    items += sidebarGroup("answers","task","Ответы врачей", snavKey, [
+      ["assignments","task","Проверка заданий", (toolsState.assign.counts||{}).pending||0], ["feed","feed","Лента ответов"], ["surveys","poll","Анкеты"]
+    ]);
+    items += sidebarGroup("sales","wallet","Продажи", snavKey, [
+      ["orders","wallet","Заказы и оплаты", (toolsState.orders.summary||{}).overdueOrders||0]].concat(isAdmin?[["products","folder","Продукты"]]:[]));
     if(isAdmin){
       items += sidebarGroup("admin","shield","Управление", snavKey, [
         ["team","users","Команда"], ["audit","list","Журнал действий"]
@@ -1807,7 +1846,7 @@ function renderStudentHome(){
   var done = doneIds.length;
   var lock = course.locked || {locked:false};
 
-  var html = '<div style="margin-top:10px;">' + renderOnboardingCard();
+  var html = '<div style="margin-top:10px;">' + renderOnboardingCard() + renderSurveyHomeCard();
   if(lock.locked){
     html += '<div class="card course-hero" style="background:var(--status-blocked-tint);">' +
       magnet("blocked", "Доступ ограничен") +
@@ -2043,6 +2082,7 @@ function lessonStagesFor(lesson){
   var stages = ["intro"];
   if(lesson.videoUrl) stages.push("video");
   if(lesson.quiz && lesson.quiz.length) stages.push("quiz");
+  if(lesson.assignment) stages.push("task");
   return stages;
 }
 function resetLessonStageState(){
@@ -2124,7 +2164,9 @@ function renderCoursePlayer(){
   course.lessons.forEach(function(l,i){
     var isDone = doneIds.indexOf(l.id)!==-1;
     var isLocked = l.hiddenForMe || l.dripLockedForMe;
-    var lockLabel = l.hiddenForMe ? 'Временно недоступен' : (l.dripLockedForMe ? 'Откроется '+fmtDate(l.availableAt) : escapeHtml(l.duration||""));
+    var lsub = (course.assignments||{})[l.id];
+    var taskNote = lsub ? (lsub.status==="pending" ? ' · задание на проверке' : (lsub.status==="returned" ? ' · задание вернули' : '')) : '';
+    var lockLabel = l.hiddenForMe ? 'Временно недоступен' : (l.dripLockedForMe ? 'Откроется '+fmtDate(l.availableAt) : escapeHtml(l.duration||"")+taskNote);
     nav += '<div class="lesson-item'+(i===idx?' active':'')+(isDone?' done':'')+'" data-action="goto-lesson" data-idx="'+i+'"'+(isLocked?' style="opacity:.45;cursor:not-allowed;"':'')+'>' +
       '<span class="lesson-num">'+(isLocked?icon("lock","ic-sm"):(isDone?icon("check","ic-sm"):(i+1)))+'</span><div><b>'+escapeHtml(l.title)+'</b><span>'+lockLabel+'</span></div></div>';
   });
@@ -2153,7 +2195,7 @@ function renderCoursePlayer(){
     '<div class="meta">Урок '+(idx+1)+' из '+course.lessons.length+' · '+escapeHtml(lesson.duration||"")+'</div>';
 
   if(stages.length>1){
-    var stageLabels = { intro:"Материал", video:"Видео", quiz:"Тест" };
+    var stageLabels = { intro:"Материал", video:"Видео", quiz:"Тест", task:"Задание" };
     body += '<div class="tabs" style="margin:14px 0 4px;">';
     stages.forEach(function(sKey){
       var locked = sKey==="quiz" && !isDoneAlready && stages.indexOf("video")!==-1 && !studentState.videoEnded;
@@ -2183,6 +2225,8 @@ function renderCoursePlayer(){
     body += renderLessonVideoStage(lesson, stages, isDoneAlready);
   } else if(stage==="quiz"){
     body += renderLessonQuizStage(lesson);
+  } else if(stage==="task"){
+    body += renderLessonTaskStage(lesson, stages);
   }
 
   body += '</div>';
@@ -2208,6 +2252,8 @@ function renderLessonVideoStage(lesson, stages, isDoneAlready){
     '<button class="btn btn-ghost" data-action="lesson-stage" data-stage="intro">← К материалу</button>';
   if(hasQuiz){
     html += '<button class="btn btn-primary" data-action="lesson-stage" data-stage="quiz"'+(canProceed?'':' disabled title="Досмотрите видео до конца"')+'>Пройти тест →</button>';
+  } else if(stages.indexOf("task")!==-1){
+    html += '<button class="btn btn-primary" data-action="lesson-stage" data-stage="task"'+(canProceed?'':' disabled title="Досмотрите видео до конца"')+'>К заданию →</button>';
   } else {
     html += '<button class="btn btn-primary" data-action="next-lesson"'+(canProceed?'':' disabled title="Досмотрите видео до конца"')+'>Урок пройден, далее →</button>';
   }
@@ -2224,7 +2270,9 @@ function renderLessonQuizStage(lesson){
       '<div class="big">'+icon(result.score>=60?"badge":"star","ic-lg")+'</div>' +
       '<b style="font-size:20px;display:block;margin-bottom:6px;">'+result.score+'%</b>' +
       '<p style="color:var(--muted);">правильных ответов — это просто для закрепления материала, на сертификат не влияет.</p>' +
-      '<button class="btn btn-primary" style="margin-top:14px;" data-action="next-lesson">Далее →</button>' +
+      (lesson.assignment
+        ? '<button class="btn btn-primary" style="margin-top:14px;" data-action="lesson-stage" data-stage="task">Далее → задание</button>'
+        : '<button class="btn btn-primary" style="margin-top:14px;" data-action="next-lesson">Далее →</button>') +
     '</div>';
     return html;
   }
@@ -2620,6 +2668,7 @@ function roleCapabilities(role){
       { label:"Проходить итоговый тест и получать сертификат", allowed:true },
       { label:"Общаться с куратором и потоком в Telegram-группе", allowed:true },
       { label:"Сохранять уроки в «Мои материалы» и оставлять личные заметки", allowed:true },
+      { label:"Отвечать на задания к урокам и заполнять анкеты", allowed:true },
       { label:"Просматривать прогресс и данные других врачей", allowed:false },
       { label:"Редактировать уроки, тест или график их открытия", allowed:false },
       { label:"Управлять доступом, сертификатами или ролями сотрудников", allowed:false }
@@ -2631,6 +2680,8 @@ function roleCapabilities(role){
       { label:"Продлевать/блокировать доступ, выдавать сертификаты", allowed:true },
       { label:"Назначать график открытия уроков (индивидуально и массово)", allowed:true },
       { label:"Приглашать новых врачей, управлять потоками и эфирами", allowed:true },
+      { label:"Проверять задания врачей, вести заказы и отмечать оплаты", allowed:true },
+      { label:"Создавать продукты, анкеты и задания к урокам", allowed:false },
       { label:"Редактировать содержимое уроков, тест и их порядок", allowed:false },
       { label:"Назначать роли сотрудникам, просматривать журнал действий", allowed:false }
     ];
@@ -2639,6 +2690,7 @@ function roleCapabilities(role){
     return [
       { label:"Всё, что доступно куратору обучения", allowed:true },
       { label:"Редактировать уроки, тест, черновики и историю правок", allowed:true },
+      { label:"Создавать продукты, анкеты и задания к урокам", allowed:true },
       { label:"Назначать и снимать роль куратора у сотрудников", allowed:true },
       { label:"Просматривать полный журнал действий платформы", allowed:true },
       { label:"Откатывать действия из журнала", allowed:false },
@@ -2710,6 +2762,7 @@ function renderMyProfilePage(){
   caps.forEach(function(c){
     html += '<div class="cap-row'+(c.allowed?'':' off')+'"><span class="cap-dot">'+(c.allowed?icon("check","ic-sm"):'')+'</span><span>'+escapeHtml(c.label)+'</span></div>';
   });
+  if(isStudent) html += renderMyOrdersBlock();
   html += '<button class="btn btn-sm btn-ghost btn-block" style="margin-top:14px;" data-action="sidebar-nav" data-key="settings">Пароль, сеансы и тема — в «Настройках» →</button>';
   html += '</div></div></div></div>';
   return el(html);
@@ -2808,6 +2861,16 @@ function renderStaffShell(){
     content.appendChild(renderSettingsPage());
   } else if(staffState.mainTab === "profile"){
     content.appendChild(renderMyProfilePage());
+  } else if(staffState.mainTab === "assignments"){
+    content.appendChild(renderAssignmentsTab());
+  } else if(staffState.mainTab === "feed"){
+    content.appendChild(renderFeedTab());
+  } else if(staffState.mainTab === "orders"){
+    content.appendChild(renderOrdersTab());
+  } else if(staffState.mainTab === "products" && (me.role==="admin"||me.role==="super_admin")){
+    content.appendChild(renderProductsTab());
+  } else if(staffState.mainTab === "surveys"){
+    content.appendChild(renderSurveysTab());
   } else if(staffState.mainTab === "students"){
     addSideFlow(main);
     content.appendChild(renderInboxCard());
@@ -2847,6 +2910,11 @@ function renderStaffNotificationsPage(){
   var students = staffState.students || [];
   var since = Date.now() - 14*86400000;
   var feed = upcomingEventReminders().map(function(r){ return { t:Date.now(), kind:"live", icon:"calendar", text:escapeHtml(r.title) }; });
+  // Уведомления, адресованные самому сотруднику (например, новый ответ его врача на задание).
+  (notifState.items||[]).forEach(function(n){
+    if(new Date(n.created_at).getTime()<since) return;
+    feed.push({ t:new Date(n.created_at).getTime(), kind:"task", icon:"task", text:'<b>'+escapeHtml(n.title)+'</b>'+(n.body?' · '+escapeHtml(n.body):''), nav:/^assignment_/.test(n.type)?"assignments":null });
+  });
   students.forEach(function(st){
     var nm = '<b>'+escapeHtml(st.name)+'</b>';
     if(st.created_at && new Date(st.created_at).getTime()>=since) feed.push({ t:new Date(st.created_at).getTime(), kind:"reg", icon:"user", text:nm+' зарегистрировался(-ась)'+(specNames(st)?' · '+escapeHtml(specNames(st)):''), id:st.id });
@@ -2861,7 +2929,7 @@ function renderStaffNotificationsPage(){
     feed.slice(0,40).forEach(function(f){
       var d = new Date(f.t), day = d.toDateString()===new Date().toDateString() ? "Сегодня" : d.toLocaleDateString("ru-RU",{weekday:"long",day:"numeric",month:"long"});
       if(day!==lastDay){ html += '<div class="feed-day">'+day+'</div>'; lastDay = day; }
-      html += '<div class="feed-row'+(f.id?' feed-link':'')+'"'+(f.id?' data-action="open-student" data-id="'+f.id+'"':'')+'>' +
+      html += '<div class="feed-row'+(f.id||f.nav?' feed-link':'')+'"'+(f.id?' data-action="open-student" data-id="'+f.id+'"':(f.nav?' data-action="sidebar-nav" data-key="'+f.nav+'"':''))+'>' +
         '<span class="feed-ic '+f.kind+'">'+icon(f.icon,"ic-sm")+'</span><span class="feed-text">'+f.text+'</span>' +
         '<span class="feed-time">'+(f.kind==="live"?"скоро":fmtTime(d.toISOString()))+'</span></div>';
     });
@@ -2873,7 +2941,9 @@ function renderStaffNotificationsPage(){
   html += '<div class="pp-col"><div class="card co-card"><b class="co-card-title">Требует внимания</b>' +
     '<div class="att-row" data-action="sidebar-nav" data-key="students"><b>'+inbox.inactive.length+'</b><span>не заходили 7+ дней</span><em>→</em></div>' +
     '<div class="att-row" data-action="sidebar-nav" data-key="students"><b>'+inbox.pendingCertificates.length+'</b><span>ждут сертификат</span><em>→</em></div>' +
-    '<div class="att-row" data-action="sidebar-nav" data-key="students"><b>'+reqFull.length+'</b><span>'+ruPluralClient(reqFull.length,"заявка","заявки","заявок")+' на полную программу</span><em>→</em></div></div>';
+    '<div class="att-row" data-action="sidebar-nav" data-key="students"><b>'+reqFull.length+'</b><span>'+ruPluralClient(reqFull.length,"заявка","заявки","заявок")+' на полную программу</span><em>→</em></div>' +
+    '<div class="att-row" data-action="sidebar-nav" data-key="assignments"><b>'+((toolsState.assign.counts||{}).pending||0)+'</b><span>ответов ждут проверки</span><em>→</em></div>' +
+    '<div class="att-row" data-action="sidebar-nav" data-key="orders"><b>'+((toolsState.orders.summary||{}).overdueOrders||0)+'</b><span>заказов с просроченным платежом</span><em>→</em></div></div>';
   var now = new Date();
   var evs = (calendarState.events||[]).filter(function(ev){ return new Date(ev.event_date+"T"+(ev.event_time||"00:00"))>=now; })
     .sort(function(a,b){ return (a.event_date+a.event_time).localeCompare(b.event_date+b.event_time); }).slice(0,4);
@@ -2937,15 +3007,22 @@ function renderStaffHome(container){
   container.appendChild(el('<div style="margin-top:6px;">'+streamsHtml+'</div>'));
 
   var inbox = staffState.inbox || {inactive:[],pendingCertificates:[]};
-  var totalTasks = inbox.inactive.length + inbox.pendingCertificates.length;
+  var pendingTasks = (toolsState.assign.counts||{}).pending||0, overdueOrders = (toolsState.orders.summary||{}).overdueOrders||0;
+  var totalTasks = inbox.inactive.length + inbox.pendingCertificates.length + pendingTasks + overdueOrders;
   container.appendChild(el(
     '<div style="display:flex;align-items:center;gap:10px;margin:20px 0 10px;">' +
       '<div class="tile-icon" style="background:var(--status-attention-tint);color:var(--status-attention);">'+icon("clipboard")+'</div>' +
       '<b style="font-size:14.5px;">Задачи на сегодня</b>' +
     '</div>'
   ));
-  if(totalTasks) container.appendChild(renderInboxCard());
-  else container.appendChild(el(
+  if(pendingTasks || overdueOrders){
+    container.appendChild(el('<div class="card co-card today-extra">' +
+      (pendingTasks ? '<div class="att-row" data-action="sidebar-nav" data-key="assignments"><b>'+pendingTasks+'</b><span>'+ruPluralClient(pendingTasks,"ответ врача ждёт","ответа врачей ждут","ответов врачей ждут")+' проверки</span><em>→</em></div>' : '') +
+      (overdueOrders ? '<div class="att-row" data-action="sidebar-nav" data-key="orders"><b>'+overdueOrders+'</b><span>'+ruPluralClient(overdueOrders,"заказ","заказа","заказов")+' с просроченным платежом</span><em>→</em></div>' : '') +
+    '</div>'));
+  }
+  if(inbox.inactive.length + inbox.pendingCertificates.length) container.appendChild(renderInboxCard());
+  else if(!totalTasks) container.appendChild(el(
     '<div class="card empty-state" style="padding:32px 20px;">' +
       '<div class="tile-icon" style="background:var(--status-active-tint);color:var(--status-active);margin:0 auto 12px;">'+icon("check")+'</div>' +
       '<b style="font-size:13.5px;display:block;color:var(--ink);">Всё разобрано</b>' +
@@ -3264,8 +3341,9 @@ function renderMaterialsTab(){
       (canEdit ? '<div style="display:flex;flex-direction:column;gap:2px;">' +
         '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-lesson" data-id="'+l.id+'" data-dir="up"'+(isFirst?' disabled':'')+' title="Выше">↑</button>' +
         '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-lesson" data-id="'+l.id+'" data-dir="down"'+(isLast?' disabled':'')+' title="Ниже">↓</button></div>' : '') +
-      '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+(i+1)+'. '+escapeHtml(l.title)+(l.has_draft?' '+magnet("attention","черновик"):'')+'</b><span style="font-size:12px;color:var(--muted);">'+(hiddenCount?'Скрыт от '+hiddenCount+' врачей':'Виден всем')+(l.drip_days?' · открывается через '+l.drip_days+' дн. после регистрации':'')+'</span></div>' +
+      '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+(i+1)+'. '+escapeHtml(l.title)+(l.has_draft?' '+magnet("attention","черновик"):'')+'</b><span style="font-size:12px;color:var(--muted);">'+(hiddenCount?'Скрыт от '+hiddenCount+' врачей':'Виден всем')+(l.drip_days?' · открывается через '+l.drip_days+' дн. после регистрации':'')+(l.assignment_prompt?' · есть задание'+(l.assignment_required?' (стоп-урок)':''):'')+'</span></div>' +
       (canEdit ? '<button class="btn btn-sm btn-ghost" data-action="open-lesson-editor" data-id="'+l.id+'">Редактировать</button>' : '') +
+      (canEdit ? '<button class="btn btn-sm '+(l.assignment_prompt?'btn-primary':'btn-ghost')+'" data-action="open-assign-editor" data-id="'+l.id+'">Задание</button>' : '') +
       (canEdit ? '<button class="btn btn-sm btn-ghost" data-action="open-lesson-video-editor" data-id="'+l.id+'" data-title="'+escapeHtml(l.title)+'">Видео</button>' : '') +
       (canEdit ? '<button class="btn btn-sm btn-ghost" data-action="open-lesson-quiz-manager" data-id="'+l.id+'" data-title="'+escapeHtml(l.title)+'">Тест урока</button>' : '') +
       '<button class="btn btn-sm btn-ghost" data-action="open-schedule-modal" data-id="'+l.id+'" data-title="'+escapeHtml(l.title)+'">Расписание</button>' +
@@ -4387,6 +4465,8 @@ function renderStudentDrawer(){
     '<div class="tabs"><button class="tab'+(staffState.drawerTab==="progress"?' active':'')+'" data-action="drawer-tab" data-tab="progress">Прогресс</button>' +
     '<button class="tab'+(staffState.drawerTab==="access"?' active':'')+'" data-action="drawer-tab" data-tab="access">Доступ</button>' +
     '<button class="tab'+(staffState.drawerTab==="profile"?' active':'')+'" data-action="drawer-tab" data-tab="profile">Профиль</button>' +
+    '<button class="tab'+(staffState.drawerTab==="tasks"?' active':'')+'" data-action="drawer-tab" data-tab="tasks">Задания</button>' +
+    '<button class="tab'+(staffState.drawerTab==="orders"?' active':'')+'" data-action="drawer-tab" data-tab="orders">Оплаты</button>' +
     '<button class="tab'+(staffState.drawerTab==="notes"?' active':'')+'" data-action="drawer-tab" data-tab="notes">Заметки</button></div>';
 
   if(staffState.drawerTab === "progress"){
@@ -4444,6 +4524,10 @@ function renderStudentDrawer(){
           '<button class="btn btn-primary" data-action="toggle-access-block" data-id="'+s.id+'" data-blocked="false">Снять блокировку</button>' :
           '<button class="btn btn-ghost" data-action="toggle-access-block" data-id="'+s.id+'" data-blocked="true">Заблокировать доступ к курсу</button>') +
       '</div>';
+  } else if(staffState.drawerTab === "tasks"){
+    body += renderStudentAssignTab();
+  } else if(staffState.drawerTab === "orders"){
+    body += renderStudentOrdersTab(s);
   } else if(staffState.drawerTab === "notes"){
     body += '<p class="hint" style="margin-top:0;">Видно только персоналу — врач эти записи не видит.</p>' +
       '<div class="field"><textarea class="input" id="studentNoteInput" style="height:64px;" placeholder="Например: пропускает эфиры, стоит позвонить"></textarea></div>' +
@@ -4521,6 +4605,888 @@ async function applyStudentTab(tab, navKey){
 }
 
 /* ============================= СОБЫТИЯ ============================= */
+/* ============================= ЗАДАНИЯ, ЛЕНТА ОТВЕТОВ, ЗАКАЗЫ, АНКЕТЫ ============================= */
+// Разделы «как в GetCourse»: проверка заданий к урокам, лента всех ответов
+// врачей, продукты/заказы/рассрочки и анкеты. Данные грузятся лениво — при
+// заходе в раздел (loadToolsSection), счётчик непроверенных — вместе с данными
+// панели (бейдж в меню).
+var toolsState = {
+  assign:{ status:"pending", lessonId:"", list:[], counts:{pending:0,accepted:0,returned:0}, loaded:false, comments:{}, openHistory:{}, busy:null },
+  feed:{ type:"all", items:[], loaded:false },
+  orders:{ filter:"all", q:"", list:[], summary:null, loaded:false, open:null, draft:null, busy:false },
+  products:{ list:[], loaded:false, editing:null },
+  surveys:{ list:[], loaded:false, editing:null, results:null, resultsId:null },
+  assignEditor:null,
+  studentAssign:[]
+};
+var studentTools = { surveys:[], fillId:null, answers:{}, surveyError:"", orders:[], ordersLoaded:false, taskDraft:{}, taskEditing:{} };
+var SURVEY_TYPE_LABELS = { single:"Один вариант", multi:"Несколько вариантов", scale:"Шкала", text:"Свободный ответ" };
+var ORDER_STATUS = { "new":["neutral","Ждёт оплаты"], partial:["attention","Оплачен частично"], paid:["done","Оплачен"], cancelled:["neutral","Отменён"] };
+
+function isAdminRole(){ return me && (me.role==="admin" || me.role==="super_admin"); }
+function fmtMoney(n){ return (Number(n)||0).toLocaleString("ru-RU")+" ₽"; }
+function fmtDay(v){ var d = dpParse(v); return d ? fmtDateShort(d) : "—"; }
+function todayIso(){ return dpIso(new Date()); }
+// Номер урока — по текущему порядку в «Учебных материалах» (idx в базе после
+// перестановок может идти с пропусками).
+function lessonNo(lessonId, idx){
+  var i = (staffState.materials||[]).findIndex(function(l){ return l.id===lessonId; });
+  return i!==-1 ? i+1 : (typeof idx==="number" ? idx+1 : "");
+}
+function toolsHead(title, sub, right){
+  return '<div class="tools-head"><div><h2>'+escapeHtml(title)+'</h2>'+(sub?'<p>'+sub+'</p>':'')+'</div>'+(right?'<div class="tools-head-r">'+right+'</div>':'')+'</div>';
+}
+function starsHtml(n){ var h=''; for(var i=1;i<=5;i++) h += '<span class="'+(i<=n?'on':'')+'">'+icon("star","ic-sm")+'</span>'; return h; }
+function splitAmountClient(total, n){ var base=Math.floor(total/n), parts=[]; for(var i=0;i<n;i++) parts.push(base); parts[0]+=total-base*n; return parts; }
+function addMonthsIso(iso, k){
+  var d = dpParse(iso) || new Date(), day = d.getDate();
+  var t = new Date(d.getFullYear(), d.getMonth()+k, 1);
+  var last = new Date(t.getFullYear(), t.getMonth()+1, 0).getDate();
+  t.setDate(Math.min(day, last));
+  return dpIso(t);
+}
+// Фоновое обновление (раз в 30с) не должно выбивать курсор из поля, где человек
+// сейчас пишет ответ или комментарий.
+function isTypingNow(){
+  var a = document.activeElement;
+  return !!(a && (a.tagName==="TEXTAREA" || (a.tagName==="INPUT" && /^(text|search|email|tel|number|url|password)$/.test(a.type)) || a.isContentEditable));
+}
+
+async function loadAssignments(){
+  var p = new URLSearchParams(); p.set("status", toolsState.assign.status);
+  if(staffState.activeCourseId) p.set("courseId", staffState.activeCourseId);
+  if(toolsState.assign.lessonId) p.set("lessonId", toolsState.assign.lessonId);
+  try{ var r = await api("/assignments?"+p.toString()); toolsState.assign.list = r.submissions; toolsState.assign.counts = r.counts; toolsState.assign.loaded = true; }
+  catch(e){ showToast(e.message); }
+}
+async function loadAssignCounts(){
+  try{ var r = await api("/assignments?status=pending"+(staffState.activeCourseId?"&courseId="+encodeURIComponent(staffState.activeCourseId):"")); toolsState.assign.counts = r.counts; }catch(e){}
+}
+async function loadFeed(){
+  var p = new URLSearchParams(); p.set("type", toolsState.feed.type);
+  if(staffState.activeCourseId) p.set("courseId", staffState.activeCourseId);
+  try{ var r = await api("/assignments/feed?"+p.toString()); toolsState.feed.items = r.items; toolsState.feed.loaded = true; }catch(e){ showToast(e.message); }
+}
+async function loadOrders(){
+  try{ var r = await api("/orders"); toolsState.orders.list = r.orders; toolsState.orders.summary = r.summary; toolsState.orders.loaded = true; }catch(e){}
+}
+async function loadProducts(){
+  try{ var r = await api("/orders/products"); toolsState.products.list = r.products; toolsState.products.loaded = true; }catch(e){ showToast(e.message); }
+}
+async function loadSurveysAdmin(){
+  var S = toolsState.surveys;
+  try{ var r = await api("/surveys"); S.list = r.surveys; S.loaded = true; }catch(e){ showToast(e.message); return; }
+  if(!S.list.some(function(x){ return x.id===S.resultsId; })) S.resultsId = S.list.length ? S.list[0].id : null;
+  if(S.resultsId) await loadSurveyResults(S.resultsId);
+}
+async function loadSurveyResults(id){
+  try{ var r = await api("/surveys/"+id+"/results"); if(toolsState.surveys.resultsId===id) toolsState.surveys.results = r; }catch(e){ showToast(e.message); }
+}
+async function loadToolsSection(key){
+  if(key==="assignments") await loadAssignments();
+  else if(key==="feed") await loadFeed();
+  else if(key==="orders") await Promise.all([loadOrders(), loadProducts()]);
+  else if(key==="products") await Promise.all([loadProducts(), loadOrders()]);
+  else if(key==="surveys") await loadSurveysAdmin();
+}
+async function loadStudentTools(){
+  try{ var r = await api("/surveys/mine"); studentTools.surveys = r.surveys; }catch(e){}
+}
+async function loadMyOrders(){
+  try{ var r = await api("/orders/mine"); studentTools.orders = r.orders; studentTools.ordersLoaded = true; }catch(e){}
+}
+
+/* ---------- Проверка заданий ---------- */
+
+function renderAssignmentsTab(){
+  var A = toolsState.assign, c = A.counts || {};
+  var lessons = staffState.materials || [];
+  var withTask = lessons.filter(function(l){ return l.assignment_prompt; });
+  var lessonSel = '<select class="input tools-select" data-tchange="assign-lesson"><option value="">Все уроки</option>' +
+    lessons.map(function(l,i){ return '<option value="'+l.id+'"'+(A.lessonId===l.id?' selected':'')+'>Урок '+(i+1)+'. '+escapeHtml(l.title)+'</option>'; }).join('') + '</select>';
+  var html = '<div class="page-wide">' + toolsHead("Проверка заданий",
+    "Ответы врачей на задания к урокам. Примите ответ или верните на доработку с комментарием — врач сразу получит уведомление, а принятый ответ засчитает урок.", lessonSel);
+  var tabs = [["pending","На проверке",c.pending],["returned","На доработке",c.returned],["accepted","Принятые",c.accepted],["all","Все",null]];
+  html += '<div class="tabs">' + tabs.map(function(t){
+    return '<button type="button" class="tab'+(A.status===t[0]?' active':'')+'" data-action="assign-status" data-status="'+t[0]+'">'+t[1]+(t[2]?'<span class="tab-count">'+t[2]+'</span>':'')+'</button>';
+  }).join('') + '</div>';
+  if(!A.loaded){ return el(html + '<div class="card empty-state">Загрузка…</div></div>'); }
+  if(!A.list.length){
+    var txt = A.status==="pending"
+      ? (withTask.length ? '<b>Все ответы проверены</b>Новые ответы появятся здесь сами — и в уведомлениях.' : '<b>Заданий пока нет</b>Ни у одного урока нет задания. Добавьте его в «Учебных материалах» — кнопка «Задание» у урока.')
+      : '<b>Здесь пусто</b>Ответов с таким статусом нет.';
+    html += '<div class="card empty-state tools-empty"><div class="big">'+icon("task","ic-lg")+'</div>'+txt +
+      (A.status==="pending" && !withTask.length && isAdminRole() ? '<div><button class="btn btn-sm btn-primary" data-action="sidebar-nav" data-key="materials">К учебным материалам →</button></div>' : '') + '</div></div>';
+    return el(html);
+  }
+  html += '<div class="tk-list">' + A.list.map(renderAssignmentCard).join('') + '</div></div>';
+  return el(html);
+}
+
+function renderAssignHistoryEntry(x){
+  var label = x.kind==="submit" ? "Ответ врача" : (x.kind==="return" ? "Возвращено" : "Принято") + (x.name ? " · "+escapeHtml(x.name) : "");
+  return '<div class="tk-h '+x.kind+'"><span>'+label+' · '+fmtDateShort(x.at)+', '+fmtTime(x.at)+'</span>'+(x.text?'<p>'+escapeHtml(x.text)+'</p>':'')+'</div>';
+}
+
+function renderAssignmentCard(s){
+  var A = toolsState.assign;
+  var h = s.history || [], lastSub = -1;
+  h.forEach(function(x,i){ if(x.kind==="submit") lastSub = i; });
+  var earlier = lastSub>0 ? h.slice(0,lastSub) : [];
+  var statusMag = s.status==="pending" ? magnet("attention","Ждёт проверки") : (s.status==="accepted" ? magnet("done","Принято") : magnet("blocked","На доработке"));
+  var html = '<div class="card tk-card"><div class="tk-main">' +
+    '<div class="tk-top"><div class="who-cell tk-who" data-action="open-student" data-id="'+s.user_id+'">'+userAvatar({ id:s.user_id, name:s.student_name, avatar_url:s.avatar_url }) +
+      '<div><b>'+escapeHtml(s.student_name)+'</b><span>Урок '+lessonNo(s.lesson_id, s.lesson_idx)+' · '+escapeHtml(s.lesson_title)+'</span></div></div>' +
+      '<div class="tk-meta">'+statusMag+'<span>'+escapeHtml(timeSince(s.submitted_at))+(s.attempts>1?' · попытка '+s.attempts:'')+'</span></div></div>' +
+    '<div class="tk-answer">'+escapeHtml(s.answer)+'</div></div><div class="tk-side">' +
+    '<div class="tk-prompt"><span>Задание'+(s.assignment_required?' · стоп-урок':'')+'</span><p>'+escapeHtml(s.assignment_prompt||"")+'</p></div>';
+  if(earlier.length){
+    var open = !!A.openHistory[s.id];
+    html += '<button type="button" class="tk-hist-toggle" data-action="assign-history" data-id="'+s.id+'">'+icon("repeat","ic-sm")+(open?' Скрыть':' Показать')+' прошлые попытки</button>';
+    if(open) html += '<div class="tk-history">'+earlier.map(renderAssignHistoryEntry).join('')+'</div>';
+  }
+  if(s.status==="pending"){
+    var busy = A.busy===s.id;
+    html += '<div class="tk-review"><textarea class="input" rows="2" data-tbind="assign-comment" data-id="'+s.id+'" placeholder="Комментарий врачу — обязателен, если возвращаете на доработку">'+escapeHtml(A.comments[s.id]||"")+'</textarea>' +
+      '<div class="tk-actions"><button class="btn btn-sm btn-ghost" data-action="assign-review" data-decision="return" data-id="'+s.id+'"'+(busy?' disabled':'')+'>Вернуть на доработку</button>' +
+      '<button class="btn btn-sm btn-primary" data-action="assign-review" data-decision="accept" data-id="'+s.id+'"'+(busy?' disabled':'')+'>'+icon("check","ic-sm")+' Принять</button></div></div>';
+  } else {
+    html += '<div class="tk-verdict '+s.status+'"><b>'+(s.status==="accepted"?"Принято":"Возвращено на доработку")+'</b>'+
+      '<span>'+[s.reviewer_name?escapeHtml(s.reviewer_name):"", s.reviewed_at?fmtDateShort(s.reviewed_at):""].filter(Boolean).join(" · ")+'</span>' +
+      (s.curator_comment?'<p>'+escapeHtml(s.curator_comment)+'</p>':'')+'</div>';
+  }
+  return html + '</div></div>';
+}
+
+// Настройка задания у урока — отдельное окошко из «Учебных материалов», не
+// связано с черновиком/публикацией текста урока.
+function renderAssignEditorModal(){
+  var a = toolsState.assignEditor;
+  var body = '<div class="drawer-head"><div><b style="font-size:16px;">Задание к уроку</b><div class="set-muted">'+escapeHtml(a.title)+'</div></div><button class="btn btn-ghost btn-sm" data-action="assign-editor-close">Закрыть ✕</button></div>' +
+    '<div class="drawer-body">' +
+      '<div class="field"><label>Что должен сделать врач</label><textarea class="input" rows="6" data-tbind="ae.prompt" placeholder="Например: разберите пациента из своей практики по схеме из урока — жалобы, анализы, что назначили бы">'+escapeHtml(a.prompt)+'</textarea>' +
+        '<p class="hint">Врач увидит задание отдельным шагом урока и ответит текстом. Куратор примет ответ или вернёт с комментарием.</p></div>' +
+      '<label class="check-line"><input type="checkbox" data-tbind="ae.required"'+(a.required?' checked':'')+'><span><b>Стоп-урок</b>урок засчитается только после того, как куратор примет ответ</span></label>' +
+      '<div class="modal-actions">' +
+        (a.hadTask ? '<button class="btn btn-ghost" data-action="assign-editor-remove">Убрать задание</button>' : '<span></span>') +
+        '<button class="btn btn-primary" data-action="assign-editor-save">Сохранить</button></div>' +
+    '</div>';
+  return el('<div class="overlay overlay-center" data-action="overlay-close-assign-editor"><div class="drawer modal" data-stop="1" style="width:min(560px,100%);">'+body+'</div></div>');
+}
+
+/* ---------- Лента ответов ---------- */
+
+function renderFeedItem(it){
+  var who = '<b class="fd-name" data-action="open-student" data-id="'+it.student_id+'">'+escapeHtml(it.student_name)+'</b>';
+  var head, body = '', tag = '', ic;
+  if(it.type==="assignment"){
+    ic = "task";
+    head = who+' ответил(а) на задание к уроку '+lessonNo(null, it.lesson_idx)+' «'+escapeHtml(it.lesson_title)+'»';
+    tag = it.status==="pending" ? magnet("attention","ждёт проверки") : (it.status==="accepted" ? magnet("done","принято") : magnet("blocked","на доработке"));
+    body = '<div class="fd-quote">'+escapeHtml(it.text)+'</div>';
+    if(it.status==="pending") body += '<button class="btn btn-sm btn-ghost fd-go" data-action="sidebar-nav" data-key="assignments">Проверить →</button>';
+  } else if(it.type==="feedback"){
+    ic = "star";
+    head = who+' оценил(а) модуль «'+escapeHtml(it.module_title)+'»';
+    tag = '<span class="fd-stars">'+starsHtml(it.rating)+'</span>';
+    if(it.text) body = '<div class="fd-quote">'+escapeHtml(it.text)+'</div>';
+  } else {
+    ic = "poll";
+    head = who+' заполнил(а) анкету «'+escapeHtml(it.survey_title)+'»';
+    body = '<div class="fd-lines">'+(it.lines||[]).slice(0,4).map(function(l){ return '<div><span>'+escapeHtml(l.q)+'</span>'+escapeHtml(l.a)+'</div>'; }).join('') +
+      ((it.lines||[]).length>4 ? '<em>ещё '+(it.lines.length-4)+' '+ruPluralClient(it.lines.length-4,"ответ","ответа","ответов")+' — в результатах анкеты</em>' : '') + '</div>';
+  }
+  return '<div class="fd-item"><div class="fd-av">'+userAvatar({ id:it.student_id, name:it.student_name, avatar_url:it.avatar_url })+'<span class="fd-kind '+it.type+'">'+icon(ic,"ic-sm")+'</span></div>' +
+    '<div class="fd-main"><div class="fd-head"><span class="fd-title">'+head+'</span>'+tag+'<span class="fd-time">'+fmtTime(it.at)+'</span></div>'+body+'</div></div>';
+}
+
+function renderFeedTab(){
+  var F = toolsState.feed;
+  var html = '<div class="page-wide">' + toolsHead("Лента ответов", "Всё, что врачи пишут по обучению, — ответы на задания, отзывы о модулях и анкеты — одной лентой, от новых к старым.");
+  html += '<div class="seg tools-seg">' + [["all","Все"],["assignment","Задания"],["feedback","Отзывы о модулях"],["survey","Анкеты"]].map(function(x){
+    return '<button type="button" class="seg-btn'+(F.type===x[0]?' on':'')+'" data-action="feed-type" data-type="'+x[0]+'">'+x[1]+'</button>';
+  }).join('') + '</div>';
+  if(!F.loaded) return el(html + '<div class="card empty-state">Загрузка…</div></div>');
+  if(!F.items.length){
+    return el(html + '<div class="card empty-state tools-empty"><div class="big">'+icon("feed","ic-lg")+'</div><b>Ответов пока нет</b>Когда врачи начнут отвечать на задания, оценивать модули и заполнять анкеты, всё появится здесь.</div></div>');
+  }
+  html += '<div class="card co-card fd-card">';
+  var lastDay = "";
+  F.items.forEach(function(it){
+    var d = new Date(it.at), day = isSameCalendarDay(d, new Date()) ? "Сегодня" : d.toLocaleDateString("ru-RU",{ weekday:"long", day:"numeric", month:"long" });
+    if(day!==lastDay){ html += '<div class="feed-day">'+day+'</div>'; lastDay = day; }
+    html += renderFeedItem(it);
+  });
+  return el(html + '</div></div>');
+}
+
+/* ---------- Заказы и оплаты ---------- */
+
+function orderStatusMag(o){
+  if(o.status!=="cancelled" && o.status!=="paid" && o.overdue_amount>0) return magnet("blocked","Просрочен платёж");
+  var s = ORDER_STATUS[o.status] || ["neutral", o.status];
+  return magnet(s[0], s[1]);
+}
+function orderMatches(o, f){
+  if(f==="waiting") return o.status==="new" || o.status==="partial";
+  if(f==="installments") return o.installments>1 && o.status!=="cancelled";
+  if(f==="overdue") return o.overdue_amount>0 && o.status!=="cancelled" && o.status!=="paid";
+  if(f==="paid") return o.status==="paid";
+  if(f==="cancelled") return o.status==="cancelled";
+  return true;
+}
+function renderOrdersTab(){
+  var O = toolsState.orders, S = O.summary || { received:0, receivedThisMonth:0, expected:0, overdue:0, overdueOrders:0, ordersCount:0 };
+  var html = '<div class="page-wide">' + toolsHead("Заказы и оплаты",
+    "Продукт, сумма и график платежей по каждому врачу. Отмечайте поступившие платежи — статус оплаты у врача обновится сам, а после полной оплаты откроется курс продукта.",
+    '<button class="btn btn-primary" data-action="order-new">+ Новый заказ</button>');
+  var total = S.received + S.expected;
+  html += '<div class="stat-row">' +
+    '<div class="card stat"><div class="num">'+fmtMoney(S.receivedThisMonth)+'</div><div class="lbl">Получено в этом месяце</div><div class="stat-bar"><i style="width:'+(S.received?Math.round(S.receivedThisMonth/S.received*100):0)+'%"></i></div></div>' +
+    '<div class="card stat"><div class="num">'+fmtMoney(S.received)+'</div><div class="lbl">Получено всего · <b>'+S.ordersCount+'</b> '+ruPluralClient(S.ordersCount,"заказ","заказа","заказов")+'</div><div class="stat-bar"><i style="width:'+(total?Math.round(S.received/total*100):0)+'%"></i></div></div>' +
+    '<div class="card stat"><div class="num">'+fmtMoney(S.expected)+'</div><div class="lbl">Ожидается по графику</div><div class="stat-bar"><i style="width:'+(total?Math.round(S.expected/total*100):0)+'%"></i></div></div>' +
+    '<div class="card stat'+(S.overdue?' stat-warn':'')+'"><div class="num">'+fmtMoney(S.overdue)+'</div><div class="lbl">Просрочено'+(S.overdueOrders?' · <b>'+S.overdueOrders+'</b> '+ruPluralClient(S.overdueOrders,"заказ","заказа","заказов"):'')+'</div><div class="stat-bar"><i style="width:'+(S.expected?Math.round(S.overdue/S.expected*100):0)+'%"></i></div></div>' +
+  '</div>';
+  var filters = [["all","Все"],["waiting","Ждут оплаты"],["installments","Рассрочки"],["overdue","Просрочено"],["paid","Оплачены"],["cancelled","Отменены"]];
+  html += '<div class="card co-card ord-card"><div class="ord-bar"><div class="tabs ord-tabs">' + filters.map(function(f){
+      var n = O.list.filter(function(o){ return orderMatches(o, f[0]); }).length;
+      return '<button type="button" class="tab'+(O.filter===f[0]?' active':'')+'" data-action="order-filter" data-filter="'+f[0]+'">'+f[1]+(n&&f[0]!=="all"?'<span class="tab-count">'+n+'</span>':'')+'</button>';
+    }).join('') + '</div>' +
+    '<input class="input ord-search" id="ordersSearch" data-tbind="order-q" placeholder="Поиск: врач, продукт, №" value="'+escapeHtml(O.q)+'"></div>';
+  var q = O.q.trim().toLowerCase();
+  var list = O.list.filter(function(o){ return orderMatches(o, O.filter) && (!q || (o.student_name+" "+o.student_email+" "+o.title+" №"+o.number).toLowerCase().indexOf(q)!==-1); });
+  if(!O.loaded){ html += '<div class="empty-state">Загрузка…</div>'; }
+  else if(!O.list.length){
+    html += '<div class="empty-state tools-empty"><div class="big">'+icon("wallet","ic-lg")+'</div><b>Заказов пока нет</b>Создайте заказ: выберите врача и продукт, при необходимости — рассрочку. '+
+      (isAdminRole() && !toolsState.products.list.length ? 'Сначала заведите продукты в разделе «Продукты».' : '') + '</div>';
+  } else if(!list.length){
+    html += '<div class="empty-state">Ничего не найдено.</div>';
+  } else {
+    html += '<div class="table-wrap"><table class="roster roster-compact ord-table"><thead><tr><th>№</th><th>Врач</th><th>Продукт</th><th>Сумма</th><th>Оплачено</th><th>Следующий платёж</th><th>Статус</th><th></th></tr></thead><tbody>';
+    list.forEach(function(o){
+      var pct = o.amount ? Math.round(o.paid_amount/o.amount*100) : 100;
+      var overdue = o.overdue_amount>0 && o.status!=="cancelled" && o.status!=="paid";
+      html += '<tr class="row-link'+(o.status==="cancelled"?' ord-off':'')+'" data-action="order-open" data-id="'+o.id+'">' +
+        '<td class="nowrap ord-num">'+o.number+'</td>' +
+        '<td><div class="who-cell">'+userAvatar({ id:o.user_id, name:o.student_name, avatar_url:o.avatar_url })+'<div class="cell-2l"><b class="ell">'+escapeHtml(o.student_name)+'</b><small>'+escapeHtml(o.student_email)+'</small></div></div></td>' +
+        '<td><div class="cell-2l"><span class="ell">'+escapeHtml(o.title)+'</span><small>'+(o.installments>1?'Рассрочка · '+o.installments_paid+' из '+o.installments:'Один платёж')+'</small></div></td>' +
+        '<td class="nowrap"><b>'+fmtMoney(o.amount)+'</b></td>' +
+        '<td><div class="ord-paid"><div class="stat-bar"><i style="width:'+pct+'%"></i></div><span>'+fmtMoney(o.paid_amount)+'</span></div></td>' +
+        '<td class="nowrap'+(overdue?' ord-overdue':'')+'">'+(o.status==="paid"||o.status==="cancelled"||!o.next_due?'—':fmtDay(o.next_due)+(overdue?' · просрочен':''))+'</td>' +
+        '<td class="nowrap">'+orderStatusMag(o)+'</td>' +
+        '<td class="nowrap" style="text-align:right;"><button class="btn btn-sm btn-ghost row-open" data-action="order-open" data-id="'+o.id+'">Открыть →</button></td></tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+  return el(html + '</div></div>');
+}
+
+function renderOrderDrawer(){
+  var o = toolsState.orders.open;
+  var head = '<div class="drawer-head"><div><b style="font-size:16px;">Заказ №'+o.number+'</b><div class="set-muted">'+escapeHtml(o.title)+'</div></div><button class="btn btn-ghost btn-sm" data-action="order-close">Закрыть ✕</button></div>';
+  var rest = o.amount - o.paid_amount, today = todayIso();
+  var body = '<div class="drawer-body">' +
+    '<div class="ord-who" data-action="order-to-student" data-id="'+o.user_id+'">'+userAvatar({ id:o.user_id, name:o.student_name, avatar_url:o.avatar_url })+'<div class="ow-t"><b>'+escapeHtml(o.student_name)+'</b><span>'+escapeHtml(o.student_email)+'</span></div><em>Профиль →</em></div>' +
+    '<div class="ord-sum"><div><span>Сумма</span><b>'+fmtMoney(o.amount)+'</b></div><div><span>Оплачено</span><b>'+fmtMoney(o.paid_amount)+'</b></div><div><span>Остаток</span><b>'+fmtMoney(o.status==="cancelled"?0:rest)+'</b></div></div>' +
+    '<div class="ord-facts"><div><span>Статус</span>'+orderStatusMag(o)+'</div>' +
+      '<div><span>Создан</span>'+fmtDateShort(o.created_at)+(o.created_by_name?' · '+escapeHtml(o.created_by_name):'')+'</div>' +
+      (o.course_title?'<div><span>Доступ</span>'+(o.status==="paid"?'курс «'+escapeHtml(o.course_title)+'» открыт':'после полной оплаты откроется курс «'+escapeHtml(o.course_title)+'»')+'</div>':'') +
+      (o.comment?'<div><span>Комментарий</span>'+escapeHtml(o.comment)+'</div>':'') + '</div>' +
+    '<b class="co-card-title" style="margin:22px 0 10px;">'+(o.payments.length>1?'График платежей':'Платёж')+'</b><div class="ord-sched">';
+  o.payments.forEach(function(p,i){
+    var paid = !!p.paid_at, overdue = !paid && p.due_date < today && o.status!=="cancelled";
+    body += '<div class="ord-pay'+(paid?' paid':(overdue?' overdue':''))+'"><span class="ord-pay-n">'+(paid?icon("check","ic-sm"):(i+1))+'</span>' +
+      '<div class="ord-pay-main"><b>'+fmtMoney(p.amount)+'</b><span>'+(paid ? 'оплачен '+fmtDateShort(p.paid_at)+(p.marked_by_name?' · отметил(а) '+escapeHtml(p.marked_by_name):'') : 'до '+fmtDay(p.due_date)+(overdue?' · просрочен':''))+'</span></div>' +
+      (o.status==="cancelled" ? '' : paid
+        ? '<button class="btn btn-sm btn-ghost" data-action="order-unpay" data-pid="'+p.id+'"'+(toolsState.orders.busy?' disabled':'')+'>Отменить отметку</button>'
+        : '<button class="btn btn-sm btn-primary" data-action="order-pay" data-pid="'+p.id+'"'+(toolsState.orders.busy?' disabled':'')+'>Отметить оплату</button>') +
+    '</div>';
+  });
+  body += '</div>';
+  if(o.status!=="cancelled") body += '<button class="btn btn-sm btn-ghost ord-cancel" data-action="order-cancel">Отменить заказ</button>';
+  body += '</div>';
+  return el('<div class="overlay" data-action="overlay-close-order"><div class="drawer" data-stop="1" style="width:min(540px,100%);">'+head+body+'</div></div>');
+}
+
+function newOrderDraft(userId){ return { userId:userId||"", productId:"", title:"", amount:"", installments:"1", firstDueDate:todayIso(), paidNow:false, comment:"", error:"" }; }
+function renderOrderCreateModal(){
+  var d = toolsState.orders.draft;
+  var prods = toolsState.products.list.filter(function(p){ return p.active || p.id===d.productId; });
+  var prod = prods.find(function(p){ return p.id===d.productId; }) || null;
+  var maxInst = prod ? prod.max_installments : 24;
+  var students = (staffState.students||[]).slice().sort(function(a,b){ return a.name.localeCompare(b.name,"ru"); });
+  var amount = d.amount!=="" ? parseInt(d.amount,10) : (prod ? prod.price : NaN);
+  var n = Math.max(1, Math.min(maxInst, parseInt(d.installments,10)||1));
+  var preview = '';
+  if(amount>=0){
+    var parts = splitAmountClient(amount, n);
+    preview = '<div class="ord-preview"><b>'+(n>1?n+' '+ruPluralClient(n,"платёж","платежа","платежей"):'Один платёж')+'</b>' + parts.map(function(a,i){
+      return '<div><span>'+(i+1)+'.</span>'+fmtMoney(a)+'<em>до '+fmtDay(addMonthsIso(d.firstDueDate, i))+'</em>'+(i===0&&d.paidNow?'<i>оплачен</i>':'')+'</div>';
+    }).join('') + '</div>';
+  }
+  var instOpts = ''; for(var i=1;i<=maxInst;i++) instOpts += '<option value="'+i+'"'+(i===n?' selected':'')+'>'+(i===1?'Без рассрочки':i+' '+ruPluralClient(i,"платёж","платежа","платежей"))+'</option>';
+  var body = '<div class="drawer-head"><b style="font-size:16px;">Новый заказ</b><button class="btn btn-ghost btn-sm" data-action="order-draft-close">Закрыть ✕</button></div><div class="drawer-body">' +
+    '<div class="field"><label>Врач</label><select class="input" data-tbind="od.userId" data-rerender="1"><option value="">— выберите врача —</option>' +
+      students.map(function(s){ return '<option value="'+s.id+'"'+(s.id===d.userId?' selected':'')+'>'+escapeHtml(s.name)+' — '+escapeHtml(s.email)+'</option>'; }).join('') + '</select></div>' +
+    '<div class="field"><label>Продукт</label><select class="input" data-tbind="od.productId" data-rerender="1"><option value="">— без продукта, своё название —</option>' +
+      prods.map(function(p){ return '<option value="'+p.id+'"'+(p.id===d.productId?' selected':'')+'>'+escapeHtml(p.title)+' · '+fmtMoney(p.price)+'</option>'; }).join('') + '</select>' +
+      (isAdminRole() && !toolsState.products.list.length ? '<p class="hint">Продуктов пока нет — их можно завести в разделе «Продукты».</p>' : '') + '</div>' +
+    (prod ? '' : '<div class="field"><label>Название</label><input class="input" data-tbind="od.title" value="'+escapeHtml(d.title)+'" placeholder="Например, консультация по протоколу"></div>') +
+    '<div class="profile-2f"><div class="field"><label>Сумма, ₽</label><input class="input" type="number" min="0" step="1" data-tbind="od.amount" data-rerender="1" value="'+escapeHtml(d.amount)+'" placeholder="'+(prod?prod.price:'0')+'">' +
+      (prod?'<p class="hint">Цена продукта — '+fmtMoney(prod.price)+'. Укажите другую, если скидка.</p>':'') + '</div>' +
+      '<div class="field"><label>Рассрочка</label><select class="input" data-tbind="od.installments" data-rerender="1">'+instOpts+'</select></div></div>' +
+    '<div class="profile-2f"><div class="field"><label>'+(n>1?'Первый платёж':'Оплатить до')+'</label><input class="input" type="date" data-tbind="od.firstDueDate" data-rerender="1" value="'+escapeHtml(d.firstDueDate)+'"></div>' +
+      '<div class="field"><label class="sp-label">&nbsp;</label><label class="check-line"><input type="checkbox" data-tbind="od.paidNow" data-rerender="1"'+(d.paidNow?' checked':'')+'><span>'+(n>1?'Первый платёж уже получен':'Уже оплачено')+'</span></label></div></div>' +
+    preview +
+    '<div class="field"><label>Комментарий <span class="set-muted">(виден только персоналу)</span></label><textarea class="input" rows="2" data-tbind="od.comment">'+escapeHtml(d.comment)+'</textarea></div>' +
+    (d.error?'<div class="err-text">'+escapeHtml(d.error)+'</div>':'') +
+    '<div class="modal-actions"><button class="btn btn-ghost" data-action="order-draft-close">Отмена</button><button class="btn btn-primary" data-action="order-create"'+(toolsState.orders.busy?' disabled':'')+'>Создать заказ</button></div></div>';
+  return el('<div class="overlay overlay-center" data-action="overlay-close-order-draft"><div class="drawer modal" data-stop="1" style="width:min(600px,100%);">'+body+'</div></div>');
+}
+
+/* ---------- Продукты ---------- */
+
+function renderProductsTab(){
+  var P = toolsState.products;
+  var html = '<div class="page-wide">' + toolsHead("Продукты", "Что вы продаёте: цена, возможная рассрочка и курс, который откроется врачу после полной оплаты заказа.",
+    isAdminRole() ? '<button class="btn btn-primary" data-action="product-new">+ Новый продукт</button>' : '');
+  if(!P.loaded) return el(html + '<div class="card empty-state">Загрузка…</div></div>');
+  if(!P.list.length){
+    return el(html + '<div class="card empty-state tools-empty"><div class="big">'+icon("wallet","ic-lg")+'</div><b>Продуктов пока нет</b>Например: «Медицина Долголетия — полный курс», 90 000 ₽, рассрочка до 3 платежей, открывает полный курс.' +
+      (isAdminRole()?'<div><button class="btn btn-sm btn-primary" data-action="product-new">Создать продукт</button></div>':'') + '</div></div>');
+  }
+  html += '<div class="sv-layout prod-layout"><div class="prod-grid">';
+  P.list.forEach(function(p){
+    html += '<div class="card prod-card'+(p.active?'':' off')+'"><div class="prod-top"><b>'+escapeHtml(p.title)+'</b>'+(p.active?magnet("active","В продаже"):magnet("neutral","Скрыт"))+'</div>' +
+      '<div class="prod-price">'+fmtMoney(p.price)+'</div>' +
+      '<div class="prod-facts"><div>'+icon("repeat","ic-sm")+(p.max_installments>1?'Рассрочка до '+p.max_installments+' '+ruPluralClient(p.max_installments,"платежа","платежей","платежей"):'Один платёж')+'</div>' +
+        '<div>'+icon("book","ic-sm")+(p.course_title?'Открывает курс «'+escapeHtml(p.course_title)+'»':'Без автоматического доступа к курсу')+'</div>' +
+        '<div>'+icon("list","ic-sm")+p.orders_count+' '+ruPluralClient(p.orders_count,"заказ","заказа","заказов")+'</div></div>' +
+      (isAdminRole() ? '<div class="prod-actions"><button class="btn btn-sm btn-ghost" data-action="product-edit" data-id="'+p.id+'">Изменить</button>' +
+        '<button class="btn btn-sm btn-ghost" data-action="product-toggle" data-id="'+p.id+'">'+(p.active?'Скрыть':'Вернуть в продажу')+'</button>' +
+        (p.orders_count ? '' : '<button class="btn btn-sm btn-ghost prod-del" data-action="product-delete" data-id="'+p.id+'" title="Удалить">'+icon("trash","ic-sm")+'</button>') + '</div>' : '') +
+    '</div>';
+  });
+  return el(html + '</div>' + renderProductSales() + '</div></div>');
+}
+
+// Продажи по продуктам — из уже загруженных заказов (без отменённых).
+function renderProductSales(){
+  var orders = (toolsState.orders.list||[]).filter(function(o){ return o.status!=="cancelled"; });
+  var rows = toolsState.products.list.map(function(p){
+    var mine = orders.filter(function(o){ return o.product_id===p.id; });
+    return { title:p.title, n:mine.length, paid:mine.reduce(function(a,o){ return a+o.paid_amount; },0), total:mine.reduce(function(a,o){ return a+o.amount; },0) };
+  });
+  var free = orders.filter(function(o){ return !o.product_id; });
+  if(free.length) rows.push({ title:"Без продукта", n:free.length, paid:free.reduce(function(a,o){ return a+o.paid_amount; },0), total:free.reduce(function(a,o){ return a+o.amount; },0) });
+  var sumPaid = rows.reduce(function(a,r){ return a+r.paid; },0), sumTotal = rows.reduce(function(a,r){ return a+r.total; },0);
+  var h = '<div class="card co-card ps-card"><div class="co-head"><b>Продажи по продуктам</b><button class="btn btn-sm btn-ghost" data-action="sidebar-nav" data-key="orders">Заказы →</button></div>' +
+    '<div class="ps-total"><div><b>'+fmtMoney(sumPaid)+'</b><span>получено</span></div><div><b>'+fmtMoney(sumTotal-sumPaid)+'</b><span>ожидается</span></div></div>';
+  if(!orders.length) h += '<p class="set-muted">Заказов пока нет — как только появятся, здесь будет видно, что продаётся лучше.</p>';
+  rows.filter(function(r){ return r.n; }).sort(function(a,b){ return b.total-a.total; }).forEach(function(r){
+    h += '<div class="ps-row"><div class="ps-head"><b>'+escapeHtml(r.title)+'</b><span>'+r.n+' '+ruPluralClient(r.n,"заказ","заказа","заказов")+'</span></div>' +
+      '<div class="ps-bar"><i class="paid" style="width:'+(sumTotal?r.paid/sumTotal*100:0)+'%"></i><i class="rest" style="width:'+(sumTotal?(r.total-r.paid)/sumTotal*100:0)+'%"></i></div>' +
+      '<div class="ps-sub"><span>'+fmtMoney(r.paid)+' получено</span><span>из '+fmtMoney(r.total)+'</span></div></div>';
+  });
+  return h + '</div>';
+}
+
+function renderProductModal(){
+  var p = toolsState.products.editing;
+  var courseOpts = '<option value="">— не открывать курс —</option>' + (staffState.coursesList||[]).map(function(c){ return '<option value="'+c.id+'"'+(c.id===p.courseId?' selected':'')+'>'+escapeHtml(c.title)+'</option>'; }).join('');
+  var instOpts = ''; [1,2,3,4,5,6,8,10,12,18,24].forEach(function(i){ instOpts += '<option value="'+i+'"'+(String(i)===String(p.maxInstallments)?' selected':'')+'>'+(i===1?'Без рассрочки':'До '+i+' '+ruPluralClient(i,"платежа","платежей","платежей"))+'</option>'; });
+  var body = '<div class="drawer-head"><b style="font-size:16px;">'+(p.id?'Продукт':'Новый продукт')+'</b><button class="btn btn-ghost btn-sm" data-action="product-close">Закрыть ✕</button></div><div class="drawer-body">' +
+    '<div class="field"><label>Название</label><input class="input" data-tbind="pd.title" value="'+escapeHtml(p.title)+'" placeholder="Медицина Долголетия — полный курс"></div>' +
+    '<div class="profile-2f"><div class="field"><label>Цена, ₽</label><input class="input" type="number" min="0" step="1" data-tbind="pd.price" value="'+escapeHtml(p.price)+'"></div>' +
+      '<div class="field"><label>Рассрочка</label><select class="input" data-tbind="pd.maxInstallments">'+instOpts+'</select></div></div>' +
+    '<div class="field"><label>После полной оплаты открыть курс</label><select class="input" data-tbind="pd.courseId">'+courseOpts+'</select></div>' +
+    '<label class="check-line"><input type="checkbox" data-tbind="pd.active"'+(p.active?' checked':'')+'><span><b>В продаже</b>скрытый продукт нельзя выбрать в новом заказе</span></label>' +
+    (p.error?'<div class="err-text">'+escapeHtml(p.error)+'</div>':'') +
+    '<div class="modal-actions"><button class="btn btn-ghost" data-action="product-close">Отмена</button><button class="btn btn-primary" data-action="product-save">Сохранить</button></div></div>';
+  return el('<div class="overlay overlay-center" data-action="overlay-close-product"><div class="drawer modal" data-stop="1" style="width:min(520px,100%);">'+body+'</div></div>');
+}
+
+/* ---------- Анкеты ---------- */
+
+function newSurveyQuestion(type){
+  type = type || "single";
+  return { id:"q"+Math.random().toString(36).slice(2,10), type:type, text:"", options:(type==="single"||type==="multi")?["",""]:[], required:type!=="text", max:5 };
+}
+function surveyTemplate(){
+  return { id:null, title:"Знакомство: ваша практика", description:"Пара минут — чтобы куратор лучше понимал ваш опыт и подбирал примеры под вашу практику.", courseId:"", active:true, questions:[
+    { id:"q-exp", type:"single", text:"Сколько лет вы практикуете?", options:["До 3 лет","3–10 лет","10–20 лет","Больше 20 лет"], required:true, max:5 },
+    { id:"q-topics", type:"multi", text:"Какие темы для вас сейчас важнее всего?", options:["Гормональное здоровье","Питание и нутрицевтики","Сон и восстановление","Анализы и их интерпретация","Работа с пациентами 45+"], required:false, max:5 },
+    { id:"q-ready", type:"scale", text:"Насколько вы готовы применять подходы превентивной медицины уже сейчас?", options:[], required:true, max:5 },
+    { id:"q-wish", type:"text", text:"Что должно быть в курсе, чтобы он точно оказался для вас полезным?", options:[], required:false, max:5 }
+  ], error:"" };
+}
+function renderSurveysTab(){
+  var S = toolsState.surveys;
+  var html = '<div class="page-wide">' + toolsHead("Анкеты и опросы", "Соберите анкету из вопросов — врачи увидят её у себя на главной и получат уведомление. Результаты — сводкой по каждому вопросу и поимённо.",
+    isAdminRole() ? '<button class="btn btn-ghost" data-action="survey-template">Шаблон «Знакомство»</button><button class="btn btn-primary" data-action="survey-new">+ Новая анкета</button>' : '');
+  if(!S.loaded) return el(html + '<div class="card empty-state">Загрузка…</div></div>');
+  if(!S.list.length){
+    return el(html + '<div class="card empty-state tools-empty"><div class="big">'+icon("poll","ic-lg")+'</div><b>Анкет пока нет</b>Анкета на входе поможет узнать опыт и интересы врачей, опрос после эфира — что улучшить.' +
+      (isAdminRole()?'<div><button class="btn btn-sm btn-primary" data-action="survey-template">Начать с шаблона</button></div>':'') + '</div></div>');
+  }
+  // Список анкет слева, результаты выбранной — справа (по умолчанию первой).
+  html += '<div class="sv-layout"><div class="sv-list">';
+  S.list.forEach(function(s){
+    var pct = s.audience_count ? Math.min(100, Math.round(s.responses_count/s.audience_count*100)) : 0;
+    html += '<div class="card sv-card'+(s.active?'':' off')+(S.resultsId===s.id?' sel':'')+'" data-action="survey-results" data-id="'+s.id+'"><div class="prod-top"><b>'+escapeHtml(s.title)+'</b>'+(s.active?magnet("active","Собирает ответы"):magnet("neutral","Закрыта"))+'</div>' +
+      (s.description?'<p class="sv-desc">'+escapeHtml(s.description)+'</p>':'') +
+      '<div class="sv-meta"><span>'+icon("users","ic-sm")+(s.course_title?'Курс «'+escapeHtml(s.course_title)+'»':'Все врачи')+'</span><span>'+icon("list","ic-sm")+s.questions.length+' '+ruPluralClient(s.questions.length,"вопрос","вопроса","вопросов")+'</span></div>' +
+      '<div class="sv-progress"><div><b>'+s.responses_count+'</b> '+ruPluralClient(s.responses_count,"ответ","ответа","ответов")+' из '+s.audience_count+' возможных<span>'+pct+'%</span></div><div class="stat-bar"><i style="width:'+pct+'%"></i></div></div>' +
+      (isAdminRole() ? '<div class="prod-actions"><button class="btn btn-sm btn-ghost" data-action="survey-edit" data-id="'+s.id+'">Изменить</button>' +
+          '<button class="btn btn-sm btn-ghost" data-action="survey-toggle" data-id="'+s.id+'">'+(s.active?'Закрыть':'Открыть снова')+'</button>' +
+          '<button class="btn btn-sm btn-ghost prod-del" data-action="survey-delete" data-id="'+s.id+'" title="Удалить">'+icon("trash","ic-sm")+'</button></div>' : '') + '</div>';
+  });
+  html += '</div><div class="card co-card sv-results">'+renderSurveyResultsBody()+'</div></div>';
+  return el(html + '</div>');
+}
+
+function renderSurveyBuilder(){
+  var s = toolsState.surveys.editing;
+  var courseOpts = '<option value="">Все врачи</option>' + (staffState.coursesList||[]).map(function(c){ return '<option value="'+c.id+'"'+(c.id===s.courseId?' selected':'')+'>Записанные на «'+escapeHtml(c.title)+'»</option>'; }).join('');
+  var head = '<div class="drawer-head"><b style="font-size:16px;">'+(s.id?'Анкета':'Новая анкета')+'</b><button class="btn btn-ghost btn-sm" data-action="survey-close">Закрыть ✕</button></div>';
+  var body = '<div class="drawer-body">' +
+    '<div class="field"><label>Название</label><input class="input" data-tbind="sv.title" value="'+escapeHtml(s.title)+'" placeholder="Например, опрос после эфира"></div>' +
+    '<div class="field"><label>Пояснение для врача <span class="set-muted">(необязательно)</span></label><textarea class="input" rows="2" data-tbind="sv.description">'+escapeHtml(s.description||"")+'</textarea></div>' +
+    '<div class="profile-2f"><div class="field"><label>Кому показывать</label><select class="input" data-tbind="sv.courseId">'+courseOpts+'</select></div>' +
+      '<div class="field"><label class="sp-label">&nbsp;</label><label class="check-line"><input type="checkbox" data-tbind="sv.active"'+(s.active?' checked':'')+'><span>Собирать ответы</span></label></div></div>' +
+    '<b class="co-card-title" style="margin:10px 0 10px;">Вопросы</b>';
+  s.questions.forEach(function(q, qi){
+    var typeOpts = ["single","multi","scale","text"].map(function(t){ return '<option value="'+t+'"'+(q.type===t?' selected':'')+'>'+SURVEY_TYPE_LABELS[t]+'</option>'; }).join('');
+    body += '<div class="sq-card"><div class="sq-head"><span class="sq-n">'+(qi+1)+'</span><select class="input sq-type" data-tbind="sq.type" data-id="'+qi+'" data-rerender="1">'+typeOpts+'</select>' +
+      '<div class="sq-tools"><button type="button" class="btn btn-sm btn-ghost" data-action="sq-move" data-id="'+qi+'" data-dir="-1"'+(qi===0?' disabled':'')+' title="Выше">↑</button>' +
+      '<button type="button" class="btn btn-sm btn-ghost" data-action="sq-move" data-id="'+qi+'" data-dir="1"'+(qi===s.questions.length-1?' disabled':'')+' title="Ниже">↓</button>' +
+      '<button type="button" class="btn btn-sm btn-ghost" data-action="sq-del" data-id="'+qi+'" title="Удалить вопрос">'+icon("trash","ic-sm")+'</button></div></div>' +
+      '<input class="input" data-tbind="sq.text" data-id="'+qi+'" value="'+escapeHtml(q.text)+'" placeholder="Текст вопроса">';
+    if(q.type==="single" || q.type==="multi"){
+      body += '<div class="sq-opts">';
+      q.options.forEach(function(o, oi){
+        body += '<div class="sq-opt"><span class="sq-mark '+q.type+'"></span><input class="input" data-tbind="sq.opt" data-id="'+qi+':'+oi+'" value="'+escapeHtml(o)+'" placeholder="Вариант '+(oi+1)+'">' +
+          (q.options.length>2?'<button type="button" class="btn btn-sm btn-ghost" data-action="sq-opt-del" data-id="'+qi+':'+oi+'" title="Убрать вариант">✕</button>':'') + '</div>';
+      });
+      body += '<button type="button" class="btn btn-sm btn-ghost" data-action="sq-opt-add" data-id="'+qi+'">+ Вариант</button></div>';
+    } else if(q.type==="scale"){
+      body += '<div class="sq-scale-set"><span>Шкала от 1 до</span><select class="input" data-tbind="sq.max" data-id="'+qi+'" data-rerender="1"><option value="5"'+(q.max!==10?' selected':'')+'>5</option><option value="10"'+(q.max===10?' selected':'')+'>10</option></select></div>';
+    }
+    body += '<label class="check-line sq-req"><input type="checkbox" data-tbind="sq.req" data-id="'+qi+'"'+(q.required?' checked':'')+'><span>Обязательный вопрос</span></label></div>';
+  });
+  body += '<div class="sq-add">' + ["single","multi","scale","text"].map(function(t){ return '<button type="button" class="btn btn-sm btn-ghost" data-action="sq-add" data-type="'+t+'">+ '+SURVEY_TYPE_LABELS[t]+'</button>'; }).join('') + '</div>' +
+    (s.error?'<div class="err-text">'+escapeHtml(s.error)+'</div>':'') +
+    '<div class="modal-actions"><button class="btn btn-ghost" data-action="survey-close">Отмена</button><button class="btn btn-primary" data-action="survey-save">'+(s.id?'Сохранить':'Создать и разослать')+'</button></div></div>';
+  return el('<div class="overlay" data-action="overlay-close-survey"><div class="drawer" data-stop="1" style="width:min(680px,100%);">'+head+body+'</div></div>');
+}
+
+function renderSurveyResultsBody(){
+  var R = toolsState.surveys.results;
+  var body = '<div class="co-head sr-top"><div><span class="sv-kicker">Результаты</span><b>'+(R?escapeHtml(R.survey.title):'…')+'</b></div>'+(R?'<span class="courses-count">'+R.total+' '+ruPluralClient(R.total,"ответ","ответа","ответов")+'</span>':'')+'</div>';
+  if(!R){ body += '<div class="empty-state">Загрузка…</div>'; }
+  else if(!R.total){ body += '<div class="empty-state tools-empty"><div class="big">'+icon("poll","ic-lg")+'</div><b>Ответов пока нет</b>Как только врачи начнут заполнять анкету, здесь появится сводка.</div>'; }
+  else {
+    R.survey.questions.forEach(function(q, qi){
+      var sm = R.summary[qi] || { answered:0 };
+      body += '<div class="sr-q"><div class="sr-head"><b>'+(qi+1)+'. '+escapeHtml(q.text)+'</b><span>'+sm.answered+' '+ruPluralClient(sm.answered,"ответ","ответа","ответов")+'</span></div>';
+      if(q.type==="single" || q.type==="multi"){
+        var maxC = Math.max.apply(null, sm.counts.concat([1]));
+        q.options.forEach(function(o, oi){
+          var c = sm.counts[oi]||0, pct = sm.answered ? Math.round(c/sm.answered*100) : 0;
+          body += '<div class="sr-bar'+(c===maxC&&c>0?' top':'')+'"><span class="sr-label">'+escapeHtml(o)+'</span><div class="sr-track"><i style="width:'+pct+'%"></i></div><span class="sr-num">'+c+' · '+pct+'%</span></div>';
+        });
+      } else if(q.type==="scale"){
+        body += '<div class="sr-scale"><div class="sr-avg"><b>'+(sm.avg===null?'—':String(sm.avg).replace(".",","))+'</b><span>в среднем из '+q.max+'</span></div><div class="sr-cols">';
+        var maxS = Math.max.apply(null, sm.counts.concat([1]));
+        sm.counts.forEach(function(c, i){ body += '<div class="sr-col"><i style="height:'+Math.round(c/maxS*100)+'%"></i><span>'+(i+1)+'</span></div>'; });
+        body += '</div></div>';
+      } else {
+        var texts = R.responses.filter(function(r){ return (r.answers||{})[q.id]; });
+        if(!texts.length) body += '<p class="set-muted">Пока без ответов.</p>';
+        texts.slice(0,20).forEach(function(r){ body += '<div class="sr-text"><p>'+escapeHtml(r.answers[q.id])+'</p><span>'+escapeHtml(r.student_name)+' · '+fmtDateShort(r.created_at)+'</span></div>'; });
+        if(texts.length>20) body += '<p class="set-muted">и ещё '+(texts.length-20)+'</p>';
+      }
+      body += '</div>';
+    });
+    body += '<b class="co-card-title" style="margin:24px 0 8px;">Кто ответил</b>';
+    R.responses.forEach(function(r){
+      body += '<div class="sr-person" data-action="open-student" data-id="'+r.student_id+'">'+userAvatar({ id:r.student_id, name:r.student_name, avatar_url:r.avatar_url })+'<div class="ow-t"><b>'+escapeHtml(r.student_name)+'</b><span>'+timeSince(r.created_at)+'</span></div><em>Профиль →</em></div>';
+    });
+  }
+  return body;
+}
+
+/* ---------- Врач: задание в уроке, анкеты, оплаты ---------- */
+
+function renderLessonTaskStage(lesson, stages){
+  var a = lesson.assignment, sub = (course.assignments||{})[lesson.id], editing = !!studentTools.taskEditing[lesson.id];
+  var accepted = sub && sub.status==="accepted";
+  var alreadyDone = ((course.progress && course.progress.completed_lessons) || []).indexOf(lesson.id)!==-1;
+  var html = '<div class="task-box"><div class="task-label">'+icon("task","ic-sm")+' Задание к уроку'+(a.required?'<span class="task-req">обязательное</span>':'')+'</div><div class="task-prompt">'+renderPlainToProse(a.prompt)+'</div></div>';
+  if(sub && !editing){
+    if(sub.status==="pending") html += '<div class="task-state pending"><b>'+icon("clock","ic-sm")+' Ответ отправлен — куратор проверяет</b><span>'+timeSince(sub.submittedAt)+'</span></div>';
+    else if(sub.status==="returned") html += '<div class="task-state returned"><b>'+icon("repeat","ic-sm")+' Куратор вернул ответ на доработку</b>'+(sub.curatorComment?'<p>'+escapeHtml(sub.curatorComment)+'</p>':'')+'<span>'+(sub.reviewerName?escapeHtml(sub.reviewerName)+' · ':'')+timeSince(sub.reviewedAt)+'</span></div>';
+    else html += '<div class="task-state accepted"><b>'+icon("check","ic-sm")+' Ответ принят</b>'+(sub.curatorComment?'<p>'+escapeHtml(sub.curatorComment)+'</p>':'')+'<span>'+(sub.reviewerName?escapeHtml(sub.reviewerName)+' · ':'')+timeSince(sub.reviewedAt)+'</span></div>';
+    html += '<div class="task-answer"><span>Ваш ответ</span>'+escapeHtml(sub.answer)+'</div>';
+    if(sub.status==="pending") html += '<button class="btn btn-sm btn-ghost" data-action="task-edit" data-id="'+lesson.id+'">Изменить ответ</button>';
+    if(sub.status==="returned") html += '<button class="btn btn-sm btn-primary" data-action="task-edit" data-id="'+lesson.id+'">Исправить и отправить снова</button>';
+  } else {
+    var draft = studentTools.taskDraft[lesson.id]!=null ? studentTools.taskDraft[lesson.id] : (sub ? sub.answer : "");
+    html += '<textarea class="input task-input" id="taskAnswer" data-tbind="task-draft" data-id="'+lesson.id+'" placeholder="Ваш ответ — куратор прочитает его и ответит">'+escapeHtml(draft)+'</textarea>' +
+      '<div class="task-send">'+(editing?'<button class="btn btn-sm btn-ghost" data-action="task-edit-cancel" data-id="'+lesson.id+'">Отмена</button>':'') +
+      '<button class="btn btn-sm btn-primary" data-action="task-submit" data-id="'+lesson.id+'">Отправить куратору</button></div>';
+  }
+  var prevStage = stages[stages.indexOf("task")-1] || "intro";
+  var stageNames = { intro:"К материалу", video:"К видео", quiz:"К тесту" };
+  html += '<div class="lesson-footer"><button class="btn btn-ghost" data-action="lesson-stage" data-stage="'+prevStage+'">← '+stageNames[prevStage]+'</button>';
+  if(a.required && !accepted && !alreadyDone){
+    html += '<div class="task-next"><span>Урок засчитается, когда куратор примет ответ</span><button class="btn btn-ghost" data-action="task-skip-next">Следующий урок →</button></div>';
+  } else {
+    html += '<button class="btn btn-primary" data-action="next-lesson">Урок пройден, далее →</button>';
+  }
+  return html + '</div>';
+}
+
+function renderSurveyHomeCard(){
+  var pending = (studentTools.surveys||[]).filter(function(s){ return !s.my_answers; });
+  if(!pending.length) return '';
+  var s = pending[0], n = s.questions.length;
+  return '<div class="card sv-home"><div class="tile-icon">'+icon("poll")+'</div><div class="sv-home-main"><span class="sv-kicker">Анкета'+(pending.length>1?' · ещё '+(pending.length-1):'')+'</span><b>'+escapeHtml(s.title)+'</b><span>'+n+' '+ruPluralClient(n,"вопрос","вопроса","вопросов")+' · около '+Math.max(1,Math.round(n*0.5))+' мин</span></div>' +
+    '<button class="btn btn-primary btn-sm" data-action="sf-open" data-id="'+s.id+'">Заполнить</button></div>';
+}
+
+function renderSurveyFillModal(){
+  var s = studentTools.surveys.find(function(x){ return x.id===studentTools.fillId; });
+  if(!s) return el('<div></div>');
+  var A = studentTools.answers;
+  var body = '<div class="drawer-head"><div><b style="font-size:16px;">'+escapeHtml(s.title)+'</b>'+(s.my_answers?'<div class="set-muted">Вы уже отвечали — можно изменить ответы</div>':'')+'</div><button class="btn btn-ghost btn-sm" data-action="sf-close">Закрыть ✕</button></div><div class="drawer-body">' +
+    (s.description?'<p class="sf-desc">'+escapeHtml(s.description)+'</p>':'');
+  s.questions.forEach(function(q, qi){
+    body += '<div class="sf-q'+(studentTools.missingQ===q.id?' missing':'')+'" id="sfq-'+q.id+'"><p class="qtext">'+(qi+1)+'. '+escapeHtml(q.text)+(q.required?' <span class="sf-req">*</span>':'')+'</p>';
+    if(q.type==="single" || q.type==="multi"){
+      var cur = A[q.id];
+      q.options.forEach(function(o, oi){
+        var on = q.type==="single" ? cur===oi : (Array.isArray(cur) && cur.indexOf(oi)!==-1);
+        body += '<button type="button" class="opt sf-opt'+(on?' on':'')+'" data-action="sf-pick" data-q="'+q.id+'" data-i="'+oi+'" data-multi="'+(q.type==="multi"?1:0)+'"><span class="sf-mark '+q.type+'">'+(on?icon("check","ic-sm"):'')+'</span>'+escapeHtml(o)+'</button>';
+      });
+      if(q.type==="multi") body += '<p class="hint" style="margin-top:0;">Можно выбрать несколько</p>';
+    } else if(q.type==="scale"){
+      body += '<div class="sf-scale">';
+      for(var i=1;i<=q.max;i++) body += '<button type="button" class="'+(A[q.id]===i?'on':'')+'" data-action="sf-pick" data-q="'+q.id+'" data-i="'+i+'" data-multi="0">'+i+'</button>';
+      body += '</div><div class="sf-scale-legend"><span>совсем нет</span><span>полностью</span></div>';
+    } else {
+      body += '<textarea class="input" rows="3" data-tbind="sa.text" data-id="'+q.id+'" placeholder="Ваш ответ">'+escapeHtml(A[q.id]||"")+'</textarea>';
+    }
+    body += '</div>';
+  });
+  body += (studentTools.surveyError?'<div class="err-text">'+escapeHtml(studentTools.surveyError)+'</div>':'') +
+    '<div class="modal-actions"><button class="btn btn-ghost" data-action="sf-close">Позже</button><button class="btn btn-primary" data-action="sf-submit">Отправить</button></div></div>';
+  return el('<div class="overlay overlay-center" data-action="overlay-close-sf"><div class="drawer modal" data-stop="1" style="width:min(620px,100%);">'+body+'</div></div>');
+}
+
+function renderMyOrdersBlock(){
+  var list = studentTools.orders || [];
+  if(!list.length) return '';
+  var today = todayIso();
+  var html = '<div class="my-orders"><b class="co-card-title" style="margin-bottom:10px;">Оплаты</b>';
+  list.forEach(function(o){
+    var pct = o.amount ? Math.round(o.paid_amount/o.amount*100) : 100;
+    var next = o.payments.filter(function(p){ return !p.paid_at; })[0];
+    html += '<div class="my-order"><div class="my-order-top"><b>'+escapeHtml(o.title)+'</b>'+orderStatusMag(o)+'</div>' +
+      '<div class="stat-bar"><i style="width:'+pct+'%"></i></div>' +
+      '<div class="my-order-sub"><span>Оплачено '+fmtMoney(o.paid_amount)+' из '+fmtMoney(o.amount)+'</span>' +
+        (next ? '<span class="'+(next.due_date<today?'ord-overdue':'')+'">Следующий платёж: '+fmtMoney(next.amount)+' до '+fmtDay(next.due_date)+'</span>' : '') + '</div>' +
+      (o.payments.length>1 ? '<div class="my-order-plan">'+o.payments.map(function(p){ return '<span class="'+(p.paid_at?'paid':(p.due_date<today?'overdue':''))+'" title="'+fmtMoney(p.amount)+' · до '+fmtDay(p.due_date)+'"></span>'; }).join('')+'</div>' : '') +
+    '</div>';
+  });
+  return html + '<p class="hint">Вопрос по оплате — напишите куратору в Telegram-группе потока.</p></div>';
+}
+
+/* ---------- Страница врача у куратора: задания и оплаты ---------- */
+
+function renderStudentAssignTab(){
+  var list = toolsState.studentAssign || [];
+  if(!list.length) return '<div class="empty-state" style="padding:30px 10px;">Врач пока не отвечал на задания.</div>';
+  return '<div class="tk-list tk-list-1">' + list.map(renderAssignmentCard).join('') + '</div>';
+}
+function renderStudentOrdersTab(s){
+  var list = toolsState.orders.list.filter(function(o){ return o.user_id===s.id; });
+  var html = '<div class="co-head" style="margin-bottom:12px;"><b>Заказы</b><button class="btn btn-sm btn-primary" data-action="order-new" data-user="'+s.id+'">+ Новый заказ</button></div>';
+  if(!toolsState.orders.loaded) return html + '<div class="empty-state">Загрузка…</div>';
+  if(!list.length) return html + '<div class="empty-state" style="padding:30px 10px;">Заказов нет. Статус оплаты можно выставить вручную во вкладке «Профиль» или создать заказ с графиком платежей.</div>';
+  list.forEach(function(o){
+    var pct = o.amount ? Math.round(o.paid_amount/o.amount*100) : 100;
+    html += '<div class="my-order my-order-link" data-action="order-open" data-id="'+o.id+'"><div class="my-order-top"><b>№'+o.number+' · '+escapeHtml(o.title)+'</b>'+orderStatusMag(o)+'</div>' +
+      '<div class="stat-bar"><i style="width:'+pct+'%"></i></div><div class="my-order-sub"><span>Оплачено '+fmtMoney(o.paid_amount)+' из '+fmtMoney(o.amount)+'</span>' +
+      (o.next_due && o.status!=="paid" && o.status!=="cancelled" ? '<span>следующий платёж до '+fmtDay(o.next_due)+'</span>' : '') + '</div></div>';
+  });
+  return html;
+}
+
+/* ---------- Обработчики ---------- */
+
+function toolsBind(t){
+  var k = t.getAttribute("data-tbind"), id = t.getAttribute("data-id");
+  var v = t.type==="checkbox" ? t.checked : t.value;
+  var O = toolsState.orders, S = toolsState.surveys;
+  if(k==="assign-comment") toolsState.assign.comments[id] = v;
+  else if(k==="order-q") O.q = v;
+  else if(k==="ae.prompt") toolsState.assignEditor.prompt = v;
+  else if(k==="ae.required") toolsState.assignEditor.required = v;
+  else if(k.indexOf("od.")===0 && O.draft){
+    var f = k.slice(3);
+    O.draft[f] = v;
+    if(f==="productId"){ O.draft.amount = ""; O.draft.installments = "1"; }
+  }
+  else if(k.indexOf("pd.")===0 && toolsState.products.editing) toolsState.products.editing[k.slice(3)] = v;
+  else if(k.indexOf("sv.")===0 && S.editing) S.editing[k.slice(3)] = v;
+  else if(k.indexOf("sq.")===0 && S.editing){
+    var f2 = k.slice(3);
+    if(f2==="opt"){ var p = id.split(":"); S.editing.questions[+p[0]].options[+p[1]] = v; return; }
+    var q = S.editing.questions[+id];
+    if(f2==="text") q.text = v;
+    else if(f2==="req") q.required = v;
+    else if(f2==="max") q.max = parseInt(v,10);
+    else if(f2==="type"){ q.type = v; if((v==="single"||v==="multi") && q.options.length<2) q.options = (q.options.concat(["",""])).slice(0, Math.max(2,q.options.length)); }
+  }
+  else if(k==="task-draft") studentTools.taskDraft[id] = v;
+  else if(k==="sa.text") studentTools.answers[id] = v;
+}
+
+async function toolsChange(t){
+  var k = t.getAttribute("data-tchange");
+  if(k==="assign-lesson"){ toolsState.assign.lessonId = t.value; toolsState.assign.loaded = false; render(); await loadAssignments(); render(); }
+}
+
+function openAssignEditor(lessonId){
+  var l = (staffState.materials||[]).find(function(x){ return x.id===lessonId; }) || {};
+  toolsState.assignEditor = { lessonId:lessonId, title:l.title||"", prompt:l.assignment_prompt||"", required:!!l.assignment_required, hadTask:!!l.assignment_prompt };
+}
+
+async function handleToolsClick(action, t, e){
+  var A = toolsState.assign, O = toolsState.orders, P = toolsState.products, S = toolsState.surveys;
+  var id = t.getAttribute("data-id");
+  /* --- проверка заданий --- */
+  if(action==="assign-status"){ A.status = t.getAttribute("data-status"); A.loaded = false; render(); await loadAssignments(); render(); return true; }
+  if(action==="assign-history"){ A.openHistory[id] = !A.openHistory[id]; render(); return true; }
+  if(action==="assign-review"){
+    var dec = t.getAttribute("data-decision"), cm = (A.comments[id]||"").trim();
+    if(dec==="return" && !cm){
+      showToast("Напишите, что доработать, — врач увидит комментарий");
+      var ta = document.querySelector('[data-tbind="assign-comment"][data-id="'+id+'"]'); if(ta) ta.focus();
+      return true;
+    }
+    A.busy = id; render();
+    try{
+      await api("/assignments/"+id+"/review", { method:"POST", body: JSON.stringify({ decision:dec, comment:cm }) });
+      delete A.comments[id];
+      showToast(dec==="accept" ? "Ответ принят — урок засчитан врачу" : "Ответ возвращён на доработку");
+      await loadAssignments();
+      if(staffState.selectedStudentId) await loadStudentAssign(staffState.selectedStudentId);
+      toolsState.feed.loaded = false;
+    }catch(err){ showToast(err.message); }
+    A.busy = null; render(); return true;
+  }
+  if(action==="open-assign-editor"){ openAssignEditor(id); render(); return true; }
+  if(action==="assign-editor-close" || (action==="overlay-close-assign-editor" && !e.target.closest("[data-stop]"))){ toolsState.assignEditor = null; render(); return true; }
+  if(action==="assign-editor-save" || action==="assign-editor-remove"){
+    var ae = toolsState.assignEditor, removing = action==="assign-editor-remove";
+    if(!removing && !ae.prompt.trim()){ showToast("Напишите формулировку задания"); return true; }
+    try{
+      await api("/assignments/lessons/"+ae.lessonId+"/config", { method:"PUT", body: JSON.stringify(removing ? { prompt:"", required:false } : { prompt:ae.prompt, required:ae.required }) });
+      var ml = (staffState.materials||[]).find(function(x){ return x.id===ae.lessonId; });
+      if(ml){ ml.assignment_prompt = removing ? null : ae.prompt.trim(); ml.assignment_required = removing ? false : !!ae.required; }
+      toolsState.assignEditor = null;
+      showToast(removing ? "Задание убрано" : "Задание сохранено");
+    }catch(err){ showToast(err.message); }
+    render(); return true;
+  }
+  /* --- лента --- */
+  if(action==="feed-type"){ toolsState.feed.type = t.getAttribute("data-type"); toolsState.feed.loaded = false; render(); await loadFeed(); render(); return true; }
+  /* --- заказы --- */
+  if(action==="order-filter"){ O.filter = t.getAttribute("data-filter"); render(); return true; }
+  if(action==="order-new"){
+    O.draft = newOrderDraft(t.getAttribute("data-user"));
+    render();
+    if(!P.loaded){ await loadProducts(); render(); }
+    return true;
+  }
+  if(action==="order-draft-close" || (action==="overlay-close-order-draft" && !e.target.closest("[data-stop]"))){ O.draft = null; render(); return true; }
+  if(action==="order-create"){
+    var d = O.draft;
+    if(!d.userId){ d.error = "Выберите врача"; render(); return true; }
+    O.busy = true; d.error = ""; render();
+    try{
+      var r = await api("/orders", { method:"POST", body: JSON.stringify({ userId:d.userId, productId:d.productId||null, title:d.title, amount:d.amount, installments:parseInt(d.installments,10)||1, firstDueDate:d.firstDueDate, paidNow:!!d.paidNow, comment:d.comment }) });
+      O.draft = null; O.open = r.order;
+      showToast("Заказ №"+r.order.number+" создан");
+      await loadOrders();
+      if(staffState.selectedStudentId===r.order.user_id) await refreshSelectedStudent();
+      else { var st = staffState.students.find(function(x){ return x.id===r.order.user_id; }); if(st) loadStaffData().then(render); }
+    }catch(err){ d.error = err.message; }
+    O.busy = false; render(); return true;
+  }
+  if(action==="order-open"){
+    try{ var ro = await api("/orders/"+id); O.open = ro.order; }catch(err){ showToast(err.message); }
+    render(); return true;
+  }
+  if(action==="order-close" || (action==="overlay-close-order" && !e.target.closest("[data-stop]"))){ O.open = null; render(); return true; }
+  if(action==="order-pay" || action==="order-unpay"){
+    var pay = action==="order-pay";
+    O.busy = true; render();
+    try{
+      var rp = await api("/orders/"+O.open.id+"/payments/"+t.getAttribute("data-pid")+"/"+(pay?"pay":"unpay"), { method:"POST" });
+      O.open = rp.order;
+      showToast(pay ? (rp.status==="paid" ? "Заказ оплачен полностью"+(rp.order.course_title?" — курс открыт врачу":"") : "Платёж отмечен") : "Отметка об оплате снята");
+      await loadOrders();
+      if(staffState.selectedStudentId===rp.order.user_id) await refreshSelectedStudent();
+      else { var su = staffState.students.find(function(x){ return x.id===rp.order.user_id; }); if(su) loadStaffData().then(render); }
+    }catch(err){ showToast(err.message); }
+    O.busy = false; render(); return true;
+  }
+  if(action==="order-cancel"){
+    var oc = O.open;
+    askConfirm({ title:"Вы уверены, что хотите отменить заказ №"+oc.number+"?", body:"Заказ останется в истории со статусом «Отменён», неоплаченные платежи больше не будут ждать оплаты.", confirmLabel:"Отменить заказ", danger:true, onConfirm: async function(){
+      try{ await api("/orders/"+oc.id+"/cancel", { method:"POST" }); O.open = null; showToast("Заказ отменён"); await loadOrders(); if(staffState.selectedStudentId===oc.user_id) await refreshSelectedStudent(); }catch(err){ showToast(err.message); }
+      render();
+    } });
+    return true;
+  }
+  if(action==="order-to-student"){ O.open = null; return "open-student"; }
+  /* --- продукты --- */
+  if(action==="product-new"){ P.editing = { id:null, title:"", price:"", maxInstallments:"1", courseId:"", active:true, error:"" }; render(); return true; }
+  if(action==="product-edit"){
+    var pe = P.list.find(function(x){ return x.id===id; });
+    P.editing = { id:pe.id, title:pe.title, price:String(pe.price), maxInstallments:String(pe.max_installments), courseId:pe.course_id||"", active:pe.active, error:"" };
+    render(); return true;
+  }
+  if(action==="product-close" || (action==="overlay-close-product" && !e.target.closest("[data-stop]"))){ P.editing = null; render(); return true; }
+  if(action==="product-save"){
+    var pd = P.editing;
+    try{
+      var payload = { title:pd.title, price:pd.price, maxInstallments:parseInt(pd.maxInstallments,10)||1, courseId:pd.courseId||null, active:!!pd.active };
+      await api("/orders/products"+(pd.id?"/"+pd.id:""), { method:pd.id?"PUT":"POST", body: JSON.stringify(payload) });
+      P.editing = null; showToast("Продукт сохранён"); await loadProducts();
+    }catch(err){ pd.error = err.message; }
+    render(); return true;
+  }
+  if(action==="product-toggle"){
+    var pt = P.list.find(function(x){ return x.id===id; });
+    try{ await api("/orders/products/"+id, { method:"PUT", body: JSON.stringify({ title:pt.title, price:pt.price, maxInstallments:pt.max_installments, courseId:pt.course_id, active:!pt.active }) }); await loadProducts(); }catch(err){ showToast(err.message); }
+    render(); return true;
+  }
+  if(action==="product-delete"){
+    var pdl = P.list.find(function(x){ return x.id===id; });
+    askConfirm({ title:"Вы уверены, что хотите удалить продукт «"+pdl.title+"»?", body:"Заказов по нему нет, так что удаление ничего не затронет.", confirmLabel:"Удалить", danger:true, onConfirm: async function(){
+      try{ await api("/orders/products/"+id, { method:"DELETE" }); showToast("Продукт удалён"); await loadProducts(); }catch(err){ showToast(err.message); }
+      render();
+    } });
+    return true;
+  }
+  /* --- анкеты --- */
+  if(action==="survey-new"){ S.editing = { id:null, title:"", description:"", courseId:"", active:true, questions:[newSurveyQuestion("single")], error:"" }; render(); return true; }
+  if(action==="survey-template"){ S.editing = surveyTemplate(); render(); return true; }
+  if(action==="survey-edit"){
+    var se = S.list.find(function(x){ return x.id===id; });
+    S.editing = { id:se.id, title:se.title, description:se.description||"", courseId:se.course_id||"", active:se.active, questions:JSON.parse(JSON.stringify(se.questions)).map(function(q){ q.options = q.options||[]; q.max = q.max||5; return q; }), error:"" };
+    render(); return true;
+  }
+  if(action==="survey-close" || (action==="overlay-close-survey" && !e.target.closest("[data-stop]"))){ S.editing = null; render(); return true; }
+  if(action==="sq-add"){ S.editing.questions.push(newSurveyQuestion(t.getAttribute("data-type"))); render(); return true; }
+  if(action==="sq-del"){ if(S.editing.questions.length<=1){ showToast("В анкете должен остаться хотя бы один вопрос"); return true; } S.editing.questions.splice(+id,1); render(); return true; }
+  if(action==="sq-move"){ var qs = S.editing.questions, i1 = +id, i2 = i1 + parseInt(t.getAttribute("data-dir"),10); var tmp = qs[i1]; qs[i1] = qs[i2]; qs[i2] = tmp; render(); return true; }
+  if(action==="sq-opt-add"){ S.editing.questions[+id].options.push(""); render(); return true; }
+  if(action==="sq-opt-del"){ var po = id.split(":"); S.editing.questions[+po[0]].options.splice(+po[1],1); render(); return true; }
+  if(action==="survey-save"){
+    var sv = S.editing;
+    var qsClean = sv.questions.map(function(q){ var o = { id:q.id, type:q.type, text:q.text, required:!!q.required }; if(q.type==="single"||q.type==="multi") o.options = q.options.filter(function(x){ return x.trim(); }); if(q.type==="scale") o.max = q.max===10?10:5; return o; });
+    try{
+      await api("/surveys"+(sv.id?"/"+sv.id:""), { method:sv.id?"PUT":"POST", body: JSON.stringify({ title:sv.title, description:sv.description, courseId:sv.courseId||null, active:!!sv.active, questions:qsClean }) });
+      showToast(sv.id ? "Анкета сохранена" : (sv.active ? "Анкета создана — врачи получили уведомление" : "Анкета создана"));
+      S.editing = null; await loadSurveysAdmin();
+    }catch(err){ sv.error = err.message; }
+    render(); return true;
+  }
+  if(action==="survey-toggle"){
+    var stg = S.list.find(function(x){ return x.id===id; });
+    try{ await api("/surveys/"+id, { method:"PUT", body: JSON.stringify({ title:stg.title, description:stg.description, courseId:stg.course_id, active:!stg.active, questions:stg.questions }) }); await loadSurveysAdmin(); showToast(stg.active?"Анкета закрыта":"Анкета снова собирает ответы"); }catch(err){ showToast(err.message); }
+    render(); return true;
+  }
+  if(action==="survey-delete"){
+    var sd = S.list.find(function(x){ return x.id===id; });
+    askConfirm({ title:"Вы уверены, что хотите удалить анкету «"+sd.title+"»?", body:"Вместе с ней удалятся и все ответы врачей ("+sd.responses_count+"). Если нужно просто перестать собирать ответы — закройте её.", confirmLabel:"Удалить", danger:true, onConfirm: async function(){
+      try{ await api("/surveys/"+id, { method:"DELETE" }); showToast("Анкета удалена"); await loadSurveysAdmin(); }catch(err){ showToast(err.message); }
+      render();
+    } });
+    return true;
+  }
+  if(action==="survey-results"){
+    if(S.resultsId===id && S.results) return true;
+    S.resultsId = id; S.results = null; render();
+    await loadSurveyResults(id);
+    render(); return true;
+  }
+  /* --- врач: задание --- */
+  if(action==="task-edit"){ studentTools.taskEditing[id] = true; render(); setTimeout(function(){ var x = document.getElementById("taskAnswer"); if(x){ x.focus(); x.selectionStart = x.selectionEnd = x.value.length; } }, 0); return true; }
+  if(action==="task-edit-cancel"){ studentTools.taskEditing[id] = false; delete studentTools.taskDraft[id]; render(); return true; }
+  if(action==="task-submit"){
+    var ta2 = document.getElementById("taskAnswer");
+    var val = (studentTools.taskDraft[id]!=null ? studentTools.taskDraft[id] : (ta2 ? ta2.value : "")).trim();
+    if(!val){ showToast("Напишите ответ"); return true; }
+    if(previewMode){ showToast("В режиме предпросмотра ответы не отправляются"); return true; }
+    t.disabled = true;
+    try{
+      var rs = await api("/assignments/lessons/"+id, { method:"POST", body: JSON.stringify({ answer:val }) });
+      course.assignments = course.assignments || {};
+      course.assignments[id] = Object.assign({}, course.assignments[id]||{}, rs.submission);
+      delete studentTools.taskDraft[id]; studentTools.taskEditing[id] = false;
+      showToast("Ответ отправлен куратору");
+    }catch(err){ showToast(err.message); t.disabled = false; }
+    render(); return true;
+  }
+  if(action==="task-skip-next"){ advanceAfterLesson(); render(); window.scrollTo(0,0); return true; }
+  /* --- врач: анкета --- */
+  if(action==="sf-open"){
+    var sf = studentTools.surveys.find(function(x){ return x.id===id; });
+    studentTools.fillId = id; studentTools.answers = sf && sf.my_answers ? JSON.parse(JSON.stringify(sf.my_answers)) : {}; studentTools.surveyError = ""; studentTools.missingQ = null;
+    render(); return true;
+  }
+  if(action==="sf-close" || (action==="overlay-close-sf" && !e.target.closest("[data-stop]"))){ studentTools.fillId = null; render(); return true; }
+  if(action==="sf-pick"){
+    var qid = t.getAttribute("data-q"), oi = parseInt(t.getAttribute("data-i"),10);
+    if(t.getAttribute("data-multi")==="1"){
+      var arr = Array.isArray(studentTools.answers[qid]) ? studentTools.answers[qid] : [];
+      var at = arr.indexOf(oi);
+      if(at===-1) arr.push(oi); else arr.splice(at,1);
+      studentTools.answers[qid] = arr;
+    } else studentTools.answers[qid] = oi;
+    if(studentTools.missingQ===qid){ studentTools.missingQ = null; studentTools.surveyError = ""; }
+    render(); return true;
+  }
+  if(action==="sf-submit"){
+    var sfs = studentTools.surveys.find(function(x){ return x.id===studentTools.fillId; });
+    if(previewMode){ showToast("В режиме предпросмотра ответы не отправляются"); return true; }
+    try{
+      var rr = await api("/surveys/"+sfs.id+"/respond", { method:"POST", body: JSON.stringify({ answers:studentTools.answers }) });
+      sfs.my_answers = rr.answers; studentTools.fillId = null; studentTools.surveyError = "";
+      showToast("Спасибо! Ответы отправлены");
+    }catch(err){
+      studentTools.surveyError = err.message;
+      studentTools.missingQ = (err.data && err.data.questionId) || null;
+      render();
+      var mq = studentTools.missingQ && document.getElementById("sfq-"+studentTools.missingQ);
+      if(mq) mq.scrollIntoView({ behavior:"smooth", block:"center" });
+      return true;
+    }
+    render(); return true;
+  }
+  return false;
+}
+
+async function loadStudentAssign(studentId){
+  try{ var r = await api("/assignments?status=all&studentId="+encodeURIComponent(studentId)); toolsState.studentAssign = r.submissions; }catch(e){ toolsState.studentAssign = []; }
+}
+
 function wireEvents(root){
   // render() calls wireEvents(app) on every re-render; app (the #app container) is never
   // replaced, only its innerHTML is cleared, so without this guard every listener below
@@ -4546,6 +5512,9 @@ function wireEvents(root){
     var t = e.target.closest("[data-action]");
     if(!t) return;
     var action = t.getAttribute("data-action");
+    var toolsRes = await handleToolsClick(action, t, e);
+    if(toolsRes===true) return;
+    if(typeof toolsRes==="string") action = toolsRes;
 
     if(action==="go-register"){ view="register"; registerDraft={name:"",email:"",phone:"",password:"",staffInviteCode:"",specializationIds:[],interestIds:[]}; specPickerOpen=null; render(); return; }
     if(action==="go-login"){ view="login"; render(); return; }
@@ -4662,8 +5631,10 @@ function wireEvents(root){
         profileEditor.specializationIds=(me.specializationIds||[]).slice();
         profileEditor.interestIds=(me.interestIds||[]).slice();
         specPickerOpen=null;
+        if(view==="staff"){ staffState.selectedStudentId=null; staffState.selectedStudent=null; }
         render();
         loadMySessions().then(render);
+        if(view==="student") loadMyOrders().then(render);
         return;
       }
       if(view==="student"){
@@ -4674,7 +5645,13 @@ function wireEvents(root){
       }
       staffState.navKey = navKey;
       staffState.mainTab = navKey;
+      // Открытая страница врача заменяет содержимое раздела — без сброса клик по
+      // меню переключал бы пункт, а на экране оставался бы врач.
+      staffState.selectedStudentId = null; staffState.selectedStudent = null;
       render();
+      window.scrollTo(0,0);
+      if(["assignments","feed","orders","products","surveys"].indexOf(navKey)!==-1){ await loadToolsSection(navKey); render(); }
+      if(navKey==="notifications" && notifState.unreadCount){ api("/notifications/read-all", { method:"POST" }).then(loadNotifications).then(render).catch(function(){}); }
       return;
     }
     if(action==="open-course"){
@@ -4831,7 +5808,7 @@ function wireEvents(root){
       render(); return;
     }
     if(action==="open-student"){
-      staffState.selectedStudentId=t.getAttribute("data-id"); staffState.drawerTab="progress"; staffState.selectedStudent=null; staffState.notes=[]; render(); window.scrollTo(0,0);
+      staffState.selectedStudentId=t.getAttribute("data-id"); staffState.drawerTab="progress"; staffState.selectedStudent=null; staffState.notes=[]; toolsState.studentAssign=[]; render(); window.scrollTo(0,0);
       try{
         var cqOpen=staffState.activeCourseId?"?courseId="+encodeURIComponent(staffState.activeCourseId):"";
         var d=await api("/staff/students/"+staffState.selectedStudentId+cqOpen);
@@ -4846,6 +5823,8 @@ function wireEvents(root){
     if(action==="close-drawer" || (action==="overlay-close" && !e.target.closest("[data-stop]"))){ staffState.selectedStudentId=null; render(); return; }
     if(action==="drawer-tab"){
       staffState.drawerTab=t.getAttribute("data-tab"); render();
+      if(staffState.drawerTab==="tasks"){ await loadStudentAssign(staffState.selectedStudentId); render(); }
+      if(staffState.drawerTab==="orders"){ await loadOrders(); render(); }
       if(staffState.drawerTab==="notes"){
         try{ var dn=await api("/staff/students/"+staffState.selectedStudentId+"/notes"); staffState.notes=dn.notes; render(); }catch(err){ showToast(err.message); }
       }
@@ -4976,8 +5955,10 @@ function wireEvents(root){
       if(newSCourseId!==staffState.activeCourseId){
         staffState.activeCourseId=newSCourseId;
         staffState.selectedStudentId=null; staffState.selectedStudent=null;
+        toolsState.assign.loaded=false; toolsState.feed.loaded=false;
         await loadStaffData();
         render();
+        if(staffState.mainTab==="assignments"||staffState.mainTab==="feed"){ await loadToolsSection(staffState.mainTab); render(); }
       }
       return;
     }
@@ -6064,6 +7045,8 @@ function wireEvents(root){
   });
 
   root.addEventListener("change", async function(e){
+    if(e.target.hasAttribute("data-tchange")){ await toolsChange(e.target); return; }
+    if(e.target.hasAttribute("data-tbind")){ toolsBind(e.target); if(e.target.hasAttribute("data-rerender")) render(); return; }
     if(e.target.id==="avatarFileInput"){ uploadAvatarFile(e.target.files && e.target.files[0]); return; }
     if(e.target.hasAttribute("data-stream-select")){
       try{ await api("/staff/students/"+e.target.getAttribute("data-id")+"/stream", { method:"PATCH", body: JSON.stringify({ streamId: e.target.value }) }); var s=staffState.students.find(function(x){return x.id===e.target.getAttribute("data-id");}); if(s) s.stream_id=e.target.value; showToast("Поток обновлён"); }
@@ -6106,6 +7089,14 @@ function wireEvents(root){
   });
 
   root.addEventListener("input", function(e){
+    if(e.target.hasAttribute && e.target.hasAttribute("data-tbind")){
+      toolsBind(e.target);
+      if(e.target.id==="ordersSearch"){
+        render();
+        setTimeout(function(){ var s=document.getElementById("ordersSearch"); if(s){ s.focus(); s.selectionStart=s.selectionEnd=s.value.length; } },0);
+      }
+      return;
+    }
     if(e.target.id==="rosterSearch"){
       staffState.search=e.target.value; render();
       setTimeout(function(){ var s=document.getElementById("rosterSearch"); if(s){ s.focus(); s.selectionStart=s.selectionEnd=s.value.length; } },0);

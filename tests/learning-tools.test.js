@@ -132,7 +132,7 @@ describe("Продукты, заказы, оплаты и рассрочка", (
     const o = created.body.order;
     expect(o.amount).toBe(90001);
     expect(o.payments.map((p) => p.amount)).toEqual([30001, 30000, 30000]);
-    expect(o.payments.map((p) => new Date(p.due_date).toISOString().slice(0, 10))).toEqual(["2026-01-31", "2026-02-28", "2026-03-31"]);
+    expect(o.payments.map((p) => p.due_date)).toEqual(["2026-01-31", "2026-02-28", "2026-03-31"]);
     expect(o.status).toBe("new");
     expect(o.overdue_amount).toBe(90001);
 

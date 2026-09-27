@@ -96,7 +96,7 @@ const ORDER_SELECT = `
     COALESCE((SELECT SUM(amount) FROM order_payments op WHERE op.order_id=o.id AND op.paid_at IS NOT NULL), 0)::int AS paid_amount,
     (SELECT COUNT(*)::int FROM order_payments op WHERE op.order_id=o.id) AS installments,
     (SELECT COUNT(*)::int FROM order_payments op WHERE op.order_id=o.id AND op.paid_at IS NOT NULL) AS installments_paid,
-    (SELECT MIN(due_date) FROM order_payments op WHERE op.order_id=o.id AND op.paid_at IS NULL) AS next_due,
+    (SELECT MIN(due_date)::text FROM order_payments op WHERE op.order_id=o.id AND op.paid_at IS NULL) AS next_due,
     COALESCE((SELECT SUM(amount) FROM order_payments op WHERE op.order_id=o.id AND op.paid_at IS NULL AND op.due_date < CURRENT_DATE), 0)::int AS overdue_amount
   FROM orders o
   JOIN users u ON u.id = o.user_id
@@ -108,7 +108,7 @@ async function loadOrder(id) {
   const o = await pool.query(ORDER_SELECT + " WHERE o.id=$1", [id]);
   if (!o.rowCount) return null;
   const pays = await pool.query(
-    `SELECT op.id, op.idx, op.amount, op.due_date, op.paid_at, m.name AS marked_by_name
+    `SELECT op.id, op.idx, op.amount, op.due_date::text AS due_date, op.paid_at, m.name AS marked_by_name
      FROM order_payments op LEFT JOIN users m ON m.id=op.marked_by WHERE op.order_id=$1 ORDER BY op.idx`, [id]
   );
   return Object.assign({}, o.rows[0], { payments: pays.rows });
