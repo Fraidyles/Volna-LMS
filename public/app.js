@@ -896,7 +896,7 @@ async function runSelAction(act){
     clearSel();
     studentState.materialsSearch = text.length > 80 ? text.slice(0, 80) : text;
     studentState.materialsAutoFocus = false;
-    await applyStudentTab("materials", "search");
+    await applyStudentTab("materials", "materials");
     return;
   }
   if(act==="copy"){
@@ -1078,6 +1078,22 @@ async function openStudentPage(id){
   }catch(err){ showToast(err.message); }
 }
 
+// Снимает .sb-hold при первом движении мыши: к этому моменту браузер уже
+// выставил :hover новому сайдбару, и дальше он раскрывается/сворачивается сам.
+var sbReleaseArmed = false, stillTimer = null;
+function armSidebarRelease(){
+  if(sbReleaseArmed) return;
+  sbReleaseArmed = true;
+  var release = function(){
+    sbReleaseArmed = false;
+    document.removeEventListener("pointermove", release, true);
+    document.documentElement.removeEventListener("pointerleave", release);
+    var sb = document.querySelector(".sidebar.sb-hold"); if(sb) sb.classList.remove("sb-hold");
+  };
+  document.addEventListener("pointermove", release, true);
+  document.documentElement.addEventListener("pointerleave", release);
+}
+
 function render(){
   var app = document.getElementById("app");
   if(!app) return;
@@ -1108,6 +1124,9 @@ function render(){
     prevOverlays[o.getAttribute("data-action")||""] = { top: sc ? sc.scrollTop : 0 };
   });
   var hadBackdrop = !!app.querySelector(".sidebar-backdrop");
+  // Меню было раскрыто (курсор или фокус на нём) — новое тоже раскрываем сразу.
+  var oldSb = app.querySelector(".sidebar");
+  var sbWasOpen = !!oldSb && (oldSb.classList.contains("sb-hold") || oldSb.matches(":hover") || oldSb.matches(":focus-within"));
   var screenKey = view+"|"+(view==="student" ? studentState.tab : (view==="staff" ? staffState.mainTab : ""));
   var sameScreen = screenKey === lastRenderScreen;
   lastRenderScreen = screenKey;
@@ -1176,6 +1195,15 @@ function render(){
     app.appendChild(renderConfirmModal());
   }
   app.classList.toggle("rerender", sameScreen);
+  // Та же страница пересобрана заново (фоновое обновление, действие на месте):
+  // браузер выставляет :hover новым элементам не сразу, и подсветка карточки или
+  // кнопки под курсором гасла и заново проявлялась. Пока hover не восстановился —
+  // без переходов, чтобы состояние под курсором вернулось мгновенно.
+  if(sameScreen){
+    app.classList.add("still");
+    clearTimeout(stillTimer);
+    stillTimer = setTimeout(function(){ app.classList.remove("still"); }, 200);
+  }
   app.querySelectorAll(".overlay").forEach(function(o){
     var prev = prevOverlays[o.getAttribute("data-action")||""];
     if(!prev) return;
@@ -1184,10 +1212,18 @@ function render(){
     if(sc && prev.top) sc.scrollTop = prev.top;
   });
   if(hadBackdrop){ var bd = app.querySelector(".sidebar-backdrop"); if(bd) bd.classList.add("no-anim"); }
+  if(sbWasOpen){ var nsb = app.querySelector(".sidebar"); if(nsb){ nsb.classList.add("sb-hold"); armSidebarRelease(); } }
   wireEvents(app);
   runEntranceAnimations();
   if(view==="login" || view==="register") initAuroraFx();
-  if(view==="student") applyLessonHighlights();
+  if(view==="student"){
+    applyLessonHighlights();
+    if(studentState.scrollToHl){
+      var hlEl = document.querySelector('#lessonProse mark.hl[data-hid="'+studentState.scrollToHl+'"]');
+      studentState.scrollToHl = null;
+      if(hlEl){ hlEl.scrollIntoView({ block:"center" }); hlEl.classList.add("hl-flash"); setTimeout(function(){ hlEl.classList.remove("hl-flash"); }, 1600); }
+    }
+  }
   if(view==="student" && studentState.tab==="lesson" && !studentState.quizMode && studentState.lessonStage==="video"){
     setTimeout(function(){ wireLessonVideo(savedVideoState); }, 0);
   } else if(lessonPlyrInstance){
@@ -1833,15 +1869,14 @@ function renderSidebar(){
   if(view==="student"){
     var navKey = studentState.navKey || "course";
     if(previewMode){
-      items += sidebarItem("course","home","Обучение", navKey==="course");
+      items += sidebarItem("course","home","Главная", navKey==="course");
       items += sidebarItem("schedule","calendar","Расписание", navKey==="schedule");
     } else {
       var notifBadge = notifState.unreadCount + upcomingEventReminders().length;
-      items += sidebarItem("search","search","Поиск", navKey==="search");
       items += sidebarItem("profile","user","Мой профиль", navKey==="profile");
-      items += sidebarItem("course","home","Обучение", navKey==="course");
+      items += sidebarItem("course","home","Главная", navKey==="course");
       items += sidebarItem("schedule","calendar","Расписание", navKey==="schedule");
-      items += sidebarItem("materials","folder","Материалы обучения", navKey==="materials");
+      items += sidebarItem("materials","list","Мой конспект", navKey==="materials");
       items += sidebarItem("progress","chartbar","Мой прогресс", navKey==="progress");
       // См. protocolsSectionAvailable — до этого момента в коллекции нечему появиться.
       if(course && protocolsSectionAvailable()){
@@ -2419,58 +2454,124 @@ function snippetAround(text, q){
 // Поиск по материалам — целиком на клиенте: у врача уже загружен весь текст уроков
 // (course.lessons[].html) для плеера, гонять его туда-обратно через отдельный
 // поисковый эндпоинт не нужно — достаточно снять теги и сравнить подстроку.
-function renderStudentMaterials(){
-  var q = studentState.materialsSearch.trim();
-  var bookmarks = course.bookmarkedLessonIds || [];
-  var items = course.lessons.map(function(l,idx){
-    var text = stripHtml(l.html);
-    return { lesson:l, idx:idx, text:text, isBookmarked: bookmarks.indexOf(l.id)!==-1 };
+// «Мой конспект» — всё, что врач сам отметил в уроках: выделения маркером,
+// заметки и сохранённые уроки, собранные по урокам. Список всех уроков здесь
+// не дублируется (он на «Главной» и в самом курсе). Поиск сверху ищет сразу
+// в текстах уроков, в выделениях и в заметках.
+function nbData(){
+  var hl = (course.progress && course.progress.lesson_highlights) || {};
+  var notes = (course.progress && course.progress.lesson_notes) || {};
+  var saved = course.bookmarkedLessonIds || [];
+  return course.lessons.map(function(l, idx){
+    // Выделения — в порядке текста урока, а не в порядке, в каком их отмечали.
+    var list = (hl[l.id] || []).slice();
+    if(list.length > 1){
+      var plain = hlNormalize(stripHtml(l.html));
+      list.sort(function(a, b){ return plain.indexOf(a.text) - plain.indexOf(b.text); });
+    }
+    return { lesson:l, idx:idx, hl: list, note: notes[l.id] || "", saved: saved.indexOf(l.id)!==-1 };
   });
-  if(studentState.materialsFilter==="bookmarked") items = items.filter(function(it){ return it.isBookmarked; });
+}
+function nbMark(text, q){
+  var t = escapeHtml(text);
+  if(!q) return t;
+  var qe = escapeHtml(q).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return t.replace(new RegExp("("+qe+")", "gi"), '<mark class="nb-hit">$1</mark>');
+}
+function nbQuote(it, h, q){
+  return '<div class="nb-quote" data-action="nb-open-hl" data-idx="'+it.idx+'" data-hid="'+h.id+'" title="Открыть в уроке">' +
+    '<span class="nb-quote-text">'+nbMark(h.text, q)+'</span>' +
+    '<button type="button" class="nb-x" data-action="nb-del-hl" data-lesson-id="'+it.lesson.id+'" data-hid="'+h.id+'" title="Убрать выделение" aria-label="Убрать выделение">'+icon("close","ic-sm")+'</button></div>';
+}
+function nbNote(it, q){
+  if(studentState.nbEditId === it.lesson.id){
+    return '<div class="nb-note editing"><span class="nb-label">Заметка</span>' +
+      '<textarea class="input" id="nbNoteInput" rows="4">'+escapeHtml(it.note)+'</textarea>' +
+      '<div class="nb-note-btns"><button class="btn btn-sm btn-primary" data-action="nb-note-save" data-id="'+it.lesson.id+'">Сохранить</button>' +
+      '<button class="btn btn-sm btn-ghost" data-action="nb-note-cancel">Отмена</button></div></div>';
+  }
+  if(!it.note) return '';
+  return '<div class="nb-note"><div class="nb-note-head"><span class="nb-label">Заметка</span>' +
+    '<button type="button" class="link-btn" data-action="nb-note-edit" data-id="'+it.lesson.id+'">Изменить</button></div>' +
+    '<p>'+nbMark(it.note, q)+'</p></div>';
+}
+function nbLessonCard(it, opts){
+  opts = opts || {};
+  var l = it.lesson, q = opts.q || "";
+  var hl = opts.hl || it.hl, showNote = opts.note !== false;
+  var html = '<div class="card nb-lesson">' +
+    '<div class="card-head"><div class="nb-title" data-action="goto-lesson-from-materials" data-idx="'+it.idx+'"><span>Урок '+(it.idx+1)+'</span><b>'+escapeHtml(l.title)+'</b></div>' +
+    '<div class="nb-head-btns"><button class="btn btn-sm btn-ghost nb-star'+(it.saved?' on':'')+'" data-action="toggle-bookmark" data-id="'+l.id+'" data-bookmarked="'+(it.saved?"1":"0")+'" title="'+(it.saved?"Убрать из сохранённых":"Сохранить урок")+'">'+(it.saved?"★":"☆")+'</button>' +
+    '<button class="btn btn-sm btn-ghost" data-action="goto-lesson-from-materials" data-idx="'+it.idx+'">Открыть урок →</button></div></div>';
+  var body = hl.map(function(h){ return nbQuote(it, h, q); }).join("") + (showNote ? nbNote(it, q) : "");
+  if(!body) body = '<p class="nb-empty-line">Урок сохранён — выделений и заметок в нём пока нет. Выделите текст в уроке, чтобы отметить главное.</p>';
+  if(showNote && !q && !it.note && studentState.nbEditId !== l.id) body += '<button type="button" class="link-btn nb-add-note" data-action="nb-note-edit" data-id="'+l.id+'">+ Добавить заметку</button>';
+  return html + '<div class="nb-body">'+body+'</div></div>';
+}
+function renderStudentMaterials(){
+  var q = studentState.materialsSearch.trim(), ql = q.toLowerCase();
+  var data = nbData();
+  var cnt = { hl:0, notes:0, saved:0 };
+  data.forEach(function(it){ cnt.hl += it.hl.length; if(it.note) cnt.notes++; if(it.saved) cnt.saved++; });
+  var f = studentState.materialsFilter;
+  if(["all","highlights","notes","saved"].indexOf(f)===-1) f = studentState.materialsFilter = "all";
+  var chip = function(key, label, n){ return '<button class="tab'+(f===key?' active':'')+'" data-action="materials-filter" data-filter="'+key+'">'+label+(n?' <span class="nb-count">'+n+'</span>':'')+'</button>'; };
+  var html = '<div class="page-wide"><div class="card nb-hero">' +
+    '<span class="profile-kicker">Только для вас</span><h1>Мой конспект</h1>' +
+    '<p>Всё, что вы отметили в уроках: выделения, заметки и сохранённые уроки — в одном месте.</p>' +
+    '<div class="nb-search">'+icon("search","ic-sm")+'<input class="input" id="materialsSearchInput" placeholder="Поиск по урокам, выделениям и заметкам…" value="'+escapeHtml(studentState.materialsSearch)+'"></div>' +
+    (q ? '' : '<div class="tabs nb-tabs">'+chip("all","Всё",0)+chip("highlights","Выделения",cnt.hl)+chip("notes","Заметки",cnt.notes)+chip("saved","Сохранённые",cnt.saved)+'</div>') +
+  '</div>';
+
   if(q){
-    var qLower = q.toLowerCase();
-    items = items.filter(function(it){ return it.lesson.title.toLowerCase().indexOf(qLower)!==-1 || it.text.toLowerCase().indexOf(qLower)!==-1; });
-  }
-
-  var doneIds = (course.progress && course.progress.completed_lessons) || [];
-  var nextIdx = -1;
-  course.lessons.forEach(function(l,i){ if(nextIdx<0 && doneIds.indexOf(l.id)===-1 && !l.hiddenForMe && !l.dripLockedForMe) nextIdx = i; });
-  var html = '<div class="page-wide">' +
-    '<div class="card" style="padding:18px 20px;">' +
-      '<b style="font-size:15px;display:block;margin-bottom:12px;">Материалы обучения</b>' +
-      '<input class="input" id="materialsSearchInput" placeholder="Искать по названию или тексту урока…" value="'+escapeHtml(studentState.materialsSearch)+'" style="margin-bottom:12px;">' +
-      '<div class="tabs" style="margin-top:0;margin-bottom:14px;">' +
-        '<button class="tab'+(studentState.materialsFilter==="all"?' active':'')+'" data-action="materials-filter" data-filter="all">Все материалы</button>' +
-        '<button class="tab'+(studentState.materialsFilter==="bookmarked"?' active':'')+'" data-action="materials-filter" data-filter="bookmarked">Мои материалы'+(bookmarks.length?' ('+bookmarks.length+')':'')+'</button>' +
-      '</div>';
-
-  if(!items.length){
-    html += '<div class="empty-state" style="padding:30px 10px;">'+(q?'Ничего не нашлось по запросу «'+escapeHtml(q)+'».':(studentState.materialsFilter==="bookmarked"?'Вы ещё ничего не сохранили. Откройте урок и нажмите на закладку.':'Материалов пока нет.'))+'</div>';
-  } else {
-    // Плитки в две колонки: вся плитка кликабельна, «Открыть» — по наведению
-    // (девять одинаковых кнопок подряд рябили); спокойная пометка статуса и длительность.
-    html += '<div class="mat-grid">';
-    items.forEach(function(it){
-      var l = it.lesson;
-      var isLocked = l.hiddenForMe || l.dripLockedForMe;
-      var isDone = doneIds.indexOf(l.id)!==-1, isNext = it.idx===nextIdx;
-      var status = isDone ? '<span class="mat-status done">'+icon("check","ic-sm")+'пройден</span>'
-        : isLocked ? '<span class="mat-status">'+icon("lock","ic-sm")+(l.hiddenForMe?'недоступен':'откроется '+fmtDate(l.availableAt))+'</span>'
-        : isNext ? '<span class="mat-status next">текущий</span>' : '';
-      html += '<div class="mat-item'+(isLocked?' locked':'')+(isNext?' next':'')+'"'+(isLocked?'':' data-action="goto-lesson-from-materials" data-idx="'+it.idx+'"')+'>' +
-        '<div class="mat-head">' +
-          '<b>'+(it.idx+1)+'. '+escapeHtml(l.title)+'</b>' +
-          '<button class="btn btn-sm btn-ghost mat-star" data-action="toggle-bookmark" data-id="'+l.id+'" data-bookmarked="'+(it.isBookmarked?"1":"0")+'" title="'+(it.isBookmarked?"Убрать из моих материалов":"Сохранить в мои материалы")+'">'+(it.isBookmarked?"★":"☆")+'</button>' +
-        '</div>' +
-        '<p>'+escapeHtml(snippetAround(it.text,q))+'</p>' +
-        '<div class="mat-foot">'+status+(l.duration?'<span class="mat-dur">'+icon("clock","ic-sm")+escapeHtml(l.duration)+'</span>':'')+
-          (isLocked ? '' : '<span class="mat-open">Открыть →</span>')+'</div>' +
-      '</div>';
+    // Поиск: сначала совпадения в своих записях, затем — в текстах уроков.
+    var mine = [];
+    data.forEach(function(it){
+      var hl = it.hl.filter(function(h){ return h.text.toLowerCase().indexOf(ql)!==-1; });
+      var noteHit = !!it.note && it.note.toLowerCase().indexOf(ql)!==-1;
+      if(hl.length || noteHit) mine.push(nbLessonCard(it, { q:q, hl:hl, note: noteHit }));
     });
-    html += '</div>';
+    var lessons = data.filter(function(it){ var l = it.lesson; return !l.hiddenForMe && (l.title.toLowerCase().indexOf(ql)!==-1 || stripHtml(l.html).toLowerCase().indexOf(ql)!==-1); });
+    if(mine.length) html += '<div class="courses-head nb-sec"><b class="page-h" style="margin:0;">В моих записях</b><span class="courses-count">'+mine.length+'</span></div>' + mine.join("");
+    html += '<div class="courses-head nb-sec"><b class="page-h" style="margin:0;">В уроках</b><span class="courses-count">'+lessons.length+'</span></div>';
+    if(!lessons.length && !mine.length){
+      html += '<div class="card empty-state" style="padding:30px 20px;">Ничего не нашлось по запросу «'+escapeHtml(q)+'».</div>';
+    } else if(lessons.length){
+      html += '<div class="mat-grid">' + lessons.map(function(it){
+        var l = it.lesson, locked = l.dripLockedForMe;
+        return '<div class="mat-item'+(locked?' locked':'')+'"'+(locked?'':' data-action="goto-lesson-from-materials" data-idx="'+it.idx+'"')+'>' +
+          '<div class="mat-head"><b>'+(it.idx+1)+'. '+nbMark(l.title, q)+'</b></div>' +
+          '<p>'+nbMark(snippetAround(stripHtml(l.html), q), q)+'</p>' +
+          '<div class="mat-foot">'+(locked?'<span class="mat-status">'+icon("lock","ic-sm")+'откроется '+fmtDate(l.availableAt)+'</span>':'<span class="mat-open">Открыть →</span>')+'</div></div>';
+      }).join("") + '</div>';
+    } else {
+      html += '<p class="nb-empty-line">В текстах уроков совпадений нет.</p>';
+    }
+    return el(html + '</div>');
   }
-  html += '</div></div>';
-  return el(html);
+
+  var list = data.filter(function(it){
+    var editing = studentState.nbEditId===it.lesson.id;
+    if(f==="highlights") return it.hl.length;
+    if(f==="notes") return !!it.note || editing;
+    if(f==="saved") return it.saved;
+    return it.hl.length || it.note || it.saved || editing;
+  });
+  if(!list.length){
+    var none = !cnt.hl && !cnt.notes && !cnt.saved;
+    html += '<div class="card nb-empty">' +
+      '<b>'+(none ? 'Конспект пока пуст' : ({highlights:"Выделений пока нет", notes:"Заметок пока нет", saved:"Сохранённых уроков пока нет"})[f])+'</b>' +
+      '<ol class="tg-steps">' +
+        '<li><b>Выделите текст в уроке</b><span>Появится панель: «Маркер» — фрагмент подсветится и попадёт сюда.</span></li>' +
+        '<li><b>«В заметку»</b><span>Цитата добавится в вашу заметку к уроку. Заметку можно дописать и здесь.</span></li>' +
+        '<li><b>☆ Сохранить</b><span>Звёздочка в шапке урока — чтобы быстро вернуться к нему.</span></li>' +
+      '</ol><div><button class="btn btn-primary" data-action="open-course">Перейти к урокам</button></div></div>';
+  } else {
+    html += list.map(function(it){
+      return nbLessonCard(it, { hl: f==="notes" ? [] : it.hl, note: f!=="highlights" });
+    }).join("");
+  }
+  return el(html + '</div>');
 }
 
 // Формат урока: текстовое интро (как и раньше) → видео с главами по таймкодам
@@ -5126,9 +5227,8 @@ function renderStudentDrawer(){
 
 // Общая точка входа для переключения раздела врача — используется и прямыми
 // ссылками внутри страниц (data-action="student-tab"), и боковой навигацией
-// (sidebar-nav), поэтому navKey передаётся отдельно от tab: два пункта меню
-// («Поиск» и «Материалы обучения») ведут на один и тот же tab="materials",
-// но должны подсвечиваться в сайдбаре по-разному.
+// (sidebar-nav), поэтому navKey передаётся отдельно от tab (пункт меню может
+// подсвечиваться не так, как называется вкладка).
 async function applyStudentTab(tab, navKey){
   studentState.tab = tab;
   studentState.navKey = navKey || tab;
@@ -6273,14 +6373,16 @@ function wireEvents(root){
         specPickerOpen=null;
         if(view==="staff"){ staffState.selectedStudentId=null; staffState.selectedStudent=null; }
         render();
-        loadMySessions().then(render);
-        if(view==="student") loadMyOrders().then(render);
+        // Сеансы и заказы — одним обновлением экрана, а не двумя подряд.
+        window.scrollTo(0,0);
+        Promise.all([loadMySessions(), view==="student" ? loadMyOrders() : null]).then(render);
         return;
       }
       if(view==="student"){
-        if(navKey==="search"){ studentState.materialsAutoFocus=true; await applyStudentTab("materials","search"); return; }
-        if(navKey==="materials"){ studentState.materialsAutoFocus=false; await applyStudentTab("materials","materials"); return; }
+        // Новый раздел всегда открывается с начала, а не на прокрутке прошлого.
+        if(navKey==="materials"){ studentState.materialsAutoFocus=false; await applyStudentTab("materials","materials"); window.scrollTo(0,0); return; }
         await applyStudentTab(navKey, navKey);
+        window.scrollTo(0,0);
         return;
       }
       staffState.navKey = navKey;
@@ -6337,6 +6439,38 @@ function wireEvents(root){
       }catch(err){ showToast(err.message); }
       return;
     }
+    if(action==="nb-open-hl"){
+      if(e.target.closest("[data-action='nb-del-hl']")) return;
+      var hIdx=parseInt(t.getAttribute("data-idx"),10), hL=course.lessons[hIdx];
+      if(hL.hiddenForMe || hL.dripLockedForMe){ showToast("Этот урок сейчас недоступен"); return; }
+      studentState.tab="lesson"; studentState.lessonIndex=hIdx; studentState.quizMode=false; resetLessonStageState();
+      studentState.scrollToHl=t.getAttribute("data-hid"); render(); return;
+    }
+    if(action==="nb-del-hl"){
+      var dLid=t.getAttribute("data-lesson-id");
+      try{
+        var rD=await api("/course/lessons/"+dLid+"/highlights/"+encodeURIComponent(t.getAttribute("data-hid")), { method:"DELETE" });
+        if(rD.highlights.length) course.progress.lesson_highlights[dLid]=rD.highlights; else delete course.progress.lesson_highlights[dLid];
+        render(); showToast("Выделение убрано");
+      }catch(err){ showToast(err.message); }
+      return;
+    }
+    if(action==="nb-note-edit"){
+      studentState.nbEditId=t.getAttribute("data-id"); render();
+      var nIn=document.getElementById("nbNoteInput"); if(nIn){ nIn.focus(); nIn.selectionStart=nIn.selectionEnd=nIn.value.length; }
+      return;
+    }
+    if(action==="nb-note-cancel"){ studentState.nbEditId=null; render(); return; }
+    if(action==="nb-note-save"){
+      var nId=t.getAttribute("data-id"), nVal=(document.getElementById("nbNoteInput")||{}).value||"";
+      try{
+        await api("/course/lessons/"+nId+"/note", { method:"PUT", body: JSON.stringify({ note:nVal }) });
+        if(!course.progress.lesson_notes) course.progress.lesson_notes={};
+        if(nVal.trim()) course.progress.lesson_notes[nId]=nVal.trim(); else delete course.progress.lesson_notes[nId];
+        studentState.nbEditId=null; render(); showToast("Заметка сохранена");
+      }catch(err){ showToast(err.message); }
+      return;
+    }
     if(action==="materials-filter"){ studentState.materialsFilter=t.getAttribute("data-filter"); render(); return; }
     if(action==="toggle-bookmark"){
       var bkId=t.getAttribute("data-id"); var wasBookmarked=t.getAttribute("data-bookmarked")==="1";
@@ -6348,6 +6482,8 @@ function wireEvents(root){
       return;
     }
     if(action==="goto-lesson-from-materials"){
+      var gmL=course.lessons[parseInt(t.getAttribute("data-idx"),10)];
+      if(gmL && (gmL.hiddenForMe || gmL.dripLockedForMe)){ showToast("Этот урок сейчас недоступен"); return; }
       studentState.tab="lesson"; studentState.lessonIndex=parseInt(t.getAttribute("data-idx"),10); studentState.quizMode=false; resetLessonStageState(); render(); return;
     }
     if(action==="open-lesson-at"){
