@@ -54,9 +54,6 @@ var specPickerQuery = "";
 var calendarState = { monthDate:new Date(), streams:[], events:[], showStreamForm:false, eventModalMode:null, eventModalDate:null, eventModalId:null, recurring:false };
 var materialsPicker = { open:false, targetId:null, targetTitle:"", search:"", selectedIds:[] };
 var scheduleModal = { open:false, lessonId:null, lessonTitle:"", search:"", selectedIds:[], applyToAll:true, unlockDate:"", schedule:[] };
-// Окно «Общение» — вместо внутреннего чата просто ведёт в Telegram-группу потока
-// (см. streams.telegram_url); открывается по клику на иконку "Чат" в сайдбаре.
-var telegramModal = { open:false };
 var notifState = { items:[], unreadCount:0 };
 var mySessionsList = [];
 var mySessionsLoaded = false, mySessionsLoading = false;
@@ -1054,9 +1051,6 @@ function render(){
   if(profileEditor.open && (view==="student"||view==="staff")){
     app.appendChild(renderProfileModal());
   }
-  if(telegramModal.open && (view==="student"||view==="staff")){
-    app.appendChild(renderTelegramModal());
-  }
   if(tempPasswordResult && view==="staff"){
     app.appendChild(renderTempPasswordModal());
   }
@@ -1483,41 +1477,81 @@ function renderProfileModal(){
 }
 
 // Всё общение врачей, кураторов и преподавателей — в Telegram-группе потока, не
-// в приложении (см. streams.telegram_url). Окно только показывает ссылку(и) и
-// ведёт наружу — своей переписки внутри платформы больше нет.
-function renderTelegramModal(){
-  var body = '<div class="drawer-head"><b style="font-size:16px;">Общение</b><button class="btn btn-ghost btn-sm" data-action="close-telegram-modal">Закрыть ✕</button></div>' +
-    '<div class="drawer-body">';
-  if(view==="student"){
-    var mySid = me.stream_id || "";
-    var myStream = mySid ? (calendarState.streams||[]).find(function(s){ return s.id===mySid; }) : null;
-    if(!mySid){
-      body += '<div class="empty-state" style="padding:30px 10px;">Вы пока не привязаны ни к одному потоку — куратор добавит вас, когда сформируется поток, и здесь появится ссылка на Telegram-группу.</div>';
-    } else if(!myStream || !myStream.telegram_url){
-      body += '<div class="empty-state" style="padding:30px 10px;">Куратор ещё не добавил ссылку на Telegram-группу вашего потока — уточните у него лично.</div>';
-    } else {
-      body += '<p style="font-size:14px;color:var(--muted);margin:0 0 14px;">Куратор, преподаватели и другие врачи вашего потока «'+escapeHtml(myStream.name)+'» — в этой группе.</p>' +
-        '<a class="btn btn-primary btn-block" href="'+escapeHtml(myStream.telegram_url)+'" target="_blank" rel="noopener">Открыть Telegram-группу →</a>';
-    }
+// в приложении (см. streams.telegram_url). Раздел «Telegram» — полноценная
+// страница: врачу — группа его потока, куратор, как задать вопрос и ближайшие
+// эфиры; сотрудникам — все потоки с их группами и правкой ссылок на месте.
+function tgHandle(url){ return String(url||"").replace(/^https?:\/\//,"").replace(/\/$/,""); }
+function renderTelegramPage(){
+  return view==="student" ? renderStudentTelegram() : renderStaffTelegram();
+}
+function renderStudentTelegram(){
+  var mySid = me.stream_id || "";
+  var stream = mySid ? (calendarState.streams||[]).find(function(s){ return s.id===mySid; }) : null;
+  var url = stream && stream.telegram_url;
+  var lead, actions = "";
+  if(!mySid){
+    lead = "Вы пока не в потоке. Куратор добавит вас, когда поток сформируется, — и здесь появится ссылка на группу.";
+  } else if(!url){
+    lead = "Куратор ещё не добавил ссылку на группу потока «"+escapeHtml(stream ? stream.name : "")+"». Как только добавит — она появится здесь.";
   } else {
-    var streams = calendarState.streams || [];
-    if(!streams.length){
-      body += '<div class="empty-state" style="padding:30px 10px;">Потоков пока нет — создайте их на странице «Ученики».</div>';
-    } else {
-      body += '<p style="font-size:14px;color:var(--muted);margin:0 0 14px;">Общение с врачами — в Telegram-группах их потоков.</p>';
-      streams.forEach(function(s){
-        body += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line-2);gap:10px;">' +
-          '<b style="font-size:14px;">'+escapeHtml(s.name)+'</b>' +
-          (s.telegram_url
-            ? '<a class="btn btn-sm btn-primary" href="'+escapeHtml(s.telegram_url)+'" target="_blank" rel="noopener">Открыть →</a>'
-            : '<span style="font-size:12px;color:var(--muted);">ссылка не добавлена</span>') +
-        '</div>';
-      });
-      body += '<p class="hint" style="margin-top:12px;">Добавить или изменить ссылку — на странице «Ученики», блок «Потоки».</p>';
-    }
+    lead = "Куратор, преподаватели и врачи потока «"+escapeHtml(stream.name)+"» общаются в этой группе: вопросы по урокам, доступу и оплате, анонсы эфиров.";
+    actions = '<div class="tg-actions"><a class="btn btn-primary" href="'+escapeHtml(url)+'" target="_blank" rel="noopener">'+icon("message","ic-sm")+' Открыть группу в Telegram</a>' +
+      '<button class="btn btn-ghost" data-action="tg-copy" data-url="'+escapeHtml(url)+'">'+icon("clipboard","ic-sm")+' Скопировать ссылку</button></div>' +
+      '<span class="tg-handle">'+escapeHtml(tgHandle(url))+'</span>';
   }
-  body += '</div>';
-  return el('<div class="overlay overlay-center" data-action="overlay-close-telegram-modal"><div class="drawer modal" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
+  var cur = me.curator;
+  var html = '<div class="page-wide"><div class="card tg-hero">' +
+    '<div class="proto-hero-glow aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
+    '<div class="tg-hero-main"><span class="profile-kicker">Общение</span><h1>Группа потока в Telegram</h1><p>'+lead+'</p>'+actions+'</div>' +
+    (cur ? '<div class="tg-curator">'+userAvatar(cur,"tg-cur-av")+'<div><span>Ваш куратор</span><b>'+escapeHtml(cur.name)+'</b></div></div>' : '') +
+  '</div>';
+
+  // Как спросить, чтобы ответили быстро
+  html += '<div class="grid-2 tg-grid"><div class="card board-tile">' + cardHead("Как задать вопрос", "") +
+    '<ol class="tg-steps">' +
+      '<li><b>Назовите урок и шаг</b><span>«Урок 3, задание» — куратору не придётся уточнять.</span></li>' +
+      '<li><b>Процитируйте фрагмент</b><span>Выделите текст в уроке → «Спросить куратора»: цитата с номером урока скопируется, останется вставить её в группу.</span></li>' +
+      '<li><b>Доступ и оплата — туда же</b><span>Если урок не открывается или нужна рассрочка, напишите в группе или куратору лично.</span></li>' +
+    '</ol></div>';
+
+  // Эфиры потока
+  var now = new Date();
+  var evs = (calendarState.events||[]).filter(function(ev){
+    return (!ev.stream_id || ev.stream_id===mySid) && new Date(ev.event_date+"T"+(ev.event_time||"00:00")).getTime() + (ev.duration_min||60)*60000 >= now.getTime();
+  }).sort(function(a,b){ return (a.event_date+(a.event_time||"")).localeCompare(b.event_date+(b.event_time||"")); }).slice(0,3);
+  html += '<div class="card board-tile">' + cardHead("Эфиры потока", '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="schedule">Расписание →</button>');
+  if(!evs.length){
+    html += '<span class="tile-sub">Ближайших эфиров нет — анонс появится здесь и в группе.</span>';
+  } else {
+    html += '<div class="tg-events">' + evs.map(function(ev){
+      var d = new Date(ev.event_date+"T00:00:00");
+      return '<div class="tg-ev"><div class="tg-ev-date"><b>'+d.getDate()+'</b><span>'+d.toLocaleDateString("ru-RU",{month:"short"}).replace(".","")+'</span></div>' +
+        '<div class="tg-ev-body"><b>'+escapeHtml(ev.title)+'</b><span>'+escapeHtml(ev.event_time||"")+(ev.duration_min?' · '+ev.duration_min+' мин':'')+'</span></div></div>';
+    }).join("") + '</div>';
+  }
+  html += '</div></div></div>';
+  return el(html);
+}
+function renderStaffTelegram(){
+  var streams = calendarState.streams || [];
+  var withLink = streams.filter(function(s){ return !!s.telegram_url; }).length;
+  var noStream = (staffState.students||[]).filter(function(s){ return !s.stream_id; }).length;
+  var html = '<div class="page-wide"><div class="card tg-hero">' +
+    '<div class="proto-hero-glow aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
+    '<div class="tg-hero-main"><span class="profile-kicker">Общение</span><h1>Telegram-группы потоков</h1>' +
+      '<p>Общение с врачами идёт в Telegram-группах их потоков. Врач видит в своём кабинете только группу своего потока.</p></div>' +
+    '<div class="tg-stats"><div><b>'+withLink+' / '+streams.length+'</b><span>потоков с группой</span></div>' +
+      '<div><b>'+noStream+'</b><span>'+ruPluralClient(noStream,"врач","врача","врачей")+' без потока</span></div></div>' +
+  '</div>';
+  var missing = streams.filter(function(s){ return !s.telegram_url; });
+  if(missing.length || noStream){
+    html += '<div class="card tg-warn">'+icon("bell","ic-sm")+'<span>' +
+      (missing.length ? 'Без ссылки на группу: '+missing.map(function(s){ return '«'+escapeHtml(s.name)+'»'; }).join(", ")+' — врачи этих потоков не видят, куда писать. ' : '') +
+      (noStream ? noStream+' '+ruPluralClient(noStream,"врач без потока не видит","врача без потока не видят","врачей без потока не видят")+' ни одной группы — '+(noStream===1?'добавьте его':'распределите их')+' в поток на странице «Ученики».' : '') +
+    '</span></div>';
+  }
+  html += renderStreamsPanel() + '</div>';
+  return el(html);
 }
 
 /* ============================= РЕНДЕР: АВТОРИЗАЦИЯ ============================= */
@@ -1737,7 +1771,7 @@ function renderSidebar(){
       if(course && protocolsSectionAvailable()){
         items += sidebarItem("protocols","doctor","Ваши протоколы", navKey==="protocols");
       }
-      items += sidebarItem("messages","message","Telegram", false);
+      items += sidebarItem("telegram","message","Telegram", navKey==="telegram");
       items += sidebarItem("notifications","bell","Уведомления", navKey==="notifications", notifBadge);
       items += sidebarItem("settings","gear","Настройки", navKey==="settings");
     }
@@ -1766,7 +1800,7 @@ function renderSidebar(){
         ["team","users","Команда"], ["audit","list","Журнал действий"]
       ]);
     }
-    items += sidebarItem("chats","message","Telegram", false);
+    items += sidebarItem("telegram","message","Telegram", snavKey==="telegram");
     items += sidebarItem("notifications","bell","Уведомления", snavKey==="notifications", staffNotifBadge);
     items += sidebarItem("settings","gear","Настройки", snavKey==="settings");
   }
@@ -1977,6 +2011,8 @@ function renderStudentShell(){
     content.appendChild(renderProtocolsPage());
   } else if(studentState.tab === "notifications" && !previewMode){
     content.appendChild(renderNotificationsPage());
+  } else if(studentState.tab === "telegram" && !previewMode){
+    content.appendChild(renderTelegramPage());
   } else if(studentState.tab === "settings" && !previewMode){
     content.appendChild(renderSettingsPage());
   } else if(studentState.tab === "profile" && !previewMode){
@@ -3214,7 +3250,8 @@ function renderStaffShell(){
   main.appendChild(shell);
   var content = shell.querySelector("#staffContent");
   content.appendChild(el('<h1 class="section-title">'+escapeHtml(roleLabel(me.role))+'</h1>'));
-  content.appendChild(renderStaffCourseSwitcher());
+  // Потоки и их группы общие для всех курсов — переключатель курса там лишний.
+  if(staffState.mainTab !== "telegram") content.appendChild(renderStaffCourseSwitcher());
 
   if(staffState.mainTab === "courses" && (me.role==="admin"||me.role==="super_admin")){
     content.appendChild(renderCoursesTab());
@@ -3244,6 +3281,8 @@ function renderStaffShell(){
     content.appendChild(renderFeedTab());
   } else if(staffState.mainTab === "orders"){
     content.appendChild(renderOrdersTab());
+  } else if(staffState.mainTab === "telegram"){
+    content.appendChild(renderTelegramPage());
   } else if(staffState.mainTab === "products" && (me.role==="admin"||me.role==="super_admin")){
     content.appendChild(renderProductsTab());
   } else if(staffState.mainTab === "surveys"){
@@ -6149,11 +6188,6 @@ function wireEvents(root){
     if(action==="sidebar-nav"){
       mobileNavOpen = false;
       var navKey = t.getAttribute("data-key");
-      if(navKey==="messages" || navKey==="chats"){
-        telegramModal.open = true;
-        render();
-        return;
-      }
       if(navKey==="profile"){
         if(view==="student"){ studentState.tab="profile"; studentState.navKey="profile"; }
         else { staffState.mainTab="profile"; staffState.navKey="profile"; }
@@ -7153,9 +7187,15 @@ function wireEvents(root){
     if(action==="close-materials-picker"){ materialsPicker.open=false; render(); return; }
     if(action==="overlay-close-materials" && !e.target.closest("[data-stop]")){ materialsPicker.open=false; render(); return; }
 
-    if(action==="open-telegram-modal"){ telegramModal.open=true; render(); return; }
-    if(action==="close-telegram-modal"){ telegramModal.open=false; render(); return; }
-    if(action==="overlay-close-telegram-modal" && !e.target.closest("[data-stop]")){ telegramModal.open=false; render(); return; }
+    if(action==="open-telegram-modal"){
+      if(view==="student"){ await applyStudentTab("telegram"); window.scrollTo(0,0); return; }
+      staffState.navKey="telegram"; staffState.mainTab="telegram"; staffState.selectedStudentId=null; staffState.selectedStudent=null; render(); window.scrollTo(0,0); return;
+    }
+    if(action==="tg-copy"){
+      var okTg = await copyText(t.getAttribute("data-url"));
+      showToast(okTg ? "Ссылка на группу скопирована" : "Не удалось скопировать");
+      return;
+    }
     if(action==="toggle-picker-student"){
       var pid=t.getAttribute("data-id"); var pidx=materialsPicker.selectedIds.indexOf(pid);
       if(t.checked && pidx===-1) materialsPicker.selectedIds.push(pid);
@@ -7717,7 +7757,6 @@ document.addEventListener("keydown", function(e){
   if(lessonEditor.open){ lessonEditor.open=false; render(); return; }
   if(tempPasswordResult){ tempPasswordResult=null; render(); return; }
   if(protocolReader.id){ protocolReader.id=null; render(); return; }
-  if(telegramModal.open){ telegramModal.open=false; render(); return; }
   if(profileEditor.open){ profileEditor.open=false; render(); return; }
   if(changePasswordOpen){ changePasswordOpen=false; render(); return; }
   if(typeof calendarState!=="undefined" && calendarState.eventModalMode){ calendarState.eventModalMode=null; render(); return; }

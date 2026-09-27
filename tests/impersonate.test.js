@@ -98,3 +98,16 @@ describe("Вход как врач", () => {
     expect((await api("get", "/api/auth/me", cookie)).status).toBe(401);
   });
 });
+
+describe("/auth/me: куратор врача для раздела «Telegram»", () => {
+  test("врач видит имя закреплённого куратора, без закрепления — null", async () => {
+    const cur = await createUser({ role: "curator", name: "Куратор Видимый" });
+    const st = await createUser({ courseId: course.courseId });
+    const c = await loginAs(st);
+    expect((await api("get", "/api/auth/me", c)).body.user.curator).toBeNull();
+    await pool.query("UPDATE users SET assigned_curator_id=$1 WHERE id=$2", [cur.id, st.id]);
+    const me = (await api("get", "/api/auth/me", c)).body.user;
+    expect(me.curator.name).toBe("Куратор Видимый");
+    expect(me.assigned_curator_id).toBeUndefined();
+  });
+});
