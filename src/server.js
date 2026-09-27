@@ -20,6 +20,9 @@ const notificationRoutes = require("./routes/notifications");
 const specializationRoutes = require("./routes/specializations");
 const protocolRoutes = require("./routes/protocols");
 const calendarRoutes = require("./routes/calendar");
+const assignmentRoutes = require("./routes/assignments");
+const orderRoutes = require("./routes/orders");
+const surveyRoutes = require("./routes/surveys");
 
 const app = express();
 
@@ -120,6 +123,9 @@ mounted.use("/api/courses", coursesRoutes);
 mounted.use("/api/notifications", notificationRoutes);
 mounted.use("/api/specializations", specializationRoutes);
 mounted.use("/api/protocols", protocolRoutes);
+mounted.use("/api/assignments", assignmentRoutes);
+mounted.use("/api/orders", orderRoutes);
+mounted.use("/api/surveys", surveyRoutes);
 mounted.use("/api", calendarRoutes);
 
 // Интерактивная документация API — удобно, когда фронтенд и бэкенд начнут жить отдельно
@@ -167,10 +173,11 @@ if (BASE_PATH) {
 
 const PORT = process.env.PORT || 8790;
 if (require.main === module) {
-  // Колонка для фото профиля — создаём сами при старте (идемпотентно), чтобы
-  // забытый `npm run migrate` не ломал вход: /auth/me уже читает avatar_file.
-  require("./db").query("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_file TEXT")
-    .catch((e) => console.error("Не удалось добавить users.avatar_file:", e.message));
+  // Схема применяется при каждом старте (она идемпотентна — IF NOT EXISTS везде),
+  // чтобы забытый `npm run migrate` после обновления не ломал новые разделы:
+  // фото профиля, задания, заказы, анкеты читают таблицы/колонки из свежих этапов.
+  require("./db").query(require("fs").readFileSync(path.join(__dirname, "schema.sql"), "utf8"))
+    .catch((e) => console.error("Не удалось применить схему БД:", e.message));
   const server = app.listen(PORT, () => {
     console.log("LMS backend запущен на порту " + PORT);
     console.log("Документация API: http://localhost:" + PORT + "/api-docs");

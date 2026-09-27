@@ -523,3 +523,92 @@ ALTER TABLE progress ADD CONSTRAINT progress_course_id_fkey FOREIGN KEY (course_
 -- Имя файла в uploads/avatars (сам файл отдаёт GET /api/auth/avatar/:file только
 -- авторизованным). NULL — фото нет, показываются инициалы.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_file TEXT;
+
+-- ---------- Этап 24: задания к урокам с проверкой куратором ----------
+-- Задание — текстовое поле у самого урока (как в GetCourse): формулировка и флаг
+-- «стоп-урок». Стоп-урок не засчитывается, пока куратор не примет ответ; принятие
+-- само засчитывает урок. Необязательное задание урок не держит.
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS assignment_prompt TEXT;
+ALTER TABLE lessons ADD COLUMN IF NOT EXISTS assignment_required BOOLEAN NOT NULL DEFAULT false;
+
+-- Один ответ на пару (урок, врач); повторная отправка после возврата обновляет его.
+-- history — вся переписка по ответу: [{at, kind: submit|accept|return, by, name, text}].
+CREATE TABLE IF NOT EXISTS assignment_submissions (
+  id            TEXT PRIMARY KEY,
+  lesson_id     TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+  course_id     TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  answer        TEXT NOT NULL,
+  status        TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','returned')),
+  curator_comment TEXT,
+  reviewed_by   TEXT REFERENCES users(id) ON DELETE SET NULL,
+  reviewed_at   TIMESTAMPTZ,
+  submitted_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  attempts      INT NOT NULL DEFAULT 1,
+  history       JSONB NOT NULL DEFAULT '[]',
+  UNIQUE (lesson_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_assign_status ON assignment_submissions(status, submitted_at);
+
+-- ---------- Этап 25: продукты, заказы, оплаты и рассрочки ----------
+-- Продукт — то, что продаётся (цена, опционально — курс, доступ к которому
+-- открывается при полной оплате). Заказ — продукт для конкретного врача со своей
+-- ценой (скидка) и графиком платежей: один платёж или рассрочка на N частей.
+CREATE TABLE IF NOT EXISTS products (
+  id            TEXT PRIMARY KEY,
+  title         TEXT NOT NULL,
+  price         INT NOT NULL CHECK (price >= 0),
+  course_id     TEXT REFERENCES courses(id) ON DELETE SET NULL,
+  max_installments INT NOT NULL DEFAULT 1 CHECK (max_installments BETWEEN 1 AND 24),
+  active        BOOLEAN NOT NULL DEFAULT true,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS orders (
+  id            TEXT PRIMARY KEY,
+  number        SERIAL,
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  product_id    TEXT REFERENCES products(id) ON DELETE SET NULL,
+  title         TEXT NOT NULL,
+  amount        INT NOT NULL CHECK (amount >= 0),
+  status        TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','partial','paid','cancelled')),
+  comment       TEXT,
+  created_by    TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
+
+-- Строки графика: due_date — когда платёж ожидается, paid_at — когда реально пришёл.
+CREATE TABLE IF NOT EXISTS order_payments (
+  id            TEXT PRIMARY KEY,
+  order_id      TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  idx           INT NOT NULL,
+  amount        INT NOT NULL CHECK (amount >= 0),
+  due_date      DATE NOT NULL,
+  paid_at       TIMESTAMPTZ,
+  marked_by     TEXT REFERENCES users(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_order_payments_order ON order_payments(order_id);
+
+-- ---------- Этап 26: анкеты и опросы ----------
+-- questions: [{id, type: single|multi|scale|text, text, options[], required}].
+-- course_id NULL — анкета для всех врачей, иначе только для записанных на курс.
+CREATE TABLE IF NOT EXISTS surveys (
+  id            TEXT PRIMARY KEY,
+  title         TEXT NOT NULL,
+  description   TEXT,
+  questions     JSONB NOT NULL DEFAULT '[]',
+  course_id     TEXT REFERENCES courses(id) ON DELETE CASCADE,
+  active        BOOLEAN NOT NULL DEFAULT true,
+  created_by    TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS survey_responses (
+  id            TEXT PRIMARY KEY,
+  survey_id     TEXT NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+  user_id       TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  answers       JSONB NOT NULL DEFAULT '{}',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (survey_id, user_id)
+);

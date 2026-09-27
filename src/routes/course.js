@@ -88,6 +88,17 @@ function nextStreak(pr) {
 // обмениваются на скидку 25% на другое обучение в компании (см. renderMyProgressPage
 // на фронтенде, там же и объяснение для врача). Без потолка стрик рос бы бесконечно
 // (5 очков/день) и обесценивал бы "полную" отметку в 1000.
+// Задание к уроку есть, только если у него непустая формулировка; «стоп-урок» —
+// обязательное задание: такой урок засчитывается только принятием ответа куратором.
+function hasAssignment(l) { return !!(l.assignment_prompt && l.assignment_prompt.trim()); }
+async function isStopLessonPending(lesson, userId, lessonId) {
+  if (!hasAssignment(lesson) || !lesson.assignment_required) return false;
+  const r = await pool.query(
+    "SELECT 1 FROM assignment_submissions WHERE lesson_id=$1 AND user_id=$2 AND status='accepted'", [lessonId, userId]
+  );
+  return !r.rowCount;
+}
+
 const MAX_POINTS = 1000;
 function computePoints(pr) {
   const lessonsPoints = (pr.completed_lessons || []).length * 20;
@@ -141,7 +152,7 @@ router.get("/content/:courseId", authRequired, requireRole("student"), async (re
   const courseId = course.rows[0].id;
 
   const lessons = await pool.query(
-    "SELECT id, idx, title, duration, html, drip_days, video_url, video_timecodes, module_id FROM lessons WHERE course_id=$1 ORDER BY idx",
+    "SELECT id, idx, title, duration, html, drip_days, video_url, video_timecodes, module_id, assignment_prompt, assignment_required FROM lessons WHERE course_id=$1 ORDER BY idx",
     [courseId]
   );
   const quiz = await pool.query(
@@ -192,6 +203,7 @@ router.get("/content/:courseId", authRequired, requireRole("student"), async (re
       videoUrl: l.video_url, videoTimecodes: l.video_timecodes || [],
       quiz: lessonQuizzes[l.id] || [],
       moduleId: l.module_id,
+      assignment: hasAssignment(l) ? { prompt: l.assignment_prompt, required: !!l.assignment_required } : null,
       hiddenForMe: (hiddenFor[l.id] || []).indexOf(req.user.id) !== -1,
       dripLockedForMe: drip.locked,
       scheduledForMe: drip.scheduled,
@@ -207,6 +219,20 @@ router.get("/content/:courseId", authRequired, requireRole("student"), async (re
   }));
 
   const bookmarks = await pool.query("SELECT lesson_id FROM student_bookmarks WHERE user_id=$1", [req.user.id]);
+  const subs = await pool.query(
+    `SELECT a.lesson_id, a.answer, a.status, a.curator_comment, a.reviewed_at, a.submitted_at, a.attempts, a.history,
+            r.name AS reviewer_name
+     FROM assignment_submissions a LEFT JOIN users r ON r.id = a.reviewed_by
+     WHERE a.user_id=$1 AND a.course_id=$2`,
+    [req.user.id, courseId]
+  );
+  const assignments = {};
+  subs.rows.forEach((a) => {
+    assignments[a.lesson_id] = {
+      answer: a.answer, status: a.status, curatorComment: a.curator_comment, reviewerName: a.reviewer_name,
+      reviewedAt: a.reviewed_at, submittedAt: a.submitted_at, attempts: a.attempts, history: a.history || []
+    };
+  });
 
   res.json({
     course: { id: course.rows[0].id, title: course.rows[0].title, certificatesEnabled: course.rows[0].certificates_enabled },
@@ -214,6 +240,7 @@ router.get("/content/:courseId", authRequired, requireRole("student"), async (re
     modules: modulesOut,
     moduleFeedbackGiven: moduleFeedbackGiven.rows.map((r) => r.module_id),
     bookmarkedLessonIds: bookmarks.rows.map((r) => r.lesson_id),
+    assignments,
     quiz: quiz.rows.map((q) => ({ id: q.id, question: q.question, options: q.options })),
     quizHiddenForMe: (hiddenFor.quiz || []).indexOf(req.user.id) !== -1,
     progress: pr,
@@ -233,7 +260,7 @@ router.post("/lesson-done", authRequired, requireRole("student"), async (req, re
   // Курс определяем по самому уроку (он однозначно принадлежит одному курсу), а не
   // через LIMIT 1 или "единственную" запись progress — у врача их теперь может быть
   // несколько (по одной на каждый курс, на который он записан).
-  const lessonRow = await pool.query("SELECT drip_days, course_id FROM lessons WHERE id=$1", [lessonId]);
+  const lessonRow = await pool.query("SELECT drip_days, course_id, assignment_prompt, assignment_required FROM lessons WHERE id=$1", [lessonId]);
   if (!lessonRow.rowCount) return res.status(404).json({ error: "not_found", message: "Урок не найден" });
 
   const progressRow = await pool.query(
@@ -257,6 +284,10 @@ router.post("/lesson-done", authRequired, requireRole("student"), async (req, re
   const overrideUnlockAt = overrideRow.rowCount ? overrideRow.rows[0].unlock_at : null;
   if (computeLessonLock(lessonRow.rows[0], pr, overrideUnlockAt).locked) {
     return res.status(403).json({ error: "content_drip_locked", message: "Этот урок ещё не открылся" });
+  }
+
+  if (await isStopLessonPending(lessonRow.rows[0], req.user.id, lessonId)) {
+    return res.status(409).json({ error: "assignment_required", message: "Урок засчитается, когда куратор примет ваш ответ на задание" });
   }
 
   const list = pr.completed_lessons || [];
@@ -603,7 +634,7 @@ router.get("/materials", authRequired, requireRole("curator", "admin", "super_ad
   const course = await pool.query("SELECT id, title, certificates_enabled FROM courses WHERE id=$1", [courseId]);
   if (!course.rowCount) return res.json({ lessons: [] });
   const lessons = await pool.query(
-    "SELECT id, idx, title, has_draft, drip_days FROM lessons WHERE course_id=$1 ORDER BY idx",
+    "SELECT id, idx, title, has_draft, drip_days, assignment_prompt, assignment_required FROM lessons WHERE course_id=$1 ORDER BY idx",
     [course.rows[0].id]
   );
   res.json({ lessons: lessons.rows, certificatesEnabled: course.rows[0].certificates_enabled });
@@ -1129,7 +1160,7 @@ router.post("/lessons/:id/quiz-submit", authRequired, requireRole("student"), as
   const answers = (req.body && req.body.answers) || {};
   const lessonId = req.params.id;
 
-  const lessonRow = await pool.query("SELECT drip_days, course_id FROM lessons WHERE id=$1", [lessonId]);
+  const lessonRow = await pool.query("SELECT drip_days, course_id, assignment_prompt, assignment_required FROM lessons WHERE id=$1", [lessonId]);
   if (!lessonRow.rowCount) return res.status(404).json({ error: "not_found", message: "Урок не найден" });
 
   const progressRow = await pool.query(
@@ -1164,8 +1195,9 @@ router.post("/lessons/:id/quiz-submit", authRequired, requireRole("student"), as
   const scores = pr.lesson_quiz_scores || {};
   scores[lessonId] = score;
 
+  // Стоп-урок тест не засчитывает — балл сохраняем, а урок закроет принятое задание.
   const list = pr.completed_lessons || [];
-  if (!list.includes(lessonId)) list.push(lessonId);
+  if (!list.includes(lessonId) && !(await isStopLessonPending(lessonRow.rows[0], req.user.id, lessonId))) list.push(lessonId);
 
   const streak = nextStreak(pr);
   await pool.query(
