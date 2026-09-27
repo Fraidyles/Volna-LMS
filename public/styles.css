@@ -1728,3 +1728,14 @@ tr.ord-off td{opacity:.55;}
 @media (max-width:900px){.nt-grid{grid-template-columns:1fr;}}
 .nt-now .att-row .nt-ic{flex:0 0 30px;width:30px;}
 .nt-now .att-row > span:not(.nt-ic){flex:1;min-width:0;font-size:13px;color:var(--ink);}
+
+/* Коллекция протоколов: метка «для вас» и закрытые плитки следующих уроков */
+.proto-tile-top{gap:8px;}
+.proto-badge{font-size:12px;font-weight:600;color:var(--primary);background:var(--primary-tint);padding:3px 9px;border-radius:999px;}
+.proto-tile-top .proto-src{margin-left:auto;}
+.proto-tile.locked{background:transparent;border-style:dashed;box-shadow:none;}
+.proto-tile.locked .proto-ic{background:var(--surface-2);color:var(--muted-2);}
+.proto-tile.locked .proto-title{color:var(--muted);}
+.proto-tile.locked .proto-sum{color:var(--muted-2);}
+.proto-tile.locked .proto-foot > span:first-child{color:var(--muted-2);}
+.proto-tile.locked:hover{transform:none;border-color:color-mix(in srgb,var(--primary) 35%,transparent) !important;}

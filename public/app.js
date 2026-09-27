@@ -385,7 +385,7 @@ async function loadNotifications(){
 // каждом входе (в отличие от чатов/уведомлений, тут нет бейджа, который нужно
 // держать актуальным постоянно).
 async function loadProtocols(){
-  try{ var d = await api("/course/protocols?courseId="+encodeURIComponent(activeCourseId)); studentProtocols = { forYou:d.forYou, additional:d.additional, totalInCourse:d.totalInCourse||0, nextLesson:d.nextLesson||null }; }
+  try{ var d = await api("/course/protocols?courseId="+encodeURIComponent(activeCourseId)); studentProtocols = { forYou:d.forYou, additional:d.additional, upcoming:d.upcoming||[], totalInCourse:d.totalInCourse||0, nextLesson:d.nextLesson||null }; }
   catch(e){ studentProtocols = { forYou:[], additional:[] }; }
   studentState.protocolsLoaded = true;
 }
@@ -631,7 +631,14 @@ function runEntranceAnimations(){
       // Цифра внутри кольца читает текущее заполнение самого кольца — идут строго вместе.
       (function tick(){
         if(finished || !elx.isConnected) return;
-        if(inner) inner.textContent = Math.round(parseFloat(getComputedStyle(elx).getPropertyValue("--ring-p")) || 0)+suffix;
+        // Кольцо заполняется в процентах, а внутри может быть и количество
+        // (например, «1 протокол» при 25%) — пересчитываем пропорционально.
+        if(inner){
+          var cur = parseFloat(getComputedStyle(elx).getPropertyValue("--ring-p")) || 0;
+          var tgt = parseFloat(elx.getAttribute("data-ring-target")) || 0;
+          var cnt = parseFloat(inner.getAttribute("data-count")) || 0;
+          inner.textContent = (tgt > 0 ? Math.round(cnt * Math.min(1, cur / tgt)) : cnt) + suffix;
+        }
         requestAnimationFrame(tick);
       })();
     } else {
@@ -2795,26 +2802,38 @@ function renderProtocolsPage(){
     '<div class="proto-count"><div class="progress-ring" data-anim="ring" style="--ring-p:'+pct+'%;"><div class="progress-ring-inner"><span data-count="'+opened+'">'+opened+'</span></div></div>' +
       '<span>открыто из '+total+'</span></div>' +
   '</div>';
-  if(!opened){
+  var upcoming = studentProtocols.upcoming || [];
+  if(!opened && !upcoming.length){
     html += '<div class="card proto-empty">'+icon("doctor","ic-lg")+'<b>Пока пусто</b><p>Пройдите первый урок — и здесь появятся первые протоколы.</p>' +
       '<button class="btn btn-primary" data-action="open-course">Перейти к курсу</button></div></div>';
     return el(html);
   }
-  function tiles(list, isForYou){
-    var h = '<div class="proto-grid">';
-    list.forEach(function(p, i){
-      var files = p.guides.reduce(function(n,g){ return n + (g.files||[]).length; }, 0);
-      h += '<div class="card proto-tile'+(isForYou?' mine':'')+'" data-action="open-protocol" data-id="'+p.id+'" data-mine="'+(isForYou?1:0)+'" style="animation-delay:'+(i*60)+'ms">' +
-        '<div class="proto-tile-top"><span class="proto-ic">'+icon("doctor")+'</span>'+(p.lessonIdx!=null?'<span class="proto-src">из урока '+(p.lessonIdx+1)+'</span>':'')+'</div>' +
+  // Одна сетка: сначала протоколы по специализации врача (метка «Для вас»),
+  // затем дополнительные, затем закрытые — что откроют два следующих урока.
+  // Так плитки ложатся ровными рядами, без полупустых разделов по одной.
+  function tile(p, kind, i){
+    if(kind==="locked"){
+      return '<div class="card proto-tile locked" data-action="open-lesson-at" data-idx="'+p.lessonIdx+'" title="Откроется после урока '+(p.lessonIdx+1)+'" style="animation-delay:'+(i*60)+'ms">' +
+        '<div class="proto-tile-top"><span class="proto-ic">'+icon("lock")+'</span><span class="proto-src">урок '+(p.lessonIdx+1)+'</span></div>' +
         '<b class="proto-title">'+escapeHtml(p.title)+'</b>' +
         (p.summary ? '<p class="proto-sum">'+escapeHtml(stripHtml(renderPlainToProse(p.summary)))+'</p>' : '') +
-        '<div class="proto-foot"><span>'+p.guides.length+' '+ruPluralClient(p.guides.length,"гайд","гайда","гайдов")+(files?' · '+files+' '+ruPluralClient(files,"файл","файла","файлов"):'')+'</span><span class="proto-open">Открыть гайд →</span></div>' +
-      '</div>';
-    });
-    return h + '</div>';
+        '<div class="proto-foot"><span>Откроется после урока «'+escapeHtml(p.lessonTitle)+'»</span><span class="proto-open">К уроку →</span></div></div>';
+    }
+    var files = p.guides.reduce(function(n,g){ return n + (g.files||[]).length; }, 0);
+    return '<div class="card proto-tile'+(kind==="mine"?' mine':'')+'" data-action="open-protocol" data-id="'+p.id+'" data-mine="'+(kind==="mine"?1:0)+'" style="animation-delay:'+(i*60)+'ms">' +
+      '<div class="proto-tile-top"><span class="proto-ic">'+icon("doctor")+'</span>'+(kind==="mine"?'<span class="proto-badge">для вас</span>':'')+(p.lessonIdx!=null?'<span class="proto-src">из урока '+(p.lessonIdx+1)+'</span>':'')+'</div>' +
+      '<b class="proto-title">'+escapeHtml(p.title)+'</b>' +
+      (p.summary ? '<p class="proto-sum">'+escapeHtml(stripHtml(renderPlainToProse(p.summary)))+'</p>' : '') +
+      '<div class="proto-foot"><span>'+p.guides.length+' '+ruPluralClient(p.guides.length,"гайд","гайда","гайдов")+(files?' · '+files+' '+ruPluralClient(files,"файл","файла","файлов"):'')+'</span><span class="proto-open">Открыть гайд →</span></div>' +
+    '</div>';
   }
-  if(forYou.length) html += '<div class="courses-head" style="margin-top:22px;"><b class="page-h" style="margin:0;">По вашей специализации</b><span class="courses-count">'+forYou.length+'</span></div>' + tiles(forYou, true);
-  if(additional.length) html += '<div class="courses-head" style="margin-top:22px;"><b class="page-h" style="margin:0;">Дополнительные</b><span class="courses-count">не по вашему профилю — гайд можно открыть для любой специализации</span></div>' + tiles(additional, false);
+  var n = 0, grid = '<div class="proto-grid">';
+  forYou.forEach(function(p){ grid += tile(p, "mine", n++); });
+  additional.forEach(function(p){ grid += tile(p, "extra", n++); });
+  upcoming.forEach(function(p){ grid += tile(p, "locked", n++); });
+  grid += '</div>';
+  html += '<div class="courses-head proto-legend-row" style="margin-top:22px;"><b class="page-h" style="margin:0;">Все протоколы</b>' +
+    '<span class="courses-count">'+opened+' '+ruPluralClient(opened,"открыт","открыто","открыто")+(upcoming.length?' · '+upcoming.length+' скоро':'')+'</span></div>' + grid;
   html += '</div>';
   return el(html);
 }

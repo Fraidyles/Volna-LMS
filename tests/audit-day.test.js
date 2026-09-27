@@ -205,3 +205,26 @@ describe("Выделения маркером в уроке", () => {
     expect((await api("post", "/api/course/lessons/no-such/highlights", c, { text: "текст" })).status).toBe(404);
   });
 });
+
+describe("Коллекция протоколов: что откроется в двух следующих уроках", () => {
+  test("закрытые протоколы следующих уроков видны заранее и переходят в открытые", async () => {
+    const c2 = await seedCourse();
+    const ac = await loginAs(await createUser({ role: "admin" }));
+    const mk = async (title, lessonId) => {
+      const r = await api("post", "/api/protocols", ac, { title, summary: "Кратко: " + title });
+      await api("put", `/api/protocols/${r.body.id}/lessons`, ac, { lessonIds: [lessonId] });
+      return r.body.id;
+    };
+    const p1 = await mk("Протокол урока 1", c2.lessonIds[0]);
+    const p2 = await mk("Протокол урока 2", c2.lessonIds[1]);
+    const u = await createUser({ courseId: c2.courseId });
+    const c = await loginAs(u);
+    const r0 = await api("get", "/api/course/protocols", c).query({ courseId: c2.courseId });
+    expect(r0.body.upcoming.map((x) => x.id)).toEqual([p1, p2]);
+    expect(r0.body.upcoming[0]).toMatchObject({ title: "Протокол урока 1", lessonIdx: 0 });
+    await api("post", "/api/course/lesson-done", c, { lessonId: c2.lessonIds[0] });
+    const r1 = await api("get", "/api/course/protocols", c).query({ courseId: c2.courseId });
+    expect(r1.body.upcoming.map((x) => x.id)).toEqual([p2]);
+    expect(r1.body.forYou.concat(r1.body.additional).map((x) => x.id)).toContain(p1);
+  });
+});

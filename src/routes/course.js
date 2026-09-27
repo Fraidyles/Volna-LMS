@@ -430,14 +430,31 @@ router.get("/protocols", authRequired, requireRole("student"), async (req, res) 
   courseMap.rows.forEach((r) => { if (!firstLesson[r.protocol_id]) firstLesson[r.protocol_id] = r; });
   const totalInCourse = Object.keys(firstLesson).length;
   const doneSet = new Set(completedLessons);
-  const nextLesson = courseMap.rows.length
-    ? (await pool.query("SELECT id, idx, title FROM lessons WHERE course_id=$1 ORDER BY idx", [courseId])).rows.find((l) => !doneSet.has(l.id))
-    : null;
+  const orderedLessons = courseMap.rows.length
+    ? (await pool.query("SELECT id, idx, title FROM lessons WHERE course_id=$1 ORDER BY idx", [courseId])).rows
+    : [];
+  const nextLesson = orderedLessons.find((l) => !doneSet.has(l.id)) || null;
   const unlockedIds = new Set(courseMap.rows.filter((r) => doneSet.has(r.lesson_id)).map((r) => r.protocol_id));
+  // Что откроется в двух следующих непройденных уроках с протоколами — показываем
+  // закрытыми плитками, чтобы коллекция была видна наперёд (уроки без протоколов
+  // пропускаем, иначе впереди могло бы не оказаться ничего).
+  const withProtocols = new Set(courseMap.rows.map((r) => r.lesson_id));
+  const nextTwo = orderedLessons.filter((l) => !doneSet.has(l.id) && withProtocols.has(l.id)).slice(0, 2);
+  const upcomingIds = [];
+  const upcomingFrom = {};
+  nextTwo.forEach((l) => courseMap.rows.forEach((r) => {
+    if (r.lesson_id === l.id && !unlockedIds.has(r.protocol_id) && !upcomingFrom[r.protocol_id]) { upcomingIds.push(r.protocol_id); upcomingFrom[r.protocol_id] = l; }
+  }));
+  const upcomingRows = upcomingIds.length
+    ? (await pool.query("SELECT id, title, summary FROM protocols WHERE id = ANY($1::text[])", [upcomingIds])).rows
+    : [];
+  const upcoming = upcomingIds.map((id) => upcomingRows.find((r) => r.id === id)).filter(Boolean)
+    .map((p) => ({ id: p.id, title: p.title, summary: p.summary, lessonIdx: upcomingFrom[p.id].idx, lessonTitle: upcomingFrom[p.id].title }));
   const nextUnlocks = nextLesson
     ? new Set(courseMap.rows.filter((r) => r.lesson_id === nextLesson.id && !unlockedIds.has(r.protocol_id)).map((r) => r.protocol_id)).size
     : 0;
   const meta = {
+    upcoming,
     totalInCourse,
     nextLesson: nextLesson && nextUnlocks ? { idx: nextLesson.idx, title: nextLesson.title, unlocks: nextUnlocks } : null
   };
