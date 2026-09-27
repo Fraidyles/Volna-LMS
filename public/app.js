@@ -1794,52 +1794,103 @@ function addSideFlow(main){
 // вращения берётся от времени страницы — тоже без скачков.
 var dnaPairs = [];
 function startDnaDecor(host){
+  // Спираль ДНК в 3D на обычном canvas 2D (без WebGL): точки нитей считаются в
+  // трёх измерениях, проецируются с перспективой, все элементы — отрезки нитей,
+  // половинки перемычек, шарики-узлы — сортируются по глубине и рисуются от
+  // дальних к ближним. Ближнее крупнее, ярче и толще, дальнее уходит в дымку.
+  // Спираль вращается вокруг своей оси и слегка покачивается — объём читается.
   var cv = document.createElement("canvas"); host.appendChild(cv);
   var ctx = cv.getContext("2d");
   var cs = getComputedStyle(document.documentElement);
   var light = document.documentElement.getAttribute("data-theme") === "light";
   function toRgb(h){ h = h.trim().replace("#",""); if(h.length===3) h = h.split("").map(function(c){ return c+c; }).join(""); var n = parseInt(h,16); return [n>>16&255, n>>8&255, n&255]; }
   var V = toRgb(cs.getPropertyValue("--primary")), T = toRgb(cs.getPropertyValue("--teal"));
+  // Цвет фона страницы из темы — к нему растворяются дальние части и кончики нитей.
+  var bgRaw = cs.getPropertyValue("--bg").trim();
+  var BG = /^#([0-9a-f]{3}){1,2}$/i.test(bgRaw) ? toRgb(bgRaw) : (light ? [245,245,247] : [18,18,22]);
   function mix(a,b,k){ return a.map(function(x,i){ return Math.round(x+(b[i]-x)*k); }); }
   function rgba(c,a){ return "rgba("+c[0]+","+c[1]+","+c[2]+","+a+")"; }
   var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var W = 0, H = 0;
   function size(){ var dpr = Math.min(2, window.devicePixelRatio||1); W = host.clientWidth; H = host.clientHeight; cv.width = W*dpr; cv.height = H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); }
   size();
-  var TURNS = 2, PERIOD = 300, STEP = 20, LEN = TURNS*PERIOD, last = 0;
+  var TURNS = 2, PERIOD = 300, STEP = 20, LEN = TURNS*PERIOD, SAMPLES = 120, last = 0, CAM = 700, prevTs = 0;
   function pair(i){ return dnaPairs[i] || (dnaPairs[i] = { k: Math.random()<.5?0:1, to:null, from:0, t0:0 }); }
   function env(u){ return Math.pow(Math.sin(Math.PI*u), .7); }
   function fade(u){ return Math.min(1, Math.sin(Math.PI*u)*1.6); }
   function frame(ts){
     if(!host.isConnected) return;
+    // Украшение с медленным движением — 30 кадров в секунду достаточно, вдвое дешевле.
+    if(!reduce && prevTs && ts - prevTs < 30){ requestAnimationFrame(frame); return; }
+    prevTs = ts;
     if(host.clientWidth !== W || host.clientHeight !== H) size();
     var t = ts/1000;
     ctx.clearRect(0,0,W,H);
-    var x0 = (W-LEN)/2, mid = H*.56, A = Math.min(52, H*.24), k = Math.PI*2/PERIOD;
-    var spin = reduce ? 0 : t*.35, wave = ((t*70) % (LEN+500)) - 250, n = Math.floor(LEN/STEP);
+    var cx = W/2, mid = H*.56, R = Math.min(56, H*.26), k = Math.PI*2/PERIOD;
+    var spin = reduce ? 0 : t*.45, yaw = reduce ? .18 : .22*Math.sin(t*.23), cyw = Math.cos(yaw), syw = Math.sin(yaw);
+    var wave = ((t*70) % (LEN+500)) - 250, n = Math.floor(LEN/STEP);
     if(!reduce && ts-last > 700){ last = ts; var pr = pair(1+Math.floor(Math.random()*(n-1))); if(pr.to===null){ pr.from = pr.k; pr.to = 1-pr.k; pr.t0 = t; } }
-    [1,-1].forEach(function(sg){ [0,1].forEach(function(pass){
-      ctx.beginPath();
-      for(var u=0; u<=1.0001; u+=1/240){ var x = x0+u*LEN, y = mid+sg*Math.sin(u*LEN*k+spin)*A*env(u); if(u) ctx.lineTo(x,y); else ctx.moveTo(x,y); }
-      var g = ctx.createLinearGradient(x0,0,x0+LEN,0), cA = sg>0?V:T, cB = sg>0?T:V, al = pass ? (light?.5:.7) : (light?.12:.18);
-      g.addColorStop(0, rgba(cA,0)); g.addColorStop(.18, rgba(cA,al)); g.addColorStop(.82, rgba(cB,al)); g.addColorStop(1, rgba(cB,0));
-      ctx.strokeStyle = g; ctx.lineWidth = pass?2:9; ctx.lineCap = "round"; ctx.stroke();
-    }); });
-    for(var i=1; i<n; i++){
-      var u = i/n, x = x0+u*LEN, ph = u*LEN*k+spin;
-      var y1 = mid+Math.sin(ph)*A*env(u), y2 = mid-Math.sin(ph)*A*env(u), ym = (y1+y2)/2, depth = (Math.cos(ph)+1)/2;
-      var p = pair(i);
-      if(p.to!==null){ var q = Math.min(1,(t-p.t0)/2); p.k = p.from+(p.to-p.from)*(q*q*(3-2*q)); if(q>=1){ p.k = p.to; p.to = null; } }
-      var glow = Math.max(0, 1-Math.abs(u*LEN-wave)/140);
-      var a = fade(u)*((light?.16:.2)+depth*(light?.3:.42)+glow*.3);
-      var c1 = mix(V,T,p.k), c2 = mix(V,T,1-p.k);
-      ctx.lineWidth = 1.6+depth*1.4; ctx.lineCap = "round";
-      ctx.strokeStyle = rgba(c1,a); ctx.beginPath(); ctx.moveTo(x,y1); ctx.lineTo(x,ym); ctx.stroke();
-      ctx.strokeStyle = rgba(c2,a); ctx.beginPath(); ctx.moveTo(x,ym); ctx.lineTo(x,y2); ctx.stroke();
-      ctx.shadowBlur = 8+glow*10;
-      [[y1,c1],[y2,c2]].forEach(function(d){ ctx.shadowColor = rgba(d[1],.8); ctx.fillStyle = rgba(d[1], Math.min(1,a+.15)); ctx.beginPath(); ctx.arc(x, d[0], 1.8+depth*1.8, 0, 7); ctx.fill(); });
-      ctx.shadowBlur = 0;
+    // точка на оси спирали (u — доля длины, a — угол вокруг оси, r — радиус)
+    function P(u, a, r){
+      var lx = (u-.5)*LEN, ly = Math.sin(a)*r, lz = Math.cos(a)*r;
+      var x = lx*cyw - lz*syw, z = lx*syw + lz*cyw;
+      var s = CAM/(CAM - z);
+      return { x: cx + x*s, y: mid + ly*s, z: z, s: s };
     }
+    var items = [];
+    // нити: непрерывные куски по CH сэмплов — у каждого своя глубина, толщина и
+    // блик; один путь на кусок, поэтому трубка гладкая, без «бусин» на стыках
+    var CH = 5;
+    [0, Math.PI].forEach(function(off, si){
+      var pts = [];
+      for(var j=0; j<=SAMPLES; j++){ var u = j/SAMPLES; pts.push(P(u, u*LEN*k + spin + off, R*env(u))); pts[j].u = u; }
+      for(var c0=0; c0<SAMPLES; c0+=CH){
+        var chunk = pts.slice(c0, Math.min(SAMPLES, c0+CH)+1), zs = 0, uu = 0;
+        chunk.forEach(function(q){ zs += q.z; uu += q.u; });
+        uu /= chunk.length;
+        items.push({ kind:"seg", pts:chunk, a:chunk[Math.floor(chunk.length/2)], z:zs/chunk.length, u:uu, c: mix(si?T:V, si?V:T, uu) });
+      }
+    });
+    // перемычки (пары оснований) — по половинке от каждой нити до центра, и узлы
+    for(var i=1; i<n; i++){
+      var u2 = i/n, ang = u2*LEN*k + spin, r2 = R*env(u2);
+      var pa = P(u2, ang, r2), pb = P(u2, ang+Math.PI, r2), pc = P(u2, 0, 0);
+      var pp = pair(i);
+      if(pp.to!==null){ var q = Math.min(1,(t-pp.t0)/2); pp.k = pp.from+(pp.to-pp.from)*(q*q*(3-2*q)); if(q>=1){ pp.k = pp.to; pp.to = null; } }
+      var glow = Math.max(0, 1-Math.abs(u2*LEN-wave)/140);
+      var c1 = mix(V,T,pp.k), c2 = mix(V,T,1-pp.k);
+      items.push({ kind:"rung", a:pa, b:pc, z:(pa.z+pc.z)/2, u:u2, c:c1, glow:glow });
+      items.push({ kind:"rung", a:pb, b:pc, z:(pb.z+pc.z)/2, u:u2, c:c2, glow:glow });
+      items.push({ kind:"node", a:pa, z:pa.z+.5, u:u2, c:c1, glow:glow });
+      items.push({ kind:"node", a:pb, z:pb.z+.5, u:u2, c:c2, glow:glow });
+    }
+    items.sort(function(x,y){ return x.z - y.z; });
+    ctx.lineCap = "round";
+    items.forEach(function(it){
+      var d = Math.max(0, Math.min(1, (it.z + R)/(2*R)));        // 0 — дальняя сторона, 1 — ближняя
+      var f = fade(it.u), fog = .35 + .65*d;                      // дымка вдали
+      // Цвета нитей непрозрачные, заранее смешанные с фоном (и дымкой, и затуханием
+      // к концам), — иначе полупрозрачные отрезки накладывались на стыках «бусами».
+      var col = mix(BG, it.c, fog * f * (light ? 1 : 1.08) > 1 ? 1 : fog * f * (light ? 1 : 1.08));
+      if(it.kind==="seg"){
+        var w = (2.2 + d*3.6) * it.a.s, path = function(dy){ ctx.beginPath(); it.pts.forEach(function(q, qi){ if(qi) ctx.lineTo(q.x, q.y+dy); else ctx.moveTo(q.x, q.y+dy); }); ctx.stroke(); };
+        ctx.lineJoin = "round";
+        ctx.strokeStyle = rgba(mix(col, BG, light ? .1 : .12), 1); ctx.lineWidth = w; path(0);   // тело трубки
+        // блик — светлее цвета нити (не белый), гаснет вместе с нитью к концам
+        ctx.strokeStyle = rgba(mix(col, light ? [255,255,255] : mix(it.c,[255,255,255],.5), (light ? .35 : .25 + d*.3) * f), 1);
+        ctx.lineWidth = Math.max(.7, w*.34); path(-w*.17);
+      } else if(it.kind==="rung"){
+        ctx.strokeStyle = rgba(col, f*((light?.22:.28) + d*(light?.32:.45) + it.glow*.3));
+        ctx.lineWidth = (1.2 + d*1.8) * it.a.s;
+        ctx.beginPath(); ctx.moveTo(it.a.x, it.a.y); ctx.lineTo(it.b.x, it.b.y); ctx.stroke();
+      } else {
+        // Шарик: мягкий ореол (дешёвая замена shadowBlur), тело и блик сверху-слева.
+        var r = (1.8 + d*2.6) * it.a.s * (1 + it.glow*.35);
+        if(d > .6 || it.glow > .25){ ctx.fillStyle = rgba(it.c, ((light ? .05 : .09) + it.glow*(light ? .1 : .18)) * f); ctx.beginPath(); ctx.arc(it.a.x, it.a.y, r*1.8, 0, 7); ctx.fill(); }
+        ctx.fillStyle = rgba(col, 1); ctx.beginPath(); ctx.arc(it.a.x, it.a.y, r, 0, 7); ctx.fill();
+        ctx.fillStyle = rgba(mix(col, [255,255,255], .55), .9 * f); ctx.beginPath(); ctx.arc(it.a.x - r*.32, it.a.y - r*.32, r*.38, 0, 7); ctx.fill();
+      }
+    });
     if(!reduce) requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
