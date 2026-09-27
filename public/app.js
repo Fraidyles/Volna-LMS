@@ -581,6 +581,81 @@ function applyGlow(){
 // Разметка уже содержит итоговое значение, так что без JS/при reduced-motion
 // просто показывается результат.
 var lastRenderScreen = null;
+
+// Кнопка «Назад» в браузере: приложение — SPA без pushState (см. комментарий про
+// API/BASE_PATH в начале файла — путь URL никогда не меняется, чтобы не съезжало
+// резолвление относительных ссылок), поэтому у вкладки была ровно одна запись в
+// истории — «Назад» сразу уводил с сайта. Ниже пушим новую запись при каждом
+// переходе на другой «экран» (URL остаётся тем же, меняется только state), а
+// «Назад»/«Вперёд» восстанавливают состояние из этой записи вместо ухода с сайта.
+// Внутришаговые вещи уровня урока (материал/видео/тест) и модалки сознательно не
+// отслеживаются — история покрывает переходы между разделами/уроками/карточками.
+var navHistoryReady = false, lastNavState = null, applyingNavState = false;
+function navSnapshot(){
+  return {
+    view: view,
+    studentTab: view==="student" ? studentState.tab : null,
+    studentNavKey: view==="student" ? studentState.navKey : null,
+    lessonIndex: (view==="student" && studentState.tab==="lesson") ? studentState.lessonIndex : null,
+    quizMode: (view==="student" && studentState.tab==="lesson") ? !!studentState.quizMode : null,
+    staffMainTab: view==="staff" ? staffState.mainTab : null,
+    selectedStudentId: view==="staff" ? staffState.selectedStudentId : null,
+    drawerTab: (view==="staff" && staffState.selectedStudentId) ? staffState.drawerTab : null
+  };
+}
+function navStatesEqual(a, b){
+  if(!a || !b) return false;
+  return a.view===b.view && a.studentTab===b.studentTab && a.lessonIndex===b.lessonIndex &&
+    a.quizMode===b.quizMode && a.staffMainTab===b.staffMainTab &&
+    a.selectedStudentId===b.selectedStudentId && a.drawerTab===b.drawerTab;
+}
+// Вызывается в конце каждого render() — навигационные переходы (клик по вкладке,
+// открытие урока/карточки врача) естественным образом проходят через render(), а
+// фоновые перерисовки (поллинг уведомлений раз в 30с) не меняют снимок — лишних
+// записей в истории от них не будет.
+function syncNavHistory(){
+  if(applyingNavState) return; // это состояние уже пришло из popstate — не пушим его же обратно
+  if(view!=="student" && view!=="staff") return; // логин/регистрация/загрузка — не «место», куда стоит возвращаться
+  var snap = navSnapshot();
+  if(!navHistoryReady){
+    history.replaceState(snap, "");
+    navHistoryReady = true; lastNavState = snap;
+    return;
+  }
+  if(!navStatesEqual(snap, lastNavState)){
+    history.pushState(snap, "");
+    lastNavState = snap;
+  }
+}
+window.addEventListener("popstate", function(e){
+  var s = e.state;
+  if(!s || (s.view!=="student" && s.view!=="staff")) return; // запись до входа в приложение — пусть браузер уводит с сайта как обычно
+  applyingNavState = true;
+  view = s.view;
+  if(s.view==="student"){
+    studentState.tab = s.studentTab || "home";
+    studentState.navKey = s.studentNavKey || studentState.tab;
+    if(s.lessonIndex!=null){ studentState.lessonIndex = s.lessonIndex; }
+    studentState.quizMode = !!s.quizMode;
+    if(studentState.tab==="lesson") resetLessonStageState();
+  } else if(s.view==="staff"){
+    staffState.mainTab = s.staffMainTab || "students";
+    staffState.navKey = staffState.mainTab;
+    if(s.selectedStudentId){
+      // Синхронная часть openStudentPage отработает до первого await ещё до
+      // возврата сюда (JS однопоточный) — drawerTab можно проставить сразу после.
+      if(!staffState.selectedStudent || staffState.selectedStudent.id!==s.selectedStudentId){
+        openStudentPage(s.selectedStudentId);
+      }
+      staffState.drawerTab = s.drawerTab || "progress";
+    } else {
+      staffState.selectedStudentId = null;
+    }
+  }
+  lastNavState = s;
+  render();
+  applyingNavState = false;
+});
 var animSeen = {}, animScreen = "", animTimers = [], animRun = 0;
 // Поочерёдно: следующий элемент стартует, когда закончился предыдущий (порядок —
 // как на экране). Пока ждёт очереди, стоит на нуле. Процент внутри кольца идёт
@@ -1121,6 +1196,7 @@ function render(){
     // отсутствующими в DOM узлами.
     lessonPlyrInstance = null;
   }
+  syncNavHistory();
 }
 
 // Plyr переодевает стандартный <video> в свой интерфейс, но сам элемент с id
