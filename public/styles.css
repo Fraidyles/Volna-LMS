@@ -1692,3 +1692,39 @@ tr.ord-off td{opacity:.55;}
 .sh-fact span{font-size:12px;font-weight:500;color:var(--muted);}
 .sh-fact b{font-size:15px;font-weight:600;overflow-wrap:anywhere;}
 .sh-hint{font-size:13px;}
+
+/* Уведомления врача */
+.nt-head{flex-wrap:wrap;margin-bottom:4px;}
+.nt-tools{display:flex;gap:8px;align-items:center;}
+.nt-seg{margin:0;display:inline-flex;}
+.nt-seg .seg-btn{flex:0 0 auto;padding:6px 12px;}
+.nt-row{position:relative;display:flex;align-items:flex-start;gap:12px;padding:12px 10px;margin:0 -10px;border-radius:var(--radius-s);}
+.nt-row + .nt-row{border-top:1px solid var(--line-2);}
+.nt-row.link{cursor:pointer;}
+.nt-row.link:hover{background:var(--surface-2);}
+.nt-row:not(.new) .nt-main b{font-weight:500;color:var(--muted);}
+.nt-row:not(.new) .nt-main span{color:var(--muted-2);}
+.nt-main{flex:1;min-width:0;}
+.nt-main b{display:block;font-size:14px;font-weight:600;}
+.nt-main span{display:block;font-size:13px;color:var(--muted);margin-top:2px;line-height:1.45;}
+.nt-side{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;}
+.nt-time{font-size:12px;color:var(--muted-2);}
+.nt-side em{font-style:normal;font-size:12px;color:var(--primary);opacity:0;transition:opacity .15s;}
+.nt-row.link:hover .nt-side em{opacity:1;}
+@media (hover:none){.nt-side em{opacity:1;}}
+.nt-dot{position:absolute;left:-2px;top:22px;width:6px;height:6px;border-radius:50%;background:var(--primary);}
+.nt-ic{width:30px;height:30px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--surface-2);color:var(--muted);}
+.nt-ic.primary{background:var(--primary-tint);color:var(--primary);}
+.nt-ic.done{background:var(--status-done-tint);color:var(--status-done);}
+.nt-ic.blocked{background:var(--status-blocked-tint);color:var(--status-blocked);}
+.nt-ic.live{background:var(--status-attention-tint);color:var(--status-attention);}
+.nt-ic.teal{background:var(--teal-tint);color:var(--teal);}
+.nt-empty{padding:48px 20px;}
+.nt-now .att-row{align-items:center;}
+.nt-now .att-row span:nth-child(2){flex:1;font-size:13px;}
+.nt-legend{display:flex;flex-direction:column;gap:10px;font-size:13px;color:var(--muted);}
+.nt-legend div{display:flex;align-items:center;gap:10px;}
+.nt-grid{grid-template-columns:minmax(0,1.65fr) minmax(280px,1fr);}
+@media (max-width:900px){.nt-grid{grid-template-columns:1fr;}}
+.nt-now .att-row .nt-ic{flex:0 0 30px;width:30px;}
+.nt-now .att-row > span:not(.nt-ic){flex:1;min-width:0;font-size:13px;color:var(--ink);}

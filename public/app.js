@@ -2920,28 +2920,76 @@ function renderPointsLadder(points, max){
   return h + '</div></div>';
 }
 
+// Уведомления врача: лента на всю ширину, по дням, со значком типа; новые —
+// с точкой, прочитанные приглушены (но читаемы). Клик ведёт туда, к чему
+// уведомление относится. Справа — «Сейчас важно»: что ждёт действия врача.
+var NOTIF_KINDS = {
+  assignment_returned: ["repeat","blocked"], assignment_accepted: ["check","done"], assignment_submitted: ["task","primary"],
+  new_lesson: ["book","primary"], content_unlocked: ["book","primary"], course_opened: ["book","done"], access_unblocked: ["lock","done"],
+  course_closed: ["lock","blocked"], certificate_issued: ["badge","done"], survey_new: ["poll","teal"], live: ["calendar","live"], reminder: ["clock","live"]
+};
+function notifTarget(n){
+  var t = n.synthetic ? "live" : n.type;
+  if(t==="assignment_returned" || t==="assignment_accepted") return "Открыть задание";
+  if(t==="new_lesson" || t==="content_unlocked" || t==="course_opened" || t==="access_unblocked") return "К урокам";
+  if(t==="survey_new") return "Заполнить анкету";
+  if(t==="certificate_issued") return "К сертификату";
+  if(t==="reminder") return "К итоговому тесту";
+  if(t==="live") return "К расписанию";
+  return "";
+}
 function renderNotificationsPage(){
-  var reminders = upcomingEventReminders();
-  var items = reminders.concat(notifState.items);
-  var html = '<div style="margin-top:6px;max-width:760px;">' +
-    '<div class="card" style="padding:18px 20px;">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
-        '<b style="font-size:15px;">Уведомления</b>' +
-        (notifState.unreadCount>0 ? '<button class="btn btn-sm btn-ghost" data-action="mark-all-notifs-read">Пометить всё прочитанным</button>' : '') +
-      '</div>';
+  var reminders = upcomingEventReminders().map(function(r){ return Object.assign({ type:"live" }, r); });
+  var all = reminders.concat(notifState.items);
+  var onlyNew = studentState.notifFilter==="unread";
+  var items = onlyNew ? all.filter(function(n){ return n.synthetic || !n.read_at; }) : all;
+  var unread = all.filter(function(n){ return n.synthetic || !n.read_at; }).length;
+
+  var html = '<div class="page-wide pp-grid nt-grid"><div class="pp-col"><div class="card co-card nt-card">' +
+    '<div class="co-head nt-head"><b>Уведомления</b>' +
+      '<div class="nt-tools"><div class="seg nt-seg"><button type="button" class="seg-btn'+(onlyNew?'':' on')+'" data-action="notif-filter" data-f="all">Все</button>' +
+        '<button type="button" class="seg-btn'+(onlyNew?' on':'')+'" data-action="notif-filter" data-f="unread">Новые'+(unread?' · '+unread:'')+'</button></div>' +
+      (notifState.unreadCount>0 ? '<button class="btn btn-sm btn-ghost" data-action="mark-all-notifs-read">Прочитать все</button>' : '') + '</div></div>';
   if(!items.length){
-    html += '<div class="empty-state" style="padding:30px 10px;">У вас нет новых уведомлений.</div>';
+    html += '<div class="empty-state nt-empty"><div class="big">'+icon("bell","ic-lg")+'</div>'+(onlyNew ? 'Новых уведомлений нет — всё прочитано.' : 'Уведомлений пока нет. Здесь появятся новые уроки, ответы куратора на задания и напоминания об эфирах.')+'</div>';
   } else {
+    var lastDay = "";
     items.forEach(function(n){
-      var unread = n.synthetic || !n.read_at;
-      html += '<div class="'+(n.synthetic?'':'notif-item')+'" '+(n.synthetic?'':'data-action="mark-notif-read" data-id="'+n.id+'"')+
-        ' style="padding:12px 0;border-bottom:1px solid var(--line-2);cursor:'+(n.synthetic?'default':'pointer')+';'+(unread?'':'opacity:.55;')+'">' +
-        '<b style="font-size:14px;display:block;">'+escapeHtml(n.title)+'</b>' +
-        (n.body?'<span style="font-size:13px;color:var(--muted);display:block;margin-top:3px;">'+escapeHtml(n.body)+'</span>':'') +
-        (n.created_at&&!n.synthetic?'<span style="font-size:11px;color:var(--muted-2);display:block;margin-top:4px;">'+fmtDate(n.created_at)+' '+fmtTime(n.created_at)+'</span>':'') +
+      var d = new Date(n.created_at || Date.now());
+      var day = n.synthetic ? "Скоро" : (isSameCalendarDay(d, new Date()) ? "Сегодня" : d.toLocaleDateString("ru-RU",{ weekday:"long", day:"numeric", month:"long" }));
+      if(day!==lastDay){ html += '<div class="feed-day">'+day+'</div>'; lastDay = day; }
+      var k = NOTIF_KINDS[n.synthetic ? "live" : n.type] || ["bell","neutral"], isNew = n.synthetic || !n.read_at, go = notifTarget(n);
+      html += '<div class="nt-row'+(isNew?' new':'')+(go?' link':'')+'" data-action="notif-open" data-id="'+escapeHtml(n.id)+'">' +
+        '<span class="nt-ic '+k[1]+'">'+icon(k[0],"ic-sm")+'</span>' +
+        '<div class="nt-main"><b>'+escapeHtml(n.title)+'</b>'+(n.body?'<span>'+escapeHtml(n.body)+'</span>':'')+'</div>' +
+        '<div class="nt-side">'+(n.synthetic?'<span class="nt-time">скоро</span>':'<span class="nt-time">'+fmtTime(n.created_at)+'</span>')+
+          (go?'<em>'+go+' →</em>':'')+'</div>' +
+        (isNew && !n.synthetic ? '<i class="nt-dot" aria-label="новое"></i>' : '') +
       '</div>';
     });
   }
+  html += '</div></div>';
+
+  // Справа — что ждёт действия врача прямо сейчас.
+  var returned = course ? course.lessons.map(function(l,i){ return { l:l, i:i, a:(course.assignments||{})[l.id] }; }).filter(function(x){ return x.a && x.a.status==="returned"; }) : [];
+  var survey = (studentTools.surveys||[]).find(function(x){ return !x.my_answers; });
+  var nowD = new Date(), mySid = me.stream_id || "";
+  var nextEv = (calendarState.events||[]).filter(function(ev){ return (!ev.stream_id || ev.stream_id===mySid) && new Date(ev.event_date+"T"+(ev.event_time||"00:00")) >= nowD; })
+    .sort(function(a,b){ return (a.event_date+a.event_time).localeCompare(b.event_date+b.event_time); })[0];
+  html += '<div class="pp-col"><div class="card co-card nt-now"><b class="co-card-title">Сейчас важно</b>';
+  var any = false;
+  returned.forEach(function(x){ any = true;
+    html += '<div class="att-row" data-action="open-lesson-task" data-idx="'+x.i+'"><span class="nt-ic blocked">'+icon("repeat","ic-sm")+'</span><span>Задание к уроку '+(x.i+1)+' вернули на доработку</span><em>→</em></div>'; });
+  if(survey){ any = true; html += '<div class="att-row" data-action="sf-open" data-id="'+survey.id+'"><span class="nt-ic teal">'+icon("poll","ic-sm")+'</span><span>Анкета «'+escapeHtml(survey.title)+'» ждёт ответа</span><em>→</em></div>'; }
+  if(nextEv){ any = true;
+    var ed = new Date(nextEv.event_date+"T00:00:00");
+    html += '<div class="att-row" data-action="student-tab" data-tab="schedule"><span class="nt-ic live">'+icon("calendar","ic-sm")+'</span><span>Эфир «'+escapeHtml(nextEv.title)+'» — '+ed.toLocaleDateString("ru-RU",{ day:"numeric", month:"long" })+', '+escapeHtml(nextEv.event_time||"")+'</span><em>→</em></div>'; }
+  if(!any) html += '<p class="set-muted">Ничего не ждёт вашего действия. Продолжайте курс в своём темпе.</p>';
+  html += '</div>' +
+    '<div class="card co-card nt-about"><b class="co-card-title">О чём мы сообщаем</b>' +
+      '<div class="nt-legend">' +
+        ['book|primary|Новые уроки и открытые материалы','task|primary|Ответы куратора на ваши задания','calendar|live|Эфир начнётся через 30 минут','poll|teal|Новые анкеты','badge|done|Выдан сертификат'].map(function(r){ var p = r.split("|"); return '<div><span class="nt-ic '+p[1]+'">'+icon(p[0],"ic-sm")+'</span>'+p[2]+'</div>'; }).join('') +
+      '</div></div>';
   html += '</div></div>';
   return el(html);
 }
@@ -5942,6 +5990,27 @@ function wireEvents(root){
     }
     if(action==="set-theme"){ var nt=t.getAttribute("data-theme"); if(nt!==getTheme()){ localStorage.setItem("lms-theme", nt); applyTheme(); } render(); return; }
     if(action==="toggle-theme"){ toggleTheme(); render(); return; }
+    if(action==="notif-filter"){ studentState.notifFilter = t.getAttribute("data-f"); render(); return; }
+    if(action==="notif-open"){
+      var nid2 = t.getAttribute("data-id");
+      var nn = notifState.items.find(function(x){ return String(x.id)===nid2; }) || upcomingEventReminders().find(function(x){ return x.id===nid2; });
+      if(!nn) return;
+      if(!nn.synthetic && !nn.read_at){
+        nn.read_at = new Date().toISOString(); notifState.unreadCount = Math.max(0, notifState.unreadCount-1);
+        api("/notifications/"+nid2+"/read", { method:"POST" }).catch(function(){});
+      }
+      var ty = nn.synthetic ? "live" : nn.type;
+      if(ty==="assignment_returned" || ty==="assignment_accepted"){
+        var q = /«([^»]+)»/.exec(nn.body||""), li = q && course ? course.lessons.findIndex(function(l){ return l.title===q[1]; }) : -1;
+        if(li!==-1){ studentState.tab="lesson"; studentState.navKey="course"; studentState.quizMode=false; studentState.lessonIndex=li; resetLessonStageState(); studentState.lessonStage="task"; render(); window.scrollTo(0,0); return; }
+      }
+      if(ty==="new_lesson" || ty==="content_unlocked" || ty==="course_opened" || ty==="access_unblocked"){ await applyStudentTab("course","course"); return; }
+      if(ty==="survey_new"){ var sv2 = (studentTools.surveys||[]).find(function(x){ return !x.my_answers; }); if(sv2){ studentTools.fillId = sv2.id; studentTools.answers = {}; studentTools.surveyError = ""; } render(); return; }
+      if(ty==="certificate_issued"){ await applyStudentTab("progress","progress"); return; }
+      if(ty==="reminder" && course && !course.quizHiddenForMe){ studentState.tab="lesson"; studentState.navKey="course"; studentState.quizMode=true; studentState.quizSubmitted=false; render(); window.scrollTo(0,0); return; }
+      if(ty==="live"){ await applyStudentTab("schedule","schedule"); return; }
+      render(); return;
+    }
     if(action==="mark-notif-read"){
       var nid=t.getAttribute("data-id");
       var n = notifState.items.find(function(x){ return x.id===nid; });
