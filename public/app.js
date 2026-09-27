@@ -581,6 +581,81 @@ function applyGlow(){
 // Разметка уже содержит итоговое значение, так что без JS/при reduced-motion
 // просто показывается результат.
 var lastRenderScreen = null;
+
+// Кнопка «Назад» в браузере: приложение — SPA без pushState (см. комментарий про
+// API/BASE_PATH в начале файла — путь URL никогда не меняется, чтобы не съезжало
+// резолвление относительных ссылок), поэтому у вкладки была ровно одна запись в
+// истории — «Назад» сразу уводил с сайта. Ниже пушим новую запись при каждом
+// переходе на другой «экран» (URL остаётся тем же, меняется только state), а
+// «Назад»/«Вперёд» восстанавливают состояние из этой записи вместо ухода с сайта.
+// Внутришаговые вещи уровня урока (материал/видео/тест) и модалки сознательно не
+// отслеживаются — история покрывает переходы между разделами/уроками/карточками.
+var navHistoryReady = false, lastNavState = null, applyingNavState = false;
+function navSnapshot(){
+  return {
+    view: view,
+    studentTab: view==="student" ? studentState.tab : null,
+    studentNavKey: view==="student" ? studentState.navKey : null,
+    lessonIndex: (view==="student" && studentState.tab==="lesson") ? studentState.lessonIndex : null,
+    quizMode: (view==="student" && studentState.tab==="lesson") ? !!studentState.quizMode : null,
+    staffMainTab: view==="staff" ? staffState.mainTab : null,
+    selectedStudentId: view==="staff" ? staffState.selectedStudentId : null,
+    drawerTab: (view==="staff" && staffState.selectedStudentId) ? staffState.drawerTab : null
+  };
+}
+function navStatesEqual(a, b){
+  if(!a || !b) return false;
+  return a.view===b.view && a.studentTab===b.studentTab && a.lessonIndex===b.lessonIndex &&
+    a.quizMode===b.quizMode && a.staffMainTab===b.staffMainTab &&
+    a.selectedStudentId===b.selectedStudentId && a.drawerTab===b.drawerTab;
+}
+// Вызывается в конце каждого render() — навигационные переходы (клик по вкладке,
+// открытие урока/карточки врача) естественным образом проходят через render(), а
+// фоновые перерисовки (поллинг уведомлений раз в 30с) не меняют снимок — лишних
+// записей в истории от них не будет.
+function syncNavHistory(){
+  if(applyingNavState) return; // это состояние уже пришло из popstate — не пушим его же обратно
+  if(view!=="student" && view!=="staff") return; // логин/регистрация/загрузка — не «место», куда стоит возвращаться
+  var snap = navSnapshot();
+  if(!navHistoryReady){
+    history.replaceState(snap, "");
+    navHistoryReady = true; lastNavState = snap;
+    return;
+  }
+  if(!navStatesEqual(snap, lastNavState)){
+    history.pushState(snap, "");
+    lastNavState = snap;
+  }
+}
+window.addEventListener("popstate", function(e){
+  var s = e.state;
+  if(!s || (s.view!=="student" && s.view!=="staff")) return; // запись до входа в приложение — пусть браузер уводит с сайта как обычно
+  applyingNavState = true;
+  view = s.view;
+  if(s.view==="student"){
+    studentState.tab = s.studentTab || "home";
+    studentState.navKey = s.studentNavKey || studentState.tab;
+    if(s.lessonIndex!=null){ studentState.lessonIndex = s.lessonIndex; }
+    studentState.quizMode = !!s.quizMode;
+    if(studentState.tab==="lesson") resetLessonStageState();
+  } else if(s.view==="staff"){
+    staffState.mainTab = s.staffMainTab || "students";
+    staffState.navKey = staffState.mainTab;
+    if(s.selectedStudentId){
+      // Синхронная часть openStudentPage отработает до первого await ещё до
+      // возврата сюда (JS однопоточный) — drawerTab можно проставить сразу после.
+      if(!staffState.selectedStudent || staffState.selectedStudent.id!==s.selectedStudentId){
+        openStudentPage(s.selectedStudentId);
+      }
+      staffState.drawerTab = s.drawerTab || "progress";
+    } else {
+      staffState.selectedStudentId = null;
+    }
+  }
+  lastNavState = s;
+  render();
+  applyingNavState = false;
+});
 var animSeen = {}, animScreen = "", animTimers = [], animRun = 0;
 // Поочерёдно: следующий элемент стартует, когда закончился предыдущий (порядок —
 // как на экране). Пока ждёт очереди, стоит на нуле. Процент внутри кольца идёт
@@ -1168,6 +1243,7 @@ function render(){
     // отсутствующими в DOM узлами.
     lessonPlyrInstance = null;
   }
+  syncNavHistory();
 }
 
 // Plyr переодевает стандартный <video> в свой интерфейс, но сам элемент с id
@@ -1348,6 +1424,15 @@ function renderVideoEditorModal(){
   var uploading = videoEditor.uploadProgress!==null;
   var body = '<div class="drawer-head"><b style="font-size:16px;">Видео урока «'+escapeHtml(videoEditor.lessonTitle)+'»</b><button class="btn btn-ghost btn-sm" data-action="close-video-editor">Закрыть ✕</button></div>' +
     '<div class="drawer-body">' +
+      // Без этого блока непонятно, что видео уже загружено: файловый инпут ниже браузер
+      // всегда показывает пустым (не даёт подставить имя файла из соображений безопасности),
+      // а поле-ссылка — просто текст среди других полей формы, легко пропустить.
+      (videoEditor.videoUrl
+        ? '<div class="card" style="padding:10px 12px;margin-bottom:14px;display:flex;align-items:center;gap:10px;">' +
+            icon("badge","ic-sm") +
+            '<span style="font-size:13px;">Видео уже загружено — новая загрузка или ссылка его заменят.</span>' +
+          '</div>'
+        : '') +
       '<div class="field"><label>Загрузить видео файлом <span style="font-weight:400;color:var(--muted-2);">(.mp4, .webm, .mov, .m4v — до 500 МБ)</span></label>' +
         '<div style="display:flex;gap:8px;align-items:center;">' +
           '<input type="file" id="videoFileInput" accept=".mp4,.webm,.mov,.m4v" style="font-size:12px;flex:1;min-width:0;"'+(uploading?' disabled':'')+'>' +
@@ -2241,19 +2326,20 @@ function renderStudentHome(){
       '<p>'+(lock.reason==="blocked" ? 'Куратор временно ограничил ваш доступ к демо-курсу.' : 'Срок доступа к демо-курсу истёк.')+' Чтобы продолжить обучение, напишите куратору в Telegram-группе потока — он может продлить или снять ограничение.</p>' +
       '<button class="btn btn-primary" data-action="open-telegram-modal">Написать куратору</button></div>';
   } else {
-    // Статус-трек: один слот на урок + слот теста. Это «Моя строка» — сигнатурный элемент направления.
+    // Статус-трек: ровно один слот на урок — итоговый тест не урок, у него своя
+    // плашка рядом с подписью ниже, а не десятое деление в этом ряду.
     var slots = '<div class="status-track">';
     course.lessons.forEach(function(l,i){
       var isDone = doneIds.indexOf(l.id)!==-1;
       var isCurrent = !isDone && doneIds.length===i;
       slots += '<div class="slot'+(isDone?' done':(isCurrent?' current':''))+'" title="'+escapeHtml(l.title)+'"></div>';
     });
-    var quizDone = !!pr.completed;
-    var quizCurrent = !quizDone && done===total;
-    slots += '<div class="slot'+(quizDone?' done':(quizCurrent?' current':''))+'" title="Итоговый тест"></div>';
     slots += '</div>';
+    var quizDone = !!pr.completed;
 
     var pct = Math.round((done + (quizDone?1:0)) / (total+1) * 100);
+    var testBadge = quizDone ? magnet("done","Тест пройден · "+pr.quiz_score+"%")
+      : (done===total ? magnet("attention","Итоговый тест доступен") : magnet("neutral","Итоговый тест впереди"));
     html += '<div class="card course-hero">' +
       '<div class="hero-aurora aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
       '<div class="course-hero-top">' +
@@ -2262,7 +2348,7 @@ function renderStudentHome(){
         '<p style="margin:4px 0 0;">'+total+' коротких уроков и итоговый тест. По завершении — сертификат и возможность оставить заявку на полную программу обучения.</p></div>' +
       '</div>' +
       slots +
-      '<div class="progress-label">'+done+' / '+total+' уроков'+(pr.completed?' · тест '+pr.quiz_score+'%':'')+'</div>';
+      '<div class="progress-label" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span>'+done+' / '+total+' уроков</span>'+testBadge+'</div>';
     // Название конкретного следующего шага рядом с кнопкой — чтобы врач видел,
     // куда именно попадёт, не открывая курс наугад.
     var nextStepLabel = null;
@@ -2633,8 +2719,7 @@ function renderCoursePlayer(){
     var stageLabels = { intro:"Материал", video:"Видео", quiz:"Тест", task:"Задание" };
     body += '<div class="tabs" style="margin:14px 0 4px;">';
     stages.forEach(function(sKey){
-      var locked = sKey==="quiz" && !isDoneAlready && stages.indexOf("video")!==-1 && !studentState.videoEnded;
-      body += '<button type="button" class="tab'+(stage===sKey?' active':'')+'"'+(locked?' disabled title="Сначала досмотрите видео"':'')+' data-action="lesson-stage" data-stage="'+sKey+'">'+stageLabels[sKey]+(locked?' '+icon("lock","ic-sm"):'')+'</button>';
+      body += '<button type="button" class="tab'+(stage===sKey?' active':'')+'" data-action="lesson-stage" data-stage="'+sKey+'">'+stageLabels[sKey]+'</button>';
     });
     body += '</div>';
   }
@@ -2680,6 +2765,18 @@ function renderLessonVideoStage(lesson, stages, isDoneAlready){
     });
     html += '</div>';
     html += '<div id="lessonChapterSummary" class="prose" style="min-height:24px;">'+renderPlainToProse(tcs[0].summary||'')+'</div>';
+    // Тот же список, но диапазонами (0:56–3:44 · Заголовок) под видео — конец
+    // главы это начало следующей, у последней открытый конец. Кликабельно так же,
+    // как пилюли выше (тот же data-action и chapter-item — подсветка активной
+    // главы через общий updateChapter в wireLessonVideo).
+    html += '<div class="video-timecodes">';
+    tcs.forEach(function(tc,i){
+      var next = tcs[i+1];
+      var range = fmtTimecode(tc.time) + (next ? '–'+fmtTimecode(next.time) : '');
+      html += '<button type="button" class="chapter-item video-timecode-row" data-action="seek-lesson-video" data-time="'+tc.time+'" data-chapter-id="'+tc.id+'">' +
+        '<span class="video-timecode-range">'+range+'</span><span class="video-timecode-title">'+escapeHtml(tc.title)+'</span></button>';
+    });
+    html += '</div>';
   }
 
   var hasQuiz = stages.indexOf("quiz")!==-1;
@@ -2687,7 +2784,7 @@ function renderLessonVideoStage(lesson, stages, isDoneAlready){
   html += '<div class="lesson-footer">' +
     '<button class="btn btn-ghost" data-action="lesson-stage" data-stage="intro">← К материалу</button>';
   if(hasQuiz){
-    html += '<button class="btn btn-primary" data-action="lesson-stage" data-stage="quiz"'+(canProceed?'':' disabled title="Досмотрите видео до конца"')+'>Пройти тест →</button>';
+    html += '<button class="btn btn-primary" data-action="lesson-stage" data-stage="quiz">Пройти тест →</button>';
   } else if(stages.indexOf("task")!==-1){
     html += '<button class="btn btn-primary" data-action="lesson-stage" data-stage="task"'+(canProceed?'':' disabled title="Досмотрите видео до конца"')+'>К заданию →</button>';
   } else {
@@ -6901,14 +6998,20 @@ function wireEvents(root){
     }
     if(action==="move-lesson"){
       var mlId=t.getAttribute("data-id"); var mlDir=t.getAttribute("data-dir");
-      var mlIds=staffState.materials.map(function(x){ return x.id; });
-      var mlIdx=mlIds.indexOf(mlId);
+      var mlIdx=staffState.materials.findIndex(function(x){ return x.id===mlId; });
       var mlSwap = mlDir==="up" ? mlIdx-1 : mlIdx+1;
-      if(mlIdx===-1 || mlSwap<0 || mlSwap>=mlIds.length) return;
-      var tmp=mlIds[mlIdx]; mlIds[mlIdx]=mlIds[mlSwap]; mlIds[mlSwap]=tmp;
-      try{ await api("/course/lessons/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: mlIds }) }); await loadStaffData(); }
-      catch(err){ showToast(err.message); }
-      render(); return;
+      if(mlIdx===-1 || mlSwap<0 || mlSwap>=staffState.materials.length) return;
+      // Переставляем локально и рисуем сразу — порядок уже известен на клиенте,
+      // ждать полный loadStaffData() (~15 последовательных запросов дашборда)
+      // ради двух переставленных уроков незачем — именно это и было источником
+      // многосекундной задержки на клик.
+      var mlPrev = staffState.materials.slice();
+      var mlArr = staffState.materials;
+      var mlTmp = mlArr[mlIdx]; mlArr[mlIdx]=mlArr[mlSwap]; mlArr[mlSwap]=mlTmp;
+      render();
+      try{ await api("/course/lessons/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: mlArr.map(function(x){ return x.id; }) }) }); }
+      catch(err){ staffState.materials = mlPrev; showToast(err.message); render(); }
+      return;
     }
     if(action==="lesson-editor-mode"){
       var frm = document.getElementById("lessonEditorForm");
@@ -6984,14 +7087,16 @@ function wireEvents(root){
     }
     if(action==="move-quiz-question"){
       var mqId=t.getAttribute("data-id"); var mqDir=t.getAttribute("data-dir");
-      var mqIds=staffState.quizAdmin.map(function(x){ return x.id; });
-      var mqIdx=mqIds.indexOf(mqId);
+      var mqIdx=staffState.quizAdmin.findIndex(function(x){ return x.id===mqId; });
       var mqSwap = mqDir==="up" ? mqIdx-1 : mqIdx+1;
-      if(mqIdx===-1 || mqSwap<0 || mqSwap>=mqIds.length) return;
-      var tmpq=mqIds[mqIdx]; mqIds[mqIdx]=mqIds[mqSwap]; mqIds[mqSwap]=tmpq;
-      try{ await api("/course/quiz-admin/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: mqIds }) }); await loadStaffData(); }
-      catch(err){ showToast(err.message); }
-      render(); return;
+      if(mqIdx===-1 || mqSwap<0 || mqSwap>=staffState.quizAdmin.length) return;
+      var mqPrev = staffState.quizAdmin.slice();
+      var mqArr = staffState.quizAdmin;
+      var mqTmp = mqArr[mqIdx]; mqArr[mqIdx]=mqArr[mqSwap]; mqArr[mqSwap]=mqTmp;
+      render();
+      try{ await api("/course/quiz-admin/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: mqArr.map(function(x){ return x.id; }) }) }); }
+      catch(err){ staffState.quizAdmin = mqPrev; showToast(err.message); render(); }
+      return;
     }
 
     /* ---------- Видео урока ---------- */
@@ -7069,15 +7174,16 @@ function wireEvents(root){
     }
     if(action==="move-lesson-quiz-question"){
       var lmIdx=parseInt(t.getAttribute("data-idx"),10); var lmDir=t.getAttribute("data-dir");
-      var lmIds=lessonQuizManager.questions.map(function(x){ return x.id; });
       var lmSwap = lmDir==="up" ? lmIdx-1 : lmIdx+1;
-      if(lmSwap<0 || lmSwap>=lmIds.length) return;
-      var tmpl=lmIds[lmIdx]; lmIds[lmIdx]=lmIds[lmSwap]; lmIds[lmSwap]=tmpl;
+      if(lmSwap<0 || lmSwap>=lessonQuizManager.questions.length) return;
+      var lmPrev = lessonQuizManager.questions.slice();
+      var lmArr = lessonQuizManager.questions;
+      var lmTmp = lmArr[lmIdx]; lmArr[lmIdx]=lmArr[lmSwap]; lmArr[lmSwap]=lmTmp;
+      render();
       try{
-        await api("/course/lessons/"+lessonQuizManager.lessonId+"/quiz-admin/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: lmIds }) });
-        var lmd=await api("/course/lessons/"+lessonQuizManager.lessonId+"/quiz-admin"); lessonQuizManager.questions=lmd.quiz;
-      }catch(err){ showToast(err.message); }
-      render(); return;
+        await api("/course/lessons/"+lessonQuizManager.lessonId+"/quiz-admin/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: lmArr.map(function(x){ return x.id; }) }) });
+      }catch(err){ lessonQuizManager.questions = lmPrev; showToast(err.message); render(); }
+      return;
     }
 
     /* ---------- Модули курса ---------- */
@@ -7138,15 +7244,16 @@ function wireEvents(root){
     }
     if(action==="move-module-quiz-question"){
       var mmIdx=parseInt(t.getAttribute("data-idx"),10); var mmDir=t.getAttribute("data-dir");
-      var mmIds=moduleQuizManager.questions.map(function(x){ return x.id; });
       var mmSwap = mmDir==="up" ? mmIdx-1 : mmIdx+1;
-      if(mmSwap<0 || mmSwap>=mmIds.length) return;
-      var tmpm=mmIds[mmIdx]; mmIds[mmIdx]=mmIds[mmSwap]; mmIds[mmSwap]=tmpm;
+      if(mmSwap<0 || mmSwap>=moduleQuizManager.questions.length) return;
+      var mmPrev = moduleQuizManager.questions.slice();
+      var mmArr = moduleQuizManager.questions;
+      var mmTmp = mmArr[mmIdx]; mmArr[mmIdx]=mmArr[mmSwap]; mmArr[mmSwap]=mmTmp;
+      render();
       try{
-        await api("/course/modules/"+moduleQuizManager.moduleId+"/quiz-admin/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: mmIds }) });
-        var mmd=await api("/course/modules/"+moduleQuizManager.moduleId+"/quiz-admin"); moduleQuizManager.questions=mmd.quiz;
-      }catch(err){ showToast(err.message); }
-      render(); return;
+        await api("/course/modules/"+moduleQuizManager.moduleId+"/quiz-admin/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: mmArr.map(function(x){ return x.id; }) }) });
+      }catch(err){ moduleQuizManager.questions = mmPrev; showToast(err.message); render(); }
+      return;
     }
     if(action==="open-module-feedback-viewer"){
       moduleFeedbackViewer = { open:true, moduleId:t.getAttribute("data-id"), moduleTitle:t.getAttribute("data-title"), feedback:[], average:null, count:0 };

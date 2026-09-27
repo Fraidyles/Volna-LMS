@@ -257,6 +257,16 @@ button{font-family:var(--sans);cursor:pointer;}
 .lesson-video-wrap video{width:100%;height:100%;display:block;}
 .lesson-video-wrap .plyr{width:100%;height:100%;border-radius:var(--radius-m);}
 .chapter-item.active{background:var(--primary-tint);border-color:var(--primary);color:var(--ink);}
+/* Те же главы видео, но списком диапазонов (0:56–3:44 · Заголовок) под видео —
+   удобнее охватить взглядом длину каждой темы, чем по пилюлям выше. */
+.video-timecodes{display:flex;flex-direction:column;gap:2px;margin:4px 0 14px;}
+.video-timecode-row{display:flex;align-items:baseline;gap:12px;width:100%;text-align:left;
+  padding:8px 10px;border-radius:var(--radius-s);border:1px solid transparent;background:transparent;
+  font:inherit;cursor:pointer;transition:background .15s,border-color .15s;}
+.video-timecode-row:hover{background:var(--surface-2);}
+.video-timecode-range{flex:0 0 auto;min-width:92px;font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--muted);}
+.video-timecode-title{font-size:13.5px;color:var(--ink);}
+.video-timecode-row.active .video-timecode-range{color:var(--primary);font-weight:600;}
 .btn:disabled{opacity:.4;cursor:not-allowed;}
 .btn-block{width:100%;justify-content:center;}
 
@@ -318,7 +328,7 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
 :root[data-theme="light"] .aurora .band{opacity:.55;}
 @keyframes auroraDrift{from{translate:-10px 4px;}to{translate:12px -6px;}}
 
-.onb-aurora{position:relative;width:100%;max-width:540px;aspect-ratio:3/2;animation:fadeUp .8s cubic-bezier(.16,1,.3,1) both;
+.onb-aurora{position:relative;width:100%;max-width:540px;aspect-ratio:3/2;overflow:hidden;animation:fadeUp .8s cubic-bezier(.16,1,.3,1) both;
   -webkit-mask-image:radial-gradient(ellipse 50% 46% at 50% 50%,#000 40%,transparent 100%);mask-image:radial-gradient(ellipse 50% 46% at 50% 50%,#000 40%,transparent 100%);}
 .onb-left h1{font-size:36px;line-height:1.2;max-width:440px;color:var(--ink);font-weight:600;}
 .onb-left p{font-size:16px;color:var(--muted);max-width:400px;line-height:1.6;}

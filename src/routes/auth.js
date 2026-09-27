@@ -196,8 +196,13 @@ router.post("/login", authLimiter, async (req, res) => {
   const user = { id: row.id, email: row.email, name: row.name, role: row.role, tokenVersion: row.token_version };
   res.cookie("token", signToken(user), COOKIE_OPTS);
   // Для «Мой профиль» → «Текущие сеансы» — не блокирует сам вход, если запись не удалась.
+  // ON CONFLICT по уникальному индексу (user_id, user_agent) — устройство определяется
+  // браузером/ОС, а не IP (он меняется от сети к сети у одного и того же ноутбука).
+  // Повторный вход с того же устройства обновляет ip и дату существующей строки,
+  // а не плодит новую (см. idx_login_sessions_device в schema.sql, Этап 32).
   pool.query(
-    "INSERT INTO login_sessions (id, user_id, user_agent, ip) VALUES ($1,$2,$3,$4)",
+    `INSERT INTO login_sessions (id, user_id, user_agent, ip) VALUES ($1,$2,$3,$4)
+     ON CONFLICT (user_id, (COALESCE(user_agent,''))) DO UPDATE SET ip = EXCLUDED.ip, created_at = now()`,
     [crypto.randomUUID(), row.id, req.headers["user-agent"] || null, req.ip || null]
   ).catch(() => {});
   // Профиль целиком, а не только поля из JWT — иначе специализация/место работы/телефон
@@ -388,7 +393,7 @@ router.patch("/me", authRequired, async (req, res) => {
   }
 
   const result = await pool.query(
-    "SELECT id, email, name, role, workplace, phone, stream_id, referral_code, token_version, created_at, product, payment_status FROM users WHERE id=$1",
+    "SELECT id, email, name, role, workplace, phone, stream_id, referral_code, token_version, created_at, product, payment_status, avatar_file FROM users WHERE id=$1",
     [req.user.id]
   );
   const row = result.rows[0];
@@ -407,7 +412,8 @@ router.patch("/me", authRequired, async (req, res) => {
     specializationIds: currentSpecs.rows.map((r) => r.specialization_id),
     interestIds: interests.rows.map((r) => r.specialization_id),
     workplace: row.workplace, phone: row.phone, stream_id: row.stream_id, referral_code: row.referral_code,
-    created_at: row.created_at, product: row.product, payment_status: row.payment_status
+    created_at: row.created_at, product: row.product, payment_status: row.payment_status,
+    avatar_url: avatarUrl(row.avatar_file)
   } });
 });
 
