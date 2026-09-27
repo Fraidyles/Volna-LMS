@@ -1582,3 +1582,17 @@ tr.ord-off td{opacity:.55;}
 .prod-layout .prod-grid{align-content:stretch;}
 .prod-layout .ps-card{height:100%;}
 @media (max-width:980px){.sv-people{min-height:0;}.sv-people-body{position:static;max-height:420px;}}
+
+/* Второстепенные кнопки: обводка заметна на любой карточке (раньше --line-2
+   почти сливалась с фоном), при наведении — ярче. */
+.btn-ghost{border-color:color-mix(in srgb,var(--ink) 18%,transparent);}
+.btn-ghost:hover{border-color:color-mix(in srgb,var(--ink) 30%,transparent);}
+/* Карточка сотрудника: цифры — три равные колонки, действия — ряд во всю
+   ширину, прижатый к низу, чтобы у соседних карточек он стоял на одной линии. */
+.team-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+.team-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:auto;padding-top:14px;border-top:1px solid var(--line-2);}
+.team-actions .btn{justify-content:center;width:100%;padding:8px 10px;}
+.team-actions select.input{grid-column:1 / -1;width:100%;}
+.team-stats{grid-template-columns:repeat(3,auto);justify-content:space-between;}
+.team-stats span{white-space:nowrap;}
+.team-stats div:last-child{text-align:right;}
