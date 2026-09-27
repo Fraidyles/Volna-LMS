@@ -181,8 +181,12 @@ router.post("/login", authLimiter, async (req, res) => {
   const user = { id: row.id, email: row.email, name: row.name, role: row.role, tokenVersion: row.token_version };
   res.cookie("token", signToken(user), COOKIE_OPTS);
   // Для «Мой профиль» → «Текущие сеансы» — не блокирует сам вход, если запись не удалась.
+  // ON CONFLICT по уникальному индексу (user_id, user_agent, ip) — повторный вход с
+  // того же устройства обновляет дату существующей строки, а не плодит новую (см.
+  // idx_login_sessions_device в schema.sql).
   pool.query(
-    "INSERT INTO login_sessions (id, user_id, user_agent, ip) VALUES ($1,$2,$3,$4)",
+    `INSERT INTO login_sessions (id, user_id, user_agent, ip) VALUES ($1,$2,$3,$4)
+     ON CONFLICT (user_id, (COALESCE(user_agent,'')), (COALESCE(ip,''))) DO UPDATE SET created_at = now()`,
     [crypto.randomUUID(), row.id, req.headers["user-agent"] || null, req.ip || null]
   ).catch(() => {});
   // Профиль целиком, а не только поля из JWT — иначе специализация/место работы/телефон

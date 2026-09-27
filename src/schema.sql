@@ -633,3 +633,23 @@ UPDATE streams SET telegram_url = 'https://t.me/' || regexp_replace(telegram_url
 -- при каждом следующем открытии. Хранится по тексту фрагмента (не по позиции),
 -- чтобы правка соседних абзацев урока не сдвигала выделение.
 ALTER TABLE progress ADD COLUMN IF NOT EXISTS lesson_highlights JSONB NOT NULL DEFAULT '{}';
+
+-- ---------- Этап 31: «Активные сеансы» — одна запись на устройство ----------
+-- Раньше каждый вход дописывал новую строку в login_sessions — один и тот же
+-- браузер копился в списке много раз подряд (см. routes/auth.js POST /login).
+-- Разово схлопываем то, что уже накопилось: для каждой пары
+-- (user_id, user_agent, ip) оставляем только самый свежий вход.
+DELETE FROM login_sessions WHERE id IN (
+  SELECT id FROM (
+    SELECT id, ROW_NUMBER() OVER (
+      PARTITION BY user_id, COALESCE(user_agent,''), COALESCE(ip,'')
+      ORDER BY created_at DESC, id DESC
+    ) AS rn
+    FROM login_sessions
+  ) dupes WHERE rn > 1
+);
+-- Дальше повторный вход с того же устройства (см. INSERT ... ON CONFLICT в
+-- auth.js) обновляет дату существующей строки вместо новой — без этого
+-- уникального индекса ON CONFLICT работать не может.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_login_sessions_device
+  ON login_sessions(user_id, COALESCE(user_agent,''), COALESCE(ip,''));
