@@ -613,13 +613,24 @@ function navStatesEqual(a, b){
 // открытие урока/карточки врача) естественным образом проходят через render(), а
 // фоновые перерисовки (поллинг уведомлений раз в 30с) не меняют снимок — лишних
 // записей в истории от них не будет.
+// «Дно» истории — запись ДО входа в приложение (пустая вкладка или та страница,
+// с которой сюда пришли) — обычно живёт в ДРУГОМ документе (другой URL), а переход
+// между разными документами браузер делает напрямую, минуя popstate: перехватить
+// его из JS нечем (наш скрипт к тому моменту уже выгружен). Поэтому одиночная
+// запись-пол не спасает — рано или поздно «назад» до неё дойдёт и реально уведёт.
+// Вместо этого держим на дне ДВЕ одинаковые записи (helpers ниже, "__floor"): пока
+// их минимум одна, соседняя (тоже наш документ) всегда успевает поймать popstate
+// и тут же подложить новую — так что фактически дойти до чужого документа нельзя,
+// «назад» на дне просто топчется между двумя своими записями.
 function syncNavHistory(){
   if(applyingNavState) return; // это состояние уже пришло из popstate — не пушим его же обратно
   if(view!=="student" && view!=="staff") return; // логин/регистрация/загрузка — не «место», куда стоит возвращаться
   var snap = navSnapshot();
   if(!navHistoryReady){
     history.replaceState(snap, "");
-    navHistoryReady = true; lastNavState = snap;
+    var floor = Object.assign({}, snap, { __floor:true });
+    history.pushState(floor, "");
+    navHistoryReady = true; lastNavState = floor;
     return;
   }
   if(!navStatesEqual(snap, lastNavState)){
@@ -629,7 +640,12 @@ function syncNavHistory(){
 }
 window.addEventListener("popstate", function(e){
   var s = e.state;
-  if(!s || (s.view!=="student" && s.view!=="staff")) return; // запись до входа в приложение — пусть браузер уводит с сайта как обычно
+  if(!s || (s.view!=="student" && s.view!=="staff")){
+    // Тот редкий случай, когда всё же попали на невалидную запись в своём же
+    // документе (а не ушли на другой) — подкладываем последнее известное состояние.
+    if(navHistoryReady && lastNavState){ history.pushState(lastNavState, ""); }
+    return;
+  }
   applyingNavState = true;
   view = s.view;
   if(s.view==="student"){
@@ -655,6 +671,14 @@ window.addEventListener("popstate", function(e){
   lastNavState = s;
   render();
   applyingNavState = false;
+  if(s.__floor){
+    // Долистали до дна — сразу подкладываем ещё одну такую же запись поверх,
+    // чтобы дно снова было двухслойным и следующее «назад» опять поймалось
+    // здесь же, а не ушло на документ до входа в приложение.
+    var refloor = Object.assign({}, s);
+    history.pushState(refloor, "");
+    lastNavState = refloor;
+  }
 });
 var animSeen = {}, animScreen = "", animTimers = [], animRun = 0;
 // Поочерёдно: следующий элемент стартует, когда закончился предыдущий (порядок —
@@ -1426,11 +1450,14 @@ function renderVideoEditorModal(){
     '<div class="drawer-body">' +
       // Без этого блока непонятно, что видео уже загружено: файловый инпут ниже браузер
       // всегда показывает пустым (не даёт подставить имя файла из соображений безопасности),
-      // а поле-ссылка — просто текст среди других полей формы, легко пропустить.
+      // а поле-ссылка — просто текст среди других полей формы, легко пропустить. Мини-плеер
+      // с самим видео убирает любые сомнения — его либо видно и можно проиграть, либо нет.
       (videoEditor.videoUrl
-        ? '<div class="card" style="padding:10px 12px;margin-bottom:14px;display:flex;align-items:center;gap:10px;">' +
-            icon("badge","ic-sm") +
-            '<span style="font-size:13px;">Видео уже загружено — новая загрузка или ссылка его заменят.</span>' +
+        ? '<div class="card" style="padding:12px;margin-bottom:14px;">' +
+            '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;color:var(--muted);font-size:13px;">' +
+              icon("badge","ic-sm") + '<span>Сейчас загружено это видео — новая загрузка или ссылка его заменят</span>' +
+            '</div>' +
+            '<video src="'+escapeHtml(videoEditor.videoUrl)+'" controls preload="metadata" style="width:100%;max-height:220px;border-radius:var(--radius-s);background:#000;display:block;"></video>' +
           '</div>'
         : '') +
       '<div class="field"><label>Загрузить видео файлом <span style="font-weight:400;color:var(--muted-2);">(.mp4, .webm, .mov, .m4v — до 500 МБ)</span></label>' +
