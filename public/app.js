@@ -2531,6 +2531,18 @@ function renderLessonVideoStage(lesson, stages, isDoneAlready){
     });
     html += '</div>';
     html += '<div id="lessonChapterSummary" class="prose" style="min-height:24px;">'+renderPlainToProse(tcs[0].summary||'')+'</div>';
+    // Тот же список, но диапазонами (0:56–3:44 · Заголовок) под видео — конец
+    // главы это начало следующей, у последней открытый конец. Кликабельно так же,
+    // как пилюли выше (тот же data-action и chapter-item — подсветка активной
+    // главы через общий updateChapter в wireLessonVideo).
+    html += '<div class="video-timecodes">';
+    tcs.forEach(function(tc,i){
+      var next = tcs[i+1];
+      var range = fmtTimecode(tc.time) + (next ? '–'+fmtTimecode(next.time) : '');
+      html += '<button type="button" class="chapter-item video-timecode-row" data-action="seek-lesson-video" data-time="'+tc.time+'" data-chapter-id="'+tc.id+'">' +
+        '<span class="video-timecode-range">'+range+'</span><span class="video-timecode-title">'+escapeHtml(tc.title)+'</span></button>';
+    });
+    html += '</div>';
   }
 
   var hasQuiz = stages.indexOf("quiz")!==-1;
