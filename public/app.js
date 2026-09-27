@@ -2900,6 +2900,52 @@ function renderPointTiersCta(points){
 // (каждый пройденный урок может открыть свои протоколы — см. lesson_protocols).
 // Разбивка на «по вашей специализации» / «дополнительные» приходит уже готовой
 // с бэкенда (GET /course/protocols), тут только рендер и переключение гайдов.
+// Гайд к протоколу приходит одним абзацем, но внутри у него есть структура:
+// «Название — описание» / «Название: описание», цепочки «A → B → C» и вводная
+// фраза с двоеточием («Алгоритм по отделам ЖКТ: …»). Показываем её явно:
+// пункты с названием слева, цепочки — шагами. Если структуры нет — обычный текст.
+function guideSentences(text){
+  // Конец предложения — точка/!/? и пробел перед заглавной; «H. pylori» не режем.
+  return String(text||"").replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s+(?=[А-ЯЁA-Z«(])/).filter(Boolean);
+}
+function guideInline(t){
+  return escapeHtml(t).replace(/(\d[\d.,]*(?:[–-]\d[\d.,]*)?\s?(?:мг|г|мкг|МЕ|нмоль\/л|промилле|лет|недель|месяцев|дней|%)(?:\/сутки)?)/g, '<span class="gd-num">$1</span>');
+}
+function guideRow(sent){
+  var body = sent.replace(/\.$/, "");
+  // «Порядок ведения: 1) …; 2) …; 3) …» — нумерованный список.
+  if(/(^|[\s:])1\)\s/.test(body) && /\s2\)\s/.test(body)){
+    var at = body.search(/(^|[\s:])1\)\s/), lead1 = body.slice(0, at).replace(/[:\s]+$/, "");
+    var items = body.slice(at).split(/\s*\d+\)\s/).map(function(x){ return x.replace(/[;,.\s]+$/, "").trim(); }).filter(Boolean);
+    return '<div class="gd-row">' + (lead1 ? '<div class="gd-term">'+escapeHtml(lead1)+'</div>' : '') +
+      '<div class="gd-text"><ol class="gd-list">' + items.map(function(x){ return '<li>'+guideInline(x.replace(/^./, function(c){ return c.toUpperCase(); }))+'</li>'; }).join("") + '</ol></div></div>';
+  }
+  if((body.match(/→/g)||[]).length >= 2){
+    var lead = "", chain = body, ci = body.indexOf(":");
+    if(ci > 0 && ci < body.indexOf("→")){ lead = body.slice(0, ci); chain = body.slice(ci+1); }
+    var tail = "";
+    var steps = chain.split("→").map(function(x){ return x.trim(); }).filter(Boolean);
+    var last = steps[steps.length-1], cut = last.search(/\.\s/);
+    if(cut > 0){ tail = last.slice(cut+1).trim(); steps[steps.length-1] = last.slice(0, cut); }
+    return '<div class="gd-row gd-chain-row">' + (lead ? '<div class="gd-term">'+escapeHtml(lead)+'</div>' : '') +
+      '<div class="gd-text"><div class="gd-chain">' + steps.map(function(x, i){ return (i?'<span class="gd-arrow">→</span>':'')+'<span class="gd-step">'+guideInline(x)+'</span>'; }).join("") + '</div>' +
+      (tail ? '<p>'+guideInline(tail)+'</p>' : '') + '</div></div>';
+  }
+  var m = body.match(/^([^—:()]{2,48}?)\s?(?:\s—\s|:\s)(.+)$/);
+  if(m) return '<div class="gd-row"><div class="gd-term">'+escapeHtml(m[1].trim())+'</div><div class="gd-text"><p>'+guideInline(m[2].trim().replace(/^./, function(c){ return c.toUpperCase(); }))+'.</p></div></div>';
+  return '<div class="gd-row gd-plain"><div class="gd-text"><p>'+guideInline(body)+'.</p></div></div>';
+}
+function renderGuide(text){
+  var paras = String(text||"").split(/\n+/).map(function(x){ return x.trim(); }).filter(Boolean);
+  return '<div class="gd">' + paras.map(function(par){
+    var sents = guideSentences(par), head = "";
+    // «Алгоритм по отделам ЖКТ: Желудок — …» — вводная становится заголовком.
+    var hm = sents.length && sents[0].match(/^([^—:()]{3,48}):\s(.+)$/);
+    if(hm && /^[А-ЯЁA-Z]/.test(hm[2]) && /\s—\s|:\s/.test(hm[2]) && !/→/.test(hm[2]) && !/(^|\s)1\)\s/.test(hm[2])){ head = hm[1]; sents[0] = hm[2]; }
+    return (head ? '<div class="gd-head">'+escapeHtml(head)+'</div>' : '') + sents.map(guideRow).join("");
+  }).join("") + '</div>';
+}
+
 function renderProtocolCard(p, isForYou, readerMode){
   var expanded = readerMode || !!protocolExpanded[p.id];
   var myIds = (me.specializationIds||[]).concat(me.interestIds||[]);
@@ -2910,7 +2956,7 @@ function renderProtocolCard(p, isForYou, readerMode){
   var activeSpecId = protocolGuideTab[p.id] || (defaultGuide ? defaultGuide.specializationId : (p.guides[0] ? p.guides[0].specializationId : null));
   var activeGuide = p.guides.find(function(g){ return g.specializationId===activeSpecId; });
 
-  var html = readerMode ? '<div>' + (p.summary ? '<div class="prose proto-reader-sum">'+renderPlainToProse(p.summary)+'</div>' : '') : '<div class="card" style="padding:18px 20px;margin-bottom:12px;">' +
+  var html = readerMode ? '<div>' : '<div class="card" style="padding:18px 20px;margin-bottom:12px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;cursor:pointer;" data-action="toggle-protocol" data-id="'+p.id+'">' +
       '<div><b style="font-size:15px;display:block;">'+escapeHtml(p.title)+'</b>' +
         (p.summary ? '<p style="font-size:13px;color:var(--muted);margin:4px 0 0;">'+renderPlainToProse(p.summary)+'</p>' : '') +
@@ -2922,22 +2968,18 @@ function renderProtocolCard(p, isForYou, readerMode){
     if(!p.guides.length){
       html += '<p class="hint" style="margin-top:12px;">Гайд применения ещё не добавлен куратором.</p>';
     } else {
-      if(p.guides.length>1){
-        html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 10px;">';
-        p.guides.forEach(function(g){
-          html += '<button type="button" class="btn btn-sm '+(g.specializationId===activeSpecId?'btn-primary':'btn-ghost')+'" data-action="select-protocol-guide" data-id="'+p.id+'" data-spec="'+g.specializationId+'">'+escapeHtml(g.specializationName)+'</button>';
-        });
-        html += '</div>';
-      } else {
-        html += '<p class="hint" style="margin-top:14px;">Гайд для специализации «'+escapeHtml(p.guides[0].specializationName)+'»</p>';
-      }
-      html += '<div class="prose">'+(activeGuide&&activeGuide.guideHtml?renderPlainToProse(activeGuide.guideHtml):'')+'</div>';
+      // Специализация — спокойный переключатель «Гайд для: …», а не ряд крупных кнопок.
+      html += '<div class="gd-for"><span>Гайд для</span>' + (p.guides.length>1
+        ? '<div class="gd-seg" role="tablist">' + p.guides.map(function(g){
+            var on = g.specializationId===activeSpecId, mine = myIds.indexOf(g.specializationId)!==-1;
+            return '<button type="button" role="tab" aria-selected="'+on+'" class="gd-seg-btn'+(on?' on':'')+'" data-action="select-protocol-guide" data-id="'+p.id+'" data-spec="'+g.specializationId+'">'+escapeHtml(g.specializationName)+(mine?'<i class="gd-mine" title="Ваша специализация"></i>':'')+'</button>';
+          }).join("") + '</div>'
+        : '<b>'+escapeHtml(p.guides[0].specializationName)+'</b>') + '</div>';
+      html += activeGuide && activeGuide.guideHtml ? renderGuide(activeGuide.guideHtml) : '<p class="hint">Для этой специализации текст гайда ещё не добавлен.</p>';
       if(activeGuide && activeGuide.files && activeGuide.files.length){
-        html += '<div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;">';
-        activeGuide.files.forEach(function(f){
-          html += '<a href="'+f.url+'" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--primary);text-decoration:underline;width:fit-content;">'+icon("folder","ic-sm")+'<span>'+escapeHtml(f.originalName)+'</span></a>';
-        });
-        html += '</div>';
+        html += '<div class="gd-files"><span class="gd-files-label">Материалы</span>' + activeGuide.files.map(function(f){
+          return '<a class="gd-file" href="'+f.url+'" target="_blank" rel="noopener">'+icon("download","ic-sm")+'<span>'+escapeHtml(f.originalName)+'</span></a>';
+        }).join("") + '</div>';
       }
     }
   }
@@ -3004,8 +3046,9 @@ function renderProtocolReaderModal(){
   if(!p) return el('<div></div>');
   var inner = renderProtocolCard(p, protocolReader.mine, true);
   return el('<div class="overlay overlay-center" data-action="overlay-close-protocol-reader"><div class="drawer modal proto-reader" data-stop="1">' +
-    '<div class="drawer-head"><div><span class="profile-kicker">Протокол'+(p.lessonIdx!=null?' · из урока '+(p.lessonIdx+1):'')+'</span><b style="font-size:18px;display:block;margin-top:4px;">'+escapeHtml(p.title)+'</b></div>' +
-    '<button class="btn btn-ghost btn-sm" data-action="close-protocol-reader">Закрыть ✕</button></div><div class="drawer-body">'+inner+'</div></div></div>');
+    '<div class="drawer-head"><div class="gd-top"><span class="profile-kicker">Протокол'+(p.lessonIdx!=null?' · из урока '+(p.lessonIdx+1):'')+'</span><b class="gd-title">'+escapeHtml(p.title)+'</b>' +
+      (p.summary ? '<p class="gd-sum">'+escapeHtml(stripHtml(renderPlainToProse(p.summary)))+'</p>' : '') + '</div>' +
+    '<button class="btn btn-ghost btn-sm gd-close" data-action="close-protocol-reader" aria-label="Закрыть"><span>Закрыть</span> ✕</button></div><div class="drawer-body">'+inner+'</div></div></div>');
 }
 
 function renderMyProgressPage(){
