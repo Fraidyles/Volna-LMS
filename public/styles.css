@@ -1653,3 +1653,23 @@ tr.ord-off td{opacity:.55;}
   .home-tile:hover{transform:translateY(-2px);}
 }
 .home-tile{background:var(--glass-bg);border:var(--glass-border);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));box-shadow:none;transition:transform .25s cubic-bezier(.16,1,.3,1);}
+
+/* Ближайший эфир: зоны карточки разграничены — шапка (статус + отсчёт),
+   заголовок, сетка подписанных фактов, подвал с действиями. */
+.sched-hero{gap:16px;align-items:stretch;}
+.sh-top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;}
+.sh-count{text-align:right;line-height:1;}
+.sh-count b{display:block;font-size:30px;font-weight:800;letter-spacing:-.02em;}
+.sh-count span{font-size:12px;color:var(--muted);}
+.sh-count.live b{color:var(--status-live);font-size:22px;}
+.sched-hero h2{margin:0;}
+.sh-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:var(--border-hairline);border-radius:var(--radius-s);overflow:hidden;}
+.sh-fact{padding:12px 14px;display:flex;flex-direction:column;gap:4px;min-width:0;}
+.sh-fact + .sh-fact{border-left:var(--border-hairline);}
+.sh-fact span{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted-2);}
+.sh-fact b{font-size:14.5px;font-weight:600;overflow-wrap:anywhere;}
+.sh-fact small{display:block;font-size:11.5px;font-weight:400;color:var(--muted);margin-top:2px;}
+.sh-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:auto;padding-top:14px;border-top:var(--border-hairline);}
+.sh-hint{font-size:12.5px;color:var(--muted);}
+.sched-hero .sh-foot .sched-actions{margin-top:0;padding-top:0;}
+@media (max-width:700px){.sh-facts{grid-template-columns:1fr 1fr;}.sh-fact:nth-child(3){border-left:none;}.sh-fact:nth-child(n+3){border-top:var(--border-hairline);}}

@@ -1782,12 +1782,27 @@ function renderStudentSchedule(){
     html += '<div class="sched-top"><div class="card empty-state" style="padding:40px 20px;">Пока эфиры не запланированы.</div>'+monthCalendar()+'</div>';
   } else {
     var nx = upcoming[0], nxLive = isLiveNow(nx);
+    // Карточка по зонам: статус и отсчёт → что за эфир → факты подписанными
+    // ячейками → действия в подвале. Раньше всё шло одной колонкой мелким текстом.
+    var nxStart = startOf(nx), nxMs = nxStart - new Date();
+    var cd = nxLive ? ['идёт', 'сейчас'] : (nxMs < 3600000 ? [Math.max(1, Math.round(nxMs/60000)), 'мин до начала']
+      : (nxMs < 86400000 ? [Math.round(nxMs/3600000), ruPluralClient(Math.round(nxMs/3600000),"час","часа","часов")+' до начала']
+      : [Math.round(nxMs/86400000), ruPluralClient(Math.round(nxMs/86400000),"день","дня","дней")+' до эфира']));
+    var nxStream = nx.stream_id ? (calendarState.streams||[]).find(function(x){ return x.id===nx.stream_id; }) : null;
+    var fact = function(lbl, val){ return '<div class="sh-fact"><span>'+lbl+'</span><b>'+val+'</b></div>'; };
     html += '<div class="sched-top">' +
       '<div class="card sched-hero">' +
-        (nxLive ? magnet("live","Идёт сейчас") : magnet("attention","Ближайший эфир"+(whenLabel(nx)?' · '+whenLabel(nx):''))) +
+        '<div class="sh-top">' + (nxLive ? magnet("live","Идёт сейчас") : magnet("attention","Ближайший эфир")) +
+          '<div class="sh-count'+(nxLive?' live':'')+'"><b>'+cd[0]+'</b><span>'+cd[1]+'</span></div></div>' +
         '<h2>'+escapeHtml(nx.title)+'</h2>' +
-        '<div class="sched-hero-meta"><span>'+dateLine(nx)+'</span><span>'+(nx.duration_min||60)+' мин</span>'+(nx.speaker?'<span>'+escapeHtml(nx.speaker)+'</span>':'')+'</div>' +
-        actions(nx, nxLive, true) +
+        '<div class="sh-facts">' +
+          fact('Дата', WD[nxStart.getDay()]+', '+nxStart.toLocaleDateString("ru-RU",{day:"numeric",month:"long"})) +
+          fact('Начало', escapeHtml(nx.event_time||"—")) +
+          fact('Длительность', (nx.duration_min||60)+' мин') +
+          fact(nx.speaker ? 'Ведущий' : 'Для кого', nx.speaker ? escapeHtml(nx.speaker) : (nxStream ? escapeHtml(nxStream.name) : 'все потоки')) +
+        '</div>' +
+        '<div class="sh-foot"><span class="sh-hint">'+(nx.join_url ? 'Ссылка откроется в новой вкладке' : 'Ссылку на подключение куратор пришлёт в Telegram-группу потока')+'</span>' +
+          actions(nx, nxLive, true) + '</div>' +
       '</div>' +
       monthCalendar() +
     '</div>';
