@@ -1234,3 +1234,19 @@ a.btn{text-decoration:none;}
 .proto-reader{width:min(720px,100%) !important;}
 .proto-reader-sum{color:var(--muted);margin-bottom:6px;}
 @media (max-width:700px){.proto-hero{flex-direction:column;align-items:flex-start;}}
+
+/* Экран входа: живое сияние. Обёртки .bw двигает JS (отталкивание от курсора),
+   сами ленты по-прежнему плавают по CSS-анимации — плюс более заметный дрейф. */
+.onb-aurora .bw{position:absolute;inset:0;will-change:transform;}
+.onb-aurora .band{animation:auroraLive 16s ease-in-out infinite alternate;animation-delay:var(--anim-t,0s);}
+.onb-aurora .bw:nth-child(2) .band{animation-duration:12s;animation-delay:calc(var(--anim-t,0s) - 4s);}
+.onb-aurora .bw:nth-child(3) .band{animation-duration:19s;animation-delay:calc(var(--anim-t,0s) - 9s);}
+.onb-aurora .bw:nth-child(4) .band{animation-duration:10s;animation-delay:calc(var(--anim-t,0s) - 2s);}
+@keyframes auroraLive{
+  0%{translate:-18px 8px;scale:1 1;opacity:.85;}
+  50%{translate:14px -10px;scale:1.12 .9;opacity:1;}
+  100%{translate:26px 6px;scale:.94 1.1;opacity:.8;}}
+/* «Вмятина» от курсора — мягкое затемнение цветом фона панели, без blur. */
+.onb-aurora .dimple{position:absolute;left:-130px;top:-130px;width:260px;height:260px;border-radius:50%;pointer-events:none;opacity:0;will-change:transform,opacity;
+  background:radial-gradient(closest-side,color-mix(in srgb,var(--surface) 88%,transparent),color-mix(in srgb,var(--surface) 45%,transparent) 50%,transparent);}
+@media (prefers-reduced-motion: reduce){.onb-aurora .band{animation:none;}}

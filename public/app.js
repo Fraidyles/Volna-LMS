@@ -854,6 +854,7 @@ function render(){
   if(hadBackdrop){ var bd = app.querySelector(".sidebar-backdrop"); if(bd) bd.classList.add("no-anim"); }
   wireEvents(app);
   runEntranceAnimations();
+  if(view==="login" || view==="register") initAuroraFx();
   if(view==="student" && studentState.tab==="lesson" && !studentState.quizMode && studentState.lessonStage==="video"){
     setTimeout(function(){ wireLessonVideo(savedVideoState); }, 0);
   } else if(lessonPlyrInstance){
@@ -1317,6 +1318,46 @@ function specPickerArrayFor(pickerId){
 // Слои абстрактного «сияния» (стили — .aurora в styles.css): экран входа и плитка курса.
 var AURORA_BANDS = '<span class="band b3"></span><span class="band b1"></span><span class="band b2"></span><span class="band b4"></span><span class="grain"></span>';
 
+// Экран входа: сияние «продавливается» курсором, как поверхность воды — ленты
+// рядом с курсором мягко отталкиваются и на пружине возвращаются. Двигаем только
+// обёртки через transform (размытие не перерисовывается — дёшево для GPU), а
+// цикл requestAnimationFrame крутится лишь пока есть движение, потом засыпает.
+var auroraFx = null;
+function initAuroraFx(){
+  var host = document.querySelector(".onb-aurora");
+  if(!host || (auroraFx && auroraFx.host===host)) return;
+  if(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  var ws = Array.prototype.map.call(host.querySelectorAll(".bw"), function(w){ return { el:w, k:+w.getAttribute("data-k")||1, x:0, y:0, tx:0, ty:0 }; });
+  var dimple = host.querySelector(".dimple");
+  var st = { host:host, px:-9999, py:-9999, raf:0, dx:0, dy:0, dop:0, tdop:0 };
+  auroraFx = st;
+  function centers(){ ws.forEach(function(w){ var b = w.el.firstElementChild.getBoundingClientRect(); w.cx = b.left + b.width/2; w.cy = b.top + b.height/2; w.r = Math.max(b.width, b.height)/2; }); }
+  centers();
+  function frame(){
+    st.raf = 0;
+    if(!host.isConnected){ window.removeEventListener("pointermove", onMove); return; }
+    var hr = host.getBoundingClientRect(), moving = false;
+    ws.forEach(function(w){
+      var vx = (w.cx + w.x) - st.px, vy = (w.cy + w.y) - st.py, d = Math.sqrt(vx*vx+vy*vy) || 1, R = w.r + 220;
+      var f = d < R ? Math.pow(1 - d/R, 2) * 120 * w.k : 0;
+      w.tx = vx/d*f; w.ty = vy/d*f;
+      w.x += (w.tx - w.x)*0.09; w.y += (w.ty - w.y)*0.09;
+      if(Math.abs(w.tx-w.x)>0.2 || Math.abs(w.ty-w.y)>0.2) moving = true;
+      w.el.style.transform = "translate3d("+w.x.toFixed(1)+"px,"+w.y.toFixed(1)+"px,0)";
+    });
+    var inside = st.px>hr.left-80 && st.px<hr.right+80 && st.py>hr.top-80 && st.py<hr.bottom+80;
+    st.tdop = inside ? 1 : 0;
+    st.dop += (st.tdop - st.dop)*0.1; st.dx += ((st.px-hr.left) - st.dx)*0.25; st.dy += ((st.py-hr.top) - st.dy)*0.25;
+    if(Math.abs(st.tdop-st.dop)>0.01) moving = true;
+    dimple.style.opacity = st.dop.toFixed(3);
+    dimple.style.transform = "translate3d("+st.dx.toFixed(1)+"px,"+st.dy.toFixed(1)+"px,0)";
+    if(moving) st.raf = requestAnimationFrame(frame);
+  }
+  function onMove(e){ st.px = e.clientX; st.py = e.clientY; if(!st.raf) st.raf = requestAnimationFrame(frame); }
+  window.addEventListener("pointermove", onMove, { passive:true });
+  window.addEventListener("resize", centers);
+}
+
 function renderAuthScreen(mode){
   var isLogin = mode === "login";
   var left =
@@ -1324,7 +1365,10 @@ function renderAuthScreen(mode){
       '<div><div class="brand">'+brandMark()+'Медицина Долголетия</div>' +
       '<h1 style="margin-top:56px;">'+(isLogin ? "С возвращением" : "Регистрация на демо-курс")+'</h1>' +
       '<p>'+(isLogin ? "Войдите, чтобы продолжить обучение или открыть панель куратора." : "Пара полей — и вы сразу в первом уроке.")+'</p></div>' +
-      '<div class="onb-aurora aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
+      '<div class="onb-aurora aurora" aria-hidden="true">' +
+        '<span class="bw" data-k="0.6"><span class="band b3"></span></span><span class="bw" data-k="1"><span class="band b1"></span></span>' +
+        '<span class="bw" data-k="1.3"><span class="band b2"></span></span><span class="bw" data-k="0.8"><span class="band b4"></span></span>' +
+        '<span class="grain"></span><span class="dimple"></span></div>' +
     '</div>';
 
   var right;
