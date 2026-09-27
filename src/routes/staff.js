@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const multer = require("multer");
 const pool = require("../db");
 const { authRequired, requireRole } = require("../middleware/auth");
+const { signToken, COOKIE_OPTS } = require("../authToken");
 const { logAction } = require("../audit");
 const { revertLogEntry } = require("../revert");
 const { generateTempPassword, generateReferralCode } = require("../util");
@@ -300,6 +301,32 @@ router.get("/students/:id", authRequired, requireRole("curator", "admin", "super
     courseId,
     enrollments: enrollments.rows.map((r) => ({ courseId: r.course_id, title: r.title }))
   });
+});
+
+// «Зайти как врач»: подменяет cookie на токен этого врача, чтобы куратор/админ
+// увидел его личный кабинет ровно таким, каким его видит сам врач (для
+// поддержки — разобраться в жалобе, не выспрашивая скриншоты). Исходный
+// токен сотрудника сохраняется в отдельной cookie (impersonator_token), чтобы
+// «Вернуться в свой аккаунт» (см. auth.js POST /exit-impersonation) не требовал
+// повторного входа. requireStudentScope() выше уже гарантирует, что куратор
+// не подсмотрит врача другого куратора — то же ограничение действует и здесь.
+router.post("/students/:id/impersonate", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
+  const myToken = req.cookies && req.cookies.token;
+  if (!myToken) return res.status(401).json({ error: "not_authenticated" });
+  const target = await pool.query(
+    "SELECT id, email, name, role, token_version FROM users WHERE id=$1 AND role='student'",
+    [req.params.id]
+  );
+  if (!target.rowCount) return res.status(404).json({ error: "not_found" });
+  const t = target.rows[0];
+  const studentToken = signToken({
+    id: t.id, role: t.role, name: t.name, email: t.email, tokenVersion: t.token_version,
+    imp: { id: req.user.id, name: req.user.name, role: req.user.role }
+  });
+  res.cookie("impersonator_token", myToken, COOKIE_OPTS);
+  res.cookie("token", studentToken, COOKIE_OPTS);
+  await logAction(req.user, "student.impersonate_start", "student", t.id, t.name, {});
+  res.json({ ok: true });
 });
 
 // Блокировка/срок доступа — это про аккаунт врача целиком, а не про отдельный курс

@@ -1855,6 +1855,11 @@ function renderStudentShell(){
   if(previewMode){
     main.appendChild(el('<div style="background:var(--accent);color:#1B1A14;text-align:center;padding:10px 16px;font-size:13.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;">'+icon("eye")+' Режим просмотра «глазами врача» — изменения не сохраняются</div>'));
   }
+  if(me.impersonatedBy){
+    main.appendChild(el('<div style="background:var(--status-attention);color:#1B1A14;text-align:center;padding:10px 16px;font-size:13.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;">'+icon("eye")+
+      ' Вы вошли в личный кабинет врача от имени '+escapeHtml(me.impersonatedBy.name)+
+      ' <button type="button" class="btn btn-sm" style="background:#1B1A14;color:#fff;" data-action="exit-impersonation">Вернуться в свой аккаунт</button></div>'));
+  }
   if(course && studentState.tab === "lesson") addSideFlow(main);
   // Внизу «Моего прогресса» под карточками — анимированная спираль ДНК (декор).
   if(course && studentState.tab === "progress"){
@@ -4854,6 +4859,7 @@ function renderStudentDrawer(){
           (curator?'<span class="profile-chip">куратор: '+escapeHtml(curator.name)+'</span>':'') + '</div>' +
         '<div class="profile-contacts"><span>'+escapeHtml(s.email||"")+'</span>'+(s.phone?'<span>'+escapeHtml(s.phone)+'</span>':'')+(s.workplace?'<span>'+escapeHtml(s.workplace)+'</span>':'')+
           '<span>'+(s.online?'<b style="color:var(--status-active);">● в сети сейчас</b>':'был(а) в сети: '+escapeHtml(timeSince(s.last_seen_at)))+'</span></div>' +
+        '<div class="profile-photo-actions" style="margin-top:8px;"><button class="btn btn-sm btn-ghost" data-action="impersonate-student" data-id="'+s.id+'">'+icon("eye","ic-sm")+' Войти в ЛК врача</button></div>' +
       '</div>' +
       '<div class="profile-stats"><div><b>'+done+' / '+total+'</b><span>уроков</span></div>' +
         '<div><b>'+(typeof s.quiz_score==="number"?s.quiz_score+'%':'—')+'</b><span>итоговый тест</span></div>' +
@@ -6171,6 +6177,20 @@ function wireEvents(root){
       return;
     }
     if(action==="close-drawer" || (action==="overlay-close" && !e.target.closest("[data-stop]"))){ staffState.selectedStudentId=null; render(); return; }
+    if(action==="impersonate-student"){
+      var btnImp=t; btnImp.disabled=true;
+      try{
+        await api("/staff/students/"+t.getAttribute("data-id")+"/impersonate", { method:"POST" });
+        location.reload();
+      }catch(err){ showToast(err.message); btnImp.disabled=false; }
+      return;
+    }
+    if(action==="exit-impersonation"){
+      try{ await api("/auth/exit-impersonation", { method:"POST" }); }
+      catch(err){ showToast(err.message); }
+      location.reload();
+      return;
+    }
     if(action==="drawer-tab"){
       staffState.drawerTab=t.getAttribute("data-tab"); render();
       if(staffState.drawerTab==="tasks"){ await loadStudentAssign(staffState.selectedStudentId); render(); }

@@ -8,6 +8,7 @@ const { authRequired } = require("../middleware/auth");
 const { logAction } = require("../audit");
 const { generateReferralCode, describeUserAgent } = require("../util");
 const { verifyStaffInviteCode } = require("../staffInviteCode");
+const { signToken, COOKIE_OPTS } = require("../authToken");
 const fs = require("fs");
 const path = require("path");
 
@@ -19,13 +20,6 @@ const AVATAR_TYPES = { "image/webp": "webp", "image/jpeg": "jpg", "image/png": "
 function avatarUrl(file){ return file ? "api/auth/avatar/" + file : null; }
 
 const router = express.Router();
-
-const COOKIE_OPTS = {
-  httpOnly: true,
-  sameSite: "lax",
-  secure: process.env.NODE_ENV === "production",
-  maxAge: 30 * 24 * 60 * 60 * 1000
-};
 
 // Не больше 8 попыток входа/регистрации за 5 минут с одного IP — защита от подбора пароля.
 // Считаем только неудачные попытки, чтобы обычный человек, вошедший с первого раза, лимит не тратил.
@@ -40,13 +34,6 @@ const authLimiter = rateLimit({
 
 function normEmail(e) {
   return (e || "").trim().toLowerCase();
-}
-function signToken(user) {
-  return jwt.sign(
-    { id: user.id, role: user.role, name: user.name, email: user.email, tv: user.tokenVersion || 0 },
-    process.env.JWT_SECRET,
-    { expiresIn: "30d" }
-  );
 }
 
 router.post("/register", authLimiter, async (req, res) => {
@@ -247,8 +234,40 @@ router.get("/me", authRequired, async (req, res) => {
   u.avatar_url = avatarUrl(u.avatar_file); delete u.avatar_file;
   res.json({ user: Object.assign(u, {
     specializationIds: currentSpecs.rows.map((r) => r.specialization_id),
-    interestIds: interests.rows.map((r) => r.specialization_id)
+    interestIds: interests.rows.map((r) => r.specialization_id),
+    // Присутствует, только пока куратор/админ смотрит платформу «как врач»
+    // (см. staff.js POST /students/:id/impersonate) — фронтенд по этому полю
+    // рисует баннер с возможностью вернуться в свой аккаунт.
+    impersonatedBy: req.user.imp || null
   }) });
+});
+
+// Вернуться из режима «зайти как врач» в свой аккаунт куратора/админа —
+// impersonator_token хранит токен, с которого начался просмотр (см. staff.js).
+router.post("/exit-impersonation", authRequired, async (req, res) => {
+  const impToken = req.cookies && req.cookies.impersonator_token;
+  if (!impToken) return res.status(400).json({ error: "not_impersonating", message: "Вы не в режиме просмотра от лица врача" });
+  let payload;
+  try {
+    payload = jwt.verify(impToken, process.env.JWT_SECRET);
+  } catch (e) {
+    res.clearCookie("impersonator_token", COOKIE_OPTS);
+    return res.status(401).json({ error: "invalid_token", message: "Сессия истекла, войдите заново" });
+  }
+  const check = await pool.query("SELECT token_version FROM users WHERE id=$1", [payload.id]);
+  if (!check.rowCount || check.rows[0].token_version !== payload.tv) {
+    res.clearCookie("impersonator_token", COOKIE_OPTS);
+    return res.status(401).json({ error: "session_revoked", message: "Сессия больше не действительна, войдите заново" });
+  }
+  res.cookie("token", impToken, COOKIE_OPTS);
+  res.clearCookie("impersonator_token", COOKIE_OPTS);
+  if (req.user.imp) {
+    await logAction(
+      { id: req.user.imp.id, name: req.user.imp.name, role: req.user.imp.role },
+      "student.impersonate_end", "student", req.user.id, req.user.name, {}
+    );
+  }
+  res.json({ ok: true });
 });
 
 router.put("/me/avatar", authRequired, express.json({ limit: "600kb" }), async (req, res) => {
