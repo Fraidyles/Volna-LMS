@@ -672,3 +672,11 @@ DELETE FROM login_sessions WHERE id IN (
 DROP INDEX IF EXISTS idx_login_sessions_device;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_login_sessions_device
   ON login_sessions(user_id, COALESCE(user_agent,''));
+
+-- Типы вопросов тестов (см. src/quiz.js): single — как раньше, плюс multi / order /
+-- number / match / case. Всё, что нужно типу сверх options/correct, — в payload.
+ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS qtype TEXT NOT NULL DEFAULT 'single';
+ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAULT '{}'::jsonb;
+-- Балл итогового теста по каждому вопросу (0..1) — для повопросной аналитики:
+-- у новых типов верность не сравнить простым «ответ === correct».
+ALTER TABLE progress ADD COLUMN IF NOT EXISTS quiz_results JSONB;

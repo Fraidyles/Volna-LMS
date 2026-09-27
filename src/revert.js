@@ -72,8 +72,8 @@ const HANDLERS = {
   "content.quiz_edited": async (log) => {
     const b = requireBefore(log);
     await pool.query(
-      "UPDATE quiz_questions SET question=$1, options=$2, correct=$3 WHERE id=$4",
-      [b.question, JSON.stringify(b.options), b.correct, log.target_id]
+      "UPDATE quiz_questions SET question=$1, options=$2, correct=$3, qtype=$4, payload=$5 WHERE id=$6",
+      [b.question, JSON.stringify(b.options), b.correct, b.qtype || "single", JSON.stringify(b.payload || {}), log.target_id]
     );
   },
   "staff.role_change": async (log) => {
@@ -116,8 +116,9 @@ const HANDLERS = {
     const b = requireBefore(log);
     if (!b.courseId) throw new Error("Недостаточно данных для отката (курс не записан в действии)");
     await pool.query(
-      "INSERT INTO quiz_questions (id, course_id, lesson_id, module_id, idx, question, options, correct) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
-      [log.target_id, b.courseId, b.lessonId || null, b.moduleId || null, b.idx, b.question, JSON.stringify(b.options), b.correct]
+      "INSERT INTO quiz_questions (id, course_id, lesson_id, module_id, idx, question, options, correct, qtype, payload) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+      [log.target_id, b.courseId, b.lessonId || null, b.moduleId || null, b.idx, b.question, JSON.stringify(b.options), b.correct,
+        b.qtype || "single", JSON.stringify(b.payload || {})]
     );
   },
   "content.lesson_quiz_created": async (log) => {
