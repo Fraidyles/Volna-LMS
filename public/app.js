@@ -2637,6 +2637,7 @@ function resetLessonStageState(){
   studentState.videoEnded = false;
   studentState.lessonQuizAnswers = {};
   studentState.lessonQuizResult = null;
+  studentState.lqStep = 0;
 }
 // Модуль, все уроки которого уже пройдены, но отзыв по нему ещё не оставлен —
 // именно отзыв (не тест) считается финальным шагом гейта, поэтому проверяем по
@@ -2735,9 +2736,9 @@ function renderCoursePlayer(){
 
   var body = '<div class="lesson-body">' +
     '<button class="back-link" data-action="close-course">← К курсу</button>' +
-    '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">' +
-      '<h3 style="margin:0;">'+escapeHtml(lesson.title)+'</h3>' +
-      '<button class="btn btn-sm btn-ghost" style="flex-shrink:0;" data-action="toggle-bookmark" data-id="'+lesson.id+'" data-bookmarked="'+(isBookmarked?"1":"0")+'" title="'+(isBookmarked?"Убрать из моих материалов":"Сохранить в мои материалы")+'">'+(isBookmarked?"★ В моих материалах":"☆ Сохранить")+'</button>' +
+    '<div class="lesson-head">' +
+      '<h3>'+escapeHtml(lesson.title)+'</h3>' +
+      '<button class="btn btn-sm btn-ghost lesson-save" data-action="toggle-bookmark" data-id="'+lesson.id+'" data-bookmarked="'+(isBookmarked?"1":"0")+'" title="'+(isBookmarked?"Убрать из конспекта":"Сохранить урок в конспект")+'" aria-label="'+(isBookmarked?"Убрать из конспекта":"Сохранить урок в конспект")+'">'+(isBookmarked?"★":"☆")+'<span>'+(isBookmarked?" В конспекте":" Сохранить")+'</span></button>' +
     '</div>' +
     '<div class="meta">Урок '+(idx+1)+' из '+course.lessons.length+' · '+escapeHtml(lesson.duration||"")+'</div>';
 
@@ -2815,35 +2816,123 @@ function renderLessonVideoStage(lesson, stages, isDoneAlready){
   return html;
 }
 
+// Тест урока — по одному вопросу: полоска прогресса, варианты-карточки с буквами
+// (выбор кликом или клавишами 1–4 / A–D), после выбора — переход к следующему.
+// В конце — балл кольцом и разбор: что выбрано и какой ответ верный (тест урока
+// только для закрепления, на сертификат не влияет — поэтому ответы раскрываем).
+var QZ_LETTERS = "ABCDEFGH";
 function renderLessonQuizStage(lesson){
   var result = studentState.lessonQuizResult;
+  var qs = lesson.quiz || [], ans = studentState.lessonQuizAnswers || {};
+  if(result) return renderLessonQuizResult(lesson, result);
+  var step = Math.min(studentState.lqStep||0, qs.length-1), q = qs[step];
+  var answered = qs.filter(function(x){ return typeof ans[x.id]==="number"; }).length;
   var prevScore = course.progress && course.progress.lesson_quiz_scores && course.progress.lesson_quiz_scores[lesson.id];
-  var html = '';
-  if(result){
-    html += '<div class="empty-state" style="padding:40px 10px;">' +
-      '<div class="big">'+icon(result.score>=60?"badge":"star","ic-lg")+'</div>' +
-      '<b style="font-size:20px;display:block;margin-bottom:6px;">'+result.score+'%</b>' +
-      '<p style="color:var(--muted);">правильных ответов — это просто для закрепления материала, на сертификат не влияет.</p>' +
-      (lesson.assignment
-        ? '<button class="btn btn-primary" style="margin-top:14px;" data-action="lesson-stage" data-stage="task">Далее → задание</button>'
-        : '<button class="btn btn-primary" style="margin-top:14px;" data-action="next-lesson">Далее →</button>') +
-    '</div>';
-    return html;
-  }
-  if(typeof prevScore==="number"){
-    html += '<p class="hint" style="margin-bottom:12px;">Прошлый результат: '+prevScore+'%. Можно пройти ещё раз.</p>';
-  }
-  html += '<form id="lessonQuizForm" data-lesson-id="'+lesson.id+'">';
-  lesson.quiz.forEach(function(q,qi){
-    html += '<div class="quiz-q"><p class="qtext">'+(qi+1)+'. '+escapeHtml(q.question)+'</p>';
-    q.options.forEach(function(opt,oi){
-      html += '<label class="opt"><input type="radio" name="'+q.id+'" value="'+oi+'" required> '+escapeHtml(opt)+'</label>';
-    });
-    html += '</div>';
-  });
-  html += '<button class="btn btn-primary btn-block" type="submit">Завершить тест</button></form>';
+  var html = '<div class="qz" data-lesson-id="'+lesson.id+'">' +
+    '<div class="qz-top"><span class="qz-count">Вопрос <b>'+(step+1)+'</b> из '+qs.length+'</span>' +
+      (typeof prevScore==="number" ? '<span class="qz-prev">прошлый результат — '+prevScore+'%</span>' : '<span class="qz-prev">для закрепления, на сертификат не влияет</span>') + '</div>' +
+    '<div class="qz-bar">' + qs.map(function(x, i){
+      var cls = i===step ? ' cur' : (typeof ans[x.id]==="number" ? ' done' : '');
+      var can = i===step || typeof ans[x.id]==="number" || i<=answered;
+      return '<button type="button" class="qz-seg'+cls+'"'+(can?' data-action="lq-goto" data-i="'+i+'"':' disabled')+' aria-label="Вопрос '+(i+1)+'"></button>';
+    }).join("") + '</div>' +
+    '<div class="qz-card" key="'+step+'">' +
+      '<p class="qz-q">'+escapeHtml(q.question)+'</p>' +
+      '<div class="qz-opts" role="radiogroup">' + q.options.map(function(opt, oi){
+        var on = ans[q.id]===oi;
+        return '<button type="button" role="radio" aria-checked="'+on+'" class="qz-opt'+(on?' on':'')+'" data-action="lq-pick" data-q="'+q.id+'" data-o="'+oi+'">' +
+          '<span class="qz-key">'+QZ_LETTERS[oi]+'</span><span class="qz-text">'+escapeHtml(opt)+'</span></button>';
+      }).join("") + '</div>' +
+    '</div>' +
+    '<div class="qz-nav">' +
+      '<button type="button" class="btn btn-ghost" data-action="lq-prev"'+(step===0?' disabled':'')+'>← Назад</button>' +
+      '<span class="qz-hint">Можно выбирать клавишами 1–'+q.options.length+'</span>' +
+      (step===qs.length-1
+        ? '<button type="button" class="btn btn-primary" data-action="lq-submit"'+(answered<qs.length?' disabled title="Ответьте на все вопросы"':'')+'>Завершить тест</button>'
+        : '<button type="button" class="btn btn-primary" data-action="lq-next"'+(typeof ans[q.id]==="number"?'':' disabled')+'>Далее →</button>') +
+    '</div></div>';
   return html;
 }
+function renderLessonQuizResult(lesson, result){
+  var qs = lesson.quiz || [];
+  var total = result.total || qs.length, right = typeof result.correctCount==="number" ? result.correctCount : Math.round(result.score*total/100);
+  var mood = result.score===100 ? ["Отлично — всё верно", "Материал урока усвоен полностью."]
+    : result.score>=60 ? ["Хороший результат", "Посмотрите разбор ниже — там видно, где была ошибка."]
+    : ["Стоит повторить материал", "Загляните в разбор и перечитайте урок — тест можно пройти ещё раз."];
+  var html = '<div class="qz qz-result">' +
+    '<div class="qz-res-head"><div class="progress-ring qz-ring'+(result.score>=60?'':' low')+'" data-anim="ring" style="--ring-p:'+result.score+'%;"><div class="progress-ring-inner"><span data-count="'+result.score+'" data-suffix="%">'+result.score+'%</span></div></div>' +
+      '<div><b class="qz-res-title">'+mood[0]+'</b><p class="qz-res-sub">'+right+' из '+total+' '+ruPluralClient(total,"ответа","ответов","ответов")+' верно. '+mood[1]+'</p></div></div>';
+  if(result.review && result.review.length){
+    html += '<div class="qz-review">' + result.review.map(function(r, i){
+      var q = qs.find(function(x){ return x.id===r.id; }); if(!q) return "";
+      var ok = r.chosen===r.correct;
+      return '<div class="qz-rv'+(ok?' ok':' bad')+'"><div class="qz-rv-head"><span class="qz-rv-mark">'+(ok?icon("check","ic-sm"):icon("close","ic-sm"))+'</span><b>'+(i+1)+'. '+escapeHtml(q.question)+'</b></div>' +
+        '<div class="qz-rv-ans">' +
+          (r.chosen!=null ? '<span class="qz-rv-pill '+(ok?'ok':'bad')+'"><i>'+QZ_LETTERS[r.chosen]+'</i>'+escapeHtml(q.options[r.chosen]||"")+'</span>' : '') +
+          (ok ? '' : '<span class="qz-rv-right">верно: <span class="qz-rv-pill ok"><i>'+QZ_LETTERS[r.correct]+'</i>'+escapeHtml(q.options[r.correct]||"")+'</span></span>') +
+        '</div></div>';
+    }).join("") + '</div>';
+  }
+  html += '<div class="qz-nav"><button type="button" class="btn btn-ghost" data-action="lq-retry">Пройти ещё раз</button><span></span>' +
+    (lesson.assignment
+      ? '<button class="btn btn-primary" data-action="lesson-stage" data-stage="task">Далее → задание</button>'
+      : '<button class="btn btn-primary" data-action="next-lesson">Далее →</button>') + '</div></div>';
+  return html;
+}
+async function submitLessonQuiz(lessonId){
+  var lqLesson = course.lessons.find(function(l){ return l.id===lessonId; });
+  var lqAnswers = {};
+  (lqLesson.quiz||[]).forEach(function(q){ lqAnswers[q.id] = studentState.lessonQuizAnswers[q.id]; });
+  var wasProtoAvailLQ = protocolsSectionAvailable();
+  if(previewMode){
+    studentState.lessonQuizResult = { score:100 };
+    if(course.progress.completed_lessons.indexOf(lessonId)===-1) course.progress.completed_lessons.push(lessonId);
+    maybeCelebrateProtocolsUnlock(wasProtoAvailLQ);
+    render(); return;
+  }
+  var btn = document.querySelector('[data-action="lq-submit"]'); if(btn){ btn.disabled = true; btn.textContent = "Считаем результат…"; }
+  try{
+    var rlq = await api("/course/lessons/"+lessonId+"/quiz-submit", { method:"POST", body: JSON.stringify({ answers: lqAnswers }) });
+    course.progress.completed_lessons = rlq.completedLessons;
+    if(rlq.gamification) course.gamification = Object.assign({}, course.gamification, rlq.gamification);
+    if(!course.progress.lesson_quiz_scores) course.progress.lesson_quiz_scores = {};
+    course.progress.lesson_quiz_scores[lessonId] = rlq.score;
+    studentState.lessonQuizResult = { score: rlq.score, correctCount: rlq.correctCount, total: rlq.total, review: rlq.review };
+    maybeCelebrateProtocolsUnlock(wasProtoAvailLQ);
+    render(); window.scrollTo({ top:0, behavior:"smooth" });
+  }catch(err){ showToast(err.message); if(btn){ btn.disabled = false; btn.textContent = "Завершить тест"; } }
+}
+// Выбор ответа: отмечаем и через мгновение переходим к следующему вопросу.
+var lqAdvanceTimer = null;
+function lqPick(qid, oi){
+  var lesson = course.lessons[studentState.lessonIndex], qs = lesson.quiz || [];
+  studentState.lessonQuizAnswers[qid] = oi;
+  var step = studentState.lqStep||0;
+  render();
+  clearTimeout(lqAdvanceTimer);
+  if(step < qs.length-1){
+    lqAdvanceTimer = setTimeout(function(){
+      if(studentState.tab==="lesson" && studentState.lessonStage==="quiz" && !studentState.lessonQuizResult && (studentState.lqStep||0)===step && course.lessons[studentState.lessonIndex]===lesson){
+        studentState.lqStep = step+1; render();
+      }
+    }, 420);
+  }
+}
+document.addEventListener("keydown", function(e){
+  if(view!=="student" || studentState.tab!=="lesson" || studentState.lessonStage!=="quiz" || studentState.lessonQuizResult || studentState.quizMode) return;
+  if(e.ctrlKey || e.metaKey || e.altKey || isTypingNow()) return;
+  var lesson = course && course.lessons[studentState.lessonIndex]; if(!lesson || !lesson.quiz || !lesson.quiz.length) return;
+  var qs = lesson.quiz, step = Math.min(studentState.lqStep||0, qs.length-1), q = qs[step];
+  var k = e.key.toUpperCase(), map = { "1":0,"2":1,"3":2,"4":3,"5":4,"6":5, "A":0,"B":1,"C":2,"D":3,"E":4,"F":5, "А":0,"Б":1,"В":2,"Г":3 };
+  if(k in map && map[k] < q.options.length){ e.preventDefault(); lqPick(q.id, map[k]); return; }
+  if(e.key==="Enter" && typeof studentState.lessonQuizAnswers[q.id]==="number"){
+    e.preventDefault();
+    if(step < qs.length-1){ clearTimeout(lqAdvanceTimer); studentState.lqStep = step+1; render(); }
+    else if(qs.every(function(x){ return typeof studentState.lessonQuizAnswers[x.id]==="number"; })) submitLessonQuiz(lesson.id);
+  }
+  if(e.key==="ArrowLeft" && step>0){ clearTimeout(lqAdvanceTimer); studentState.lqStep = step-1; render(); }
+  if(e.key==="ArrowRight" && step<qs.length-1 && typeof studentState.lessonQuizAnswers[q.id]==="number"){ clearTimeout(lqAdvanceTimer); studentState.lqStep = step+1; render(); }
+});
 
 // Гейт после последнего урока модуля: сначала итоговый тест по модулю (если у него
 // есть вопросы), потом мини-опрос — оба шага в одном "плеере", без сайдбара с
@@ -2854,7 +2943,7 @@ function renderModuleGate(){
   var body = '<div class="lesson-body">' +
     (studentState.moduleGateStage==="quiz" ? renderModuleQuizStage(mod) : renderModuleFeedbackStage(mod)) +
   '</div>';
-  return el('<div class="player" style="margin-top:6px;grid-template-columns:1fr;">'+body+'</div>');
+  return el('<div class="player" style="margin-top:6px;grid-template-columns:minmax(0,1fr);">'+body+'</div>');
 }
 
 function renderModuleQuizStage(mod){
@@ -2904,7 +2993,7 @@ function renderQuizOrCert(){
   var pr = course.progress || {};
   if(pr.completed && !studentState.quizSubmitted) return renderCertificate();
   if(course.quizHiddenForMe){
-    return el('<div class="player" style="margin-top:6px;grid-template-columns:1fr;"><div class="lesson-body">' +
+    return el('<div class="player" style="margin-top:6px;grid-template-columns:minmax(0,1fr);"><div class="lesson-body">' +
       '<button class="back-link" data-action="close-course">← К курсу</button>' +
       '<div class="empty-state" style="padding:60px 10px;"><div class="big">'+icon("lock","ic-lg")+'</div>Итоговый тест временно недоступен.<br>Куратор откроет его позже.</div></div></div>');
   }
@@ -2916,7 +3005,7 @@ function renderQuizOrCert(){
     return a && a.required && !x.l.hiddenForMe && !(sub && sub.status==="accepted");
   });
   if(stopPending.length){
-    var sh = '<div class="player" style="margin-top:6px;grid-template-columns:1fr;"><div class="lesson-body">' +
+    var sh = '<div class="player" style="margin-top:6px;grid-template-columns:minmax(0,1fr);"><div class="lesson-body">' +
       '<button class="back-link" data-action="close-course">← К курсу</button>' +
       '<h3>Итоговый тест</h3><div class="task-state pending" style="margin-top:14px;"><b>'+icon("lock","ic-sm")+' Откроется, когда куратор примет обязательные задания</b></div>';
     stopPending.forEach(function(x){
@@ -2927,7 +3016,7 @@ function renderQuizOrCert(){
     return el(sh + '</div></div>');
   }
 
-  var html = '<div class="player" style="margin-top:6px;grid-template-columns:1fr;"><div class="lesson-body">' +
+  var html = '<div class="player" style="margin-top:6px;grid-template-columns:minmax(0,1fr);"><div class="lesson-body">' +
     '<button class="back-link" data-action="close-course">← К курсу</button>' +
     '<h3>Итоговый тест</h3><div class="meta">'+course.quiz.length+' вопросов · нужно набрать от 60%</div><form id="quizForm">';
   course.quiz.forEach(function(q,qi){
@@ -2944,7 +3033,7 @@ function renderQuizOrCert(){
 function renderCertificate(){
   var pr = course.progress || {};
   var certsOn = course && course.course && course.course.certificatesEnabled;
-  var html = '<div class="player" style="margin-top:6px;grid-template-columns:1fr;"><div class="cert">';
+  var html = '<div class="player" style="margin-top:6px;grid-template-columns:minmax(0,1fr);"><div class="cert">';
 
   if(!certsOn){
     // Текущий курс — демо: сертификат за него не выдаётся, вместо этого предлагаем
@@ -3019,6 +3108,52 @@ function renderPointTiersCta(points){
 // (каждый пройденный урок может открыть свои протоколы — см. lesson_protocols).
 // Разбивка на «по вашей специализации» / «дополнительные» приходит уже готовой
 // с бэкенда (GET /course/protocols), тут только рендер и переключение гайдов.
+// Гайд к протоколу приходит одним абзацем, но внутри у него есть структура:
+// «Название — описание» / «Название: описание», цепочки «A → B → C» и вводная
+// фраза с двоеточием («Алгоритм по отделам ЖКТ: …»). Показываем её явно:
+// пункты с названием слева, цепочки — шагами. Если структуры нет — обычный текст.
+function guideSentences(text){
+  // Конец предложения — точка/!/? и пробел перед заглавной; «H. pylori» не режем.
+  return String(text||"").replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s+(?=[А-ЯЁA-Z«(])/).filter(Boolean);
+}
+function guideInline(t){
+  return escapeHtml(t).replace(/(\d[\d.,]*(?:[–-]\d[\d.,]*)?\s?(?:мг|г|мкг|МЕ|нмоль\/л|промилле|лет|недель|месяцев|дней|%)(?:\/сутки)?)/g, '<span class="gd-num">$1</span>');
+}
+function guideRow(sent){
+  var body = sent.replace(/\.$/, "");
+  // «Порядок ведения: 1) …; 2) …; 3) …» — нумерованный список.
+  if(/(^|[\s:])1\)\s/.test(body) && /\s2\)\s/.test(body)){
+    var at = body.search(/(^|[\s:])1\)\s/), lead1 = body.slice(0, at).replace(/[:\s]+$/, "");
+    var items = body.slice(at).split(/\s*\d+\)\s/).map(function(x){ return x.replace(/[;,.\s]+$/, "").trim(); }).filter(Boolean);
+    return '<div class="gd-row">' + (lead1 ? '<div class="gd-term">'+escapeHtml(lead1)+'</div>' : '') +
+      '<div class="gd-text"><ol class="gd-list">' + items.map(function(x){ return '<li>'+guideInline(x.replace(/^./, function(c){ return c.toUpperCase(); }))+'</li>'; }).join("") + '</ol></div></div>';
+  }
+  if((body.match(/→/g)||[]).length >= 2){
+    var lead = "", chain = body, ci = body.indexOf(":");
+    if(ci > 0 && ci < body.indexOf("→")){ lead = body.slice(0, ci); chain = body.slice(ci+1); }
+    var tail = "";
+    var steps = chain.split("→").map(function(x){ return x.trim().replace(/^./, function(c){ return c.toUpperCase(); }); }).filter(Boolean);
+    var last = steps[steps.length-1], cut = last.search(/\.\s/);
+    if(cut > 0){ tail = last.slice(cut+1).trim(); steps[steps.length-1] = last.slice(0, cut); }
+    return '<div class="gd-row gd-chain-row">' + (lead ? '<div class="gd-term">'+escapeHtml(lead)+'</div>' : '') +
+      '<div class="gd-text"><div class="gd-chain">' + steps.map(function(x, i){ return (i?'<span class="gd-arrow">→</span>':'')+'<span class="gd-step">'+guideInline(x)+'</span>'; }).join("") + '</div>' +
+      (tail ? '<p>'+guideInline(tail)+'</p>' : '') + '</div></div>';
+  }
+  var m = body.match(/^([^—:()]{2,48}?)\s?(?:\s—\s|:\s)(.+)$/);
+  if(m) return '<div class="gd-row"><div class="gd-term">'+escapeHtml(m[1].trim())+'</div><div class="gd-text"><p>'+guideInline(m[2].trim().replace(/^./, function(c){ return c.toUpperCase(); }))+'.</p></div></div>';
+  return '<div class="gd-row gd-plain"><div class="gd-text"><p>'+guideInline(body)+'.</p></div></div>';
+}
+function renderGuide(text){
+  var paras = String(text||"").split(/\n+/).map(function(x){ return x.trim(); }).filter(Boolean);
+  return '<div class="gd">' + paras.map(function(par){
+    var sents = guideSentences(par), head = "";
+    // «Алгоритм по отделам ЖКТ: Желудок — …» — вводная становится заголовком.
+    var hm = sents.length && sents[0].match(/^([^—:()]{3,48}):\s(.+)$/);
+    if(hm && /^[А-ЯЁA-Z]/.test(hm[2]) && /\s—\s|:\s/.test(hm[2]) && !/→/.test(hm[2]) && !/(^|\s)1\)\s/.test(hm[2])){ head = hm[1]; sents[0] = hm[2]; }
+    return (head ? '<div class="gd-head">'+escapeHtml(head)+'</div>' : '') + sents.map(guideRow).join("");
+  }).join("") + '</div>';
+}
+
 function renderProtocolCard(p, isForYou, readerMode){
   var expanded = readerMode || !!protocolExpanded[p.id];
   var myIds = (me.specializationIds||[]).concat(me.interestIds||[]);
@@ -3029,7 +3164,7 @@ function renderProtocolCard(p, isForYou, readerMode){
   var activeSpecId = protocolGuideTab[p.id] || (defaultGuide ? defaultGuide.specializationId : (p.guides[0] ? p.guides[0].specializationId : null));
   var activeGuide = p.guides.find(function(g){ return g.specializationId===activeSpecId; });
 
-  var html = readerMode ? '<div>' + (p.summary ? '<div class="prose proto-reader-sum">'+renderPlainToProse(p.summary)+'</div>' : '') : '<div class="card" style="padding:18px 20px;margin-bottom:12px;">' +
+  var html = readerMode ? '<div>' : '<div class="card" style="padding:18px 20px;margin-bottom:12px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;cursor:pointer;" data-action="toggle-protocol" data-id="'+p.id+'">' +
       '<div><b style="font-size:15px;display:block;">'+escapeHtml(p.title)+'</b>' +
         (p.summary ? '<p style="font-size:13px;color:var(--muted);margin:4px 0 0;">'+renderPlainToProse(p.summary)+'</p>' : '') +
@@ -3041,22 +3176,18 @@ function renderProtocolCard(p, isForYou, readerMode){
     if(!p.guides.length){
       html += '<p class="hint" style="margin-top:12px;">Гайд применения ещё не добавлен куратором.</p>';
     } else {
-      if(p.guides.length>1){
-        html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 10px;">';
-        p.guides.forEach(function(g){
-          html += '<button type="button" class="btn btn-sm '+(g.specializationId===activeSpecId?'btn-primary':'btn-ghost')+'" data-action="select-protocol-guide" data-id="'+p.id+'" data-spec="'+g.specializationId+'">'+escapeHtml(g.specializationName)+'</button>';
-        });
-        html += '</div>';
-      } else {
-        html += '<p class="hint" style="margin-top:14px;">Гайд для специализации «'+escapeHtml(p.guides[0].specializationName)+'»</p>';
-      }
-      html += '<div class="prose">'+(activeGuide&&activeGuide.guideHtml?renderPlainToProse(activeGuide.guideHtml):'')+'</div>';
+      // Специализация — спокойный переключатель «Гайд для: …», а не ряд крупных кнопок.
+      html += '<div class="gd-for"><span>Гайд для</span>' + (p.guides.length>1
+        ? '<div class="gd-seg" role="tablist">' + p.guides.map(function(g){
+            var on = g.specializationId===activeSpecId, mine = myIds.indexOf(g.specializationId)!==-1;
+            return '<button type="button" role="tab" aria-selected="'+on+'" class="gd-seg-btn'+(on?' on':'')+'" data-action="select-protocol-guide" data-id="'+p.id+'" data-spec="'+g.specializationId+'">'+escapeHtml(g.specializationName)+(mine?'<i class="gd-mine" title="Ваша специализация"></i>':'')+'</button>';
+          }).join("") + '</div>'
+        : '<b>'+escapeHtml(p.guides[0].specializationName)+'</b>') + '</div>';
+      html += activeGuide && activeGuide.guideHtml ? renderGuide(activeGuide.guideHtml) : '<p class="hint">Для этой специализации текст гайда ещё не добавлен.</p>';
       if(activeGuide && activeGuide.files && activeGuide.files.length){
-        html += '<div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;">';
-        activeGuide.files.forEach(function(f){
-          html += '<a href="'+f.url+'" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--primary);text-decoration:underline;width:fit-content;">'+icon("folder","ic-sm")+'<span>'+escapeHtml(f.originalName)+'</span></a>';
-        });
-        html += '</div>';
+        html += '<div class="gd-files"><span class="gd-files-label">Материалы</span>' + activeGuide.files.map(function(f){
+          return '<a class="gd-file" href="'+f.url+'" target="_blank" rel="noopener">'+icon("download","ic-sm")+'<span>'+escapeHtml(f.originalName)+'</span></a>';
+        }).join("") + '</div>';
       }
     }
   }
@@ -3123,8 +3254,9 @@ function renderProtocolReaderModal(){
   if(!p) return el('<div></div>');
   var inner = renderProtocolCard(p, protocolReader.mine, true);
   return el('<div class="overlay overlay-center" data-action="overlay-close-protocol-reader"><div class="drawer modal proto-reader" data-stop="1">' +
-    '<div class="drawer-head"><div><span class="profile-kicker">Протокол'+(p.lessonIdx!=null?' · из урока '+(p.lessonIdx+1):'')+'</span><b style="font-size:18px;display:block;margin-top:4px;">'+escapeHtml(p.title)+'</b></div>' +
-    '<button class="btn btn-ghost btn-sm" data-action="close-protocol-reader">Закрыть ✕</button></div><div class="drawer-body">'+inner+'</div></div></div>');
+    '<div class="drawer-head"><div class="gd-top"><span class="profile-kicker">Протокол'+(p.lessonIdx!=null?' · из урока '+(p.lessonIdx+1):'')+'</span><b class="gd-title">'+escapeHtml(p.title)+'</b>' +
+      (p.summary ? '<p class="gd-sum">'+escapeHtml(stripHtml(renderPlainToProse(p.summary)))+'</p>' : '') + '</div>' +
+    '<button class="btn btn-ghost btn-sm gd-close" data-action="close-protocol-reader" aria-label="Закрыть"><span>Закрыть</span> ✕</button></div><div class="drawer-body">'+inner+'</div></div></div>');
 }
 
 function renderMyProgressPage(){
@@ -6485,6 +6617,12 @@ function wireEvents(root){
       }catch(err){ showToast(err.message); }
       return;
     }
+    if(action==="lq-pick"){ lqPick(t.getAttribute("data-q"), parseInt(t.getAttribute("data-o"),10)); return; }
+    if(action==="lq-goto"){ clearTimeout(lqAdvanceTimer); studentState.lqStep=parseInt(t.getAttribute("data-i"),10); render(); return; }
+    if(action==="lq-prev"){ clearTimeout(lqAdvanceTimer); studentState.lqStep=Math.max(0,(studentState.lqStep||0)-1); render(); return; }
+    if(action==="lq-next"){ clearTimeout(lqAdvanceTimer); studentState.lqStep=(studentState.lqStep||0)+1; render(); return; }
+    if(action==="lq-submit"){ var lqL=course.lessons[studentState.lessonIndex]; if(lqL) await submitLessonQuiz(lqL.id); return; }
+    if(action==="lq-retry"){ studentState.lessonQuizAnswers={}; studentState.lessonQuizResult=null; studentState.lqStep=0; render(); return; }
     if(action==="nb-open-hl"){
       if(e.target.closest("[data-action='nb-del-hl']")) return;
       var hIdx=parseInt(t.getAttribute("data-idx"),10), hL=course.lessons[hIdx];
@@ -7756,31 +7894,6 @@ function wireEvents(root){
         await loadCourse(); // очки/стрик пересчитываются на сервере из всего прогресса разом — проще перезагрузить, чем дублировать формулу на клиенте
         studentState.quizSubmitted=true;
       }catch(err){ showToast(err.message); }
-      render(); return;
-    }
-    if(e.target.id==="lessonQuizForm"){
-      e.preventDefault();
-      var lqLessonId = e.target.getAttribute("data-lesson-id");
-      var lqLesson = course.lessons.find(function(l){ return l.id===lqLessonId; });
-      var fdlq=new FormData(e.target); var lqAnswers={};
-      (lqLesson.quiz||[]).forEach(function(q){ lqAnswers[q.id]=parseInt(fdlq.get(q.id),10); });
-      var btnlq=e.target.querySelector("button[type=submit]"); btnlq.disabled=true; btnlq.textContent="Считаем результат…";
-      var wasProtoAvailLQ = protocolsSectionAvailable();
-      if(previewMode){
-        studentState.lessonQuizResult={ score:100 };
-        if(course.progress.completed_lessons.indexOf(lqLessonId)===-1) course.progress.completed_lessons.push(lqLessonId);
-        maybeCelebrateProtocolsUnlock(wasProtoAvailLQ);
-        render(); return;
-      }
-      try{
-        var rlq = await api("/course/lessons/"+lqLessonId+"/quiz-submit", { method:"POST", body: JSON.stringify({ answers: lqAnswers }) });
-        course.progress.completed_lessons = rlq.completedLessons;
-        if(rlq.gamification) course.gamification = Object.assign({}, course.gamification, rlq.gamification);
-        if(!course.progress.lesson_quiz_scores) course.progress.lesson_quiz_scores={};
-        course.progress.lesson_quiz_scores[lqLessonId]=rlq.score;
-        studentState.lessonQuizResult = { score: rlq.score };
-        maybeCelebrateProtocolsUnlock(wasProtoAvailLQ);
-      }catch(err){ showToast(err.message); btnlq.disabled=false; btnlq.textContent="Завершить тест"; return; }
       render(); return;
     }
     if(e.target.id==="moduleQuizForm"){
