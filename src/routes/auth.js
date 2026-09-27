@@ -254,7 +254,7 @@ router.post("/impersonate/stop", async (req, res) => {
 
 router.get("/me", authRequired, async (req, res) => {
   const result = await pool.query(
-    "SELECT id, email, name, role, workplace, phone, stream_id, referral_code, created_at, product, payment_status, avatar_file FROM users WHERE id=$1",
+    "SELECT id, email, name, role, workplace, phone, stream_id, referral_code, created_at, product, payment_status, avatar_file, assigned_curator_id FROM users WHERE id=$1",
     [req.user.id]
   );
   if (!result.rowCount) return res.status(404).json({ error: "not_found" });
@@ -266,6 +266,13 @@ router.get("/me", authRequired, async (req, res) => {
   );
   const u = Object.assign({}, result.rows[0]);
   u.avatar_url = avatarUrl(u.avatar_file); delete u.avatar_file;
+  // Врачу — имя и фото закреплённого куратора (страница «Telegram»: к кому обращаться).
+  u.curator = null;
+  if (u.role === "student" && u.assigned_curator_id) {
+    const c = await pool.query("SELECT id, name, avatar_file FROM users WHERE id=$1", [u.assigned_curator_id]);
+    if (c.rowCount) u.curator = { id: c.rows[0].id, name: c.rows[0].name, avatar_url: avatarUrl(c.rows[0].avatar_file) };
+  }
+  delete u.assigned_curator_id;
   res.json({ user: Object.assign(u, {
     specializationIds: currentSpecs.rows.map((r) => r.specialization_id),
     interestIds: interests.rows.map((r) => r.specialization_id),
