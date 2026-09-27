@@ -1771,7 +1771,7 @@ tr.ord-off td{opacity:.55;}
 .board-tile .tile-row .streak-flame{align-self:center;}
 /* Плашка «выбран сейчас» на карточке курса — в одну строку */
 .course-tile-badge{white-space:nowrap;}
-.course-tile-top{flex-wrap:wrap;row-gap:8px;}
+@media (max-width:640px){.course-tile-top{flex-wrap:wrap;row-gap:8px;}}
 
 /* ===== Раздел «Telegram» ===== */
 .tg-hero{position:relative;overflow:hidden;display:flex;align-items:center;gap:28px;padding:28px 30px;}
@@ -1815,4 +1815,52 @@ tr.ord-off td{opacity:.55;}
   .tg-hero-main h1{font-size:24px;}
   .tg-actions .btn{flex:1 1 100%;justify-content:center;}
   .tg-stats > div{flex:1;min-width:0;}
+}
+
+/* ===== «Мой конспект» ===== */
+.nb-hero{padding:26px 28px 18px;display:flex;flex-direction:column;gap:8px;}
+.nb-hero h1{margin:0;font-size:28px;font-weight:700;letter-spacing:-.01em;}
+.nb-hero > p{margin:0;font-size:14px;color:var(--muted);line-height:1.6;max-width:620px;}
+.nb-search{position:relative;margin-top:10px;}
+.nb-search .ic{position:absolute;left:14px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;}
+.nb-search .input{padding-left:40px;}
+.nb-tabs{margin:6px 0 0;}
+.nb-count{display:inline-block;min-width:18px;padding:0 6px;margin-left:4px;border-radius:999px;font-size:11px;line-height:18px;text-align:center;
+  background:var(--surface-2);color:var(--muted);}
+.tab.active .nb-count{color:var(--ink);}
+.nb-sec{margin-top:22px;}
+.nb-lesson{padding:18px 20px;margin-top:14px;}
+.nb-title{min-width:0;cursor:pointer;}
+.nb-title span{display:block;font-size:12px;color:var(--muted);}
+.nb-title b{display:block;font-size:15px;font-weight:700;line-height:1.35;margin-top:2px;}
+.nb-title:hover b{color:var(--primary);}
+.nb-head-btns{display:flex;gap:6px;flex:0 0 auto;}
+.nb-star{min-width:34px;justify-content:center;}
+.nb-star.on{color:var(--status-attention);}
+.nb-body{display:flex;flex-direction:column;gap:8px;}
+.nb-quote{position:relative;display:flex;align-items:flex-start;gap:10px;padding:10px 12px 10px 14px;border-radius:12px;cursor:pointer;
+  background:color-mix(in srgb,var(--primary) 10%,transparent);border-left:3px solid var(--primary);transition:background .15s;}
+.nb-quote:hover{background:color-mix(in srgb,var(--primary) 16%,transparent);}
+.nb-quote-text{flex:1;min-width:0;font-size:14px;line-height:1.55;}
+.nb-x{flex:0 0 auto;width:26px;height:26px;display:grid;place-items:center;border-radius:8px;border:none;background:transparent;color:var(--muted);cursor:pointer;opacity:0;transition:opacity .15s,background .15s;}
+.nb-quote:hover .nb-x,.nb-x:focus-visible{opacity:1;}
+.nb-x:hover{background:var(--surface-2);color:var(--ink);}
+@media (hover:none){.nb-x{opacity:1;}}
+.nb-note{padding:12px 14px;border-radius:12px;background:var(--surface-2);border:var(--border-hairline);}
+.nb-note-head{display:flex;justify-content:space-between;align-items:center;gap:10px;}
+.nb-label{display:block;font-size:12px;color:var(--muted);}
+.nb-note p{margin:6px 0 0;font-size:14px;line-height:1.55;white-space:pre-wrap;}
+.nb-note.editing textarea{margin-top:6px;font-size:14px;}
+.nb-note-btns{display:flex;gap:8px;margin-top:8px;}
+.nb-add-note{align-self:flex-start;font-size:13px;}
+.nb-empty-line{margin:0;font-size:13px;color:var(--muted);line-height:1.5;}
+.nb-empty{padding:22px 24px;margin-top:14px;display:flex;flex-direction:column;gap:14px;}
+.nb-empty > b{font-size:15px;}
+mark.nb-hit{background:color-mix(in srgb,var(--status-attention) 35%,transparent);color:inherit;border-radius:3px;padding:0 1px;}
+mark.hl.hl-flash{animation:hlFlash 1.6s ease;}
+@keyframes hlFlash{0%,40%{box-shadow:0 0 0 4px color-mix(in srgb,var(--primary) 45%,transparent);}100%{box-shadow:0 0 0 0 transparent;}}
+@media (max-width:640px){
+  .nb-hero{padding:22px 20px 16px;} .nb-hero h1{font-size:24px;}
+  .nb-lesson .card-head{flex-wrap:wrap;}
+  .nb-tabs{overflow-x:auto;flex-wrap:nowrap;}
 }
