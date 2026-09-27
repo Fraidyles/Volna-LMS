@@ -1571,3 +1571,14 @@ tr.ord-off td{opacity:.55;}
   .tools-select{width:100%;min-width:0;max-width:none;}
   .tools-seg{display:flex;overflow-x:auto;max-width:100%;}
 }
+/* Колонки «Анкет» и «Продуктов» одной высоты: левая карточка со списками
+   дотягивается до низа правой, её содержимое прокручивается внутри. */
+.sv-layout{align-items:stretch;}
+.sv-list{min-height:0;}
+.sv-people{flex:1 1 auto;position:relative;min-height:260px;padding:0;}
+.sv-people-body{position:absolute;inset:0;overflow-y:auto;padding:18px 20px;}
+.sv-people .sr-person{padding:9px 0;}
+.sv-people .sr-person:last-of-type{border-bottom:none;}
+.prod-layout .prod-grid{align-content:stretch;}
+.prod-layout .ps-card{height:100%;}
+@media (max-width:980px){.sv-people{min-height:0;}.sv-people-body{position:static;max-height:420px;}}

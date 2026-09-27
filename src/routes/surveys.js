@@ -131,7 +131,19 @@ router.get("/:id/results", authRequired, requireRole(...STAFF), async (req, res)
      FROM survey_responses sr JOIN users u ON u.id=sr.user_id WHERE sr.survey_id=$1${scope} ORDER BY sr.created_at DESC`,
     params
   );
-  res.json({ survey, summary, total: all.rowCount, responses: responses.rows });
+  // Кто из аудитории анкеты ещё не ответил — куратору, чтобы было кому напомнить
+  // (в его скоупе, как и поимённый список).
+  const pParams = [survey.id];
+  let pWhere = "u.role='student' AND NOT EXISTS (SELECT 1 FROM survey_responses sr WHERE sr.survey_id=$1 AND sr.user_id=u.id)";
+  if (survey.course_id) { pParams.push(survey.course_id); pWhere += ` AND EXISTS (SELECT 1 FROM progress p WHERE p.user_id=u.id AND p.course_id=$${pParams.length})`; }
+  if (req.user.role === "curator") { pParams.push(req.user.id); pWhere += ` AND (u.assigned_curator_id=$${pParams.length} OR u.assigned_curator_id IS NULL)`; }
+  const pending = await pool.query(
+    `SELECT u.id AS student_id, u.name AS student_name,
+       CASE WHEN u.avatar_file IS NULL THEN NULL ELSE 'api/auth/avatar/' || u.avatar_file END AS avatar_url
+     FROM users u WHERE ${pWhere} ORDER BY u.name`,
+    pParams
+  );
+  res.json({ survey, summary, total: all.rowCount, responses: responses.rows, pending: pending.rows });
 });
 
 /* ---------- Врач ---------- */

@@ -5041,7 +5041,7 @@ function renderSurveysTab(){
           '<button class="btn btn-sm btn-ghost" data-action="survey-toggle" data-id="'+s.id+'">'+(s.active?'Закрыть':'Открыть снова')+'</button>' +
           '<button class="btn btn-sm btn-ghost prod-del" data-action="survey-delete" data-id="'+s.id+'" title="Удалить">'+icon("trash","ic-sm")+'</button></div>' : '') + '</div>';
   });
-  html += '</div><div class="card co-card sv-results">'+renderSurveyResultsBody()+'</div></div>';
+  html += renderSurveyPeople() + '</div><div class="card co-card sv-results">'+renderSurveyResultsBody()+'</div></div>';
   return el(html + '</div>');
 }
 
@@ -5108,12 +5108,22 @@ function renderSurveyResultsBody(){
       }
       body += '</div>';
     });
-    body += '<b class="co-card-title" style="margin:24px 0 8px;">Кто ответил</b>';
-    R.responses.forEach(function(r){
-      body += '<div class="sr-person" data-action="open-student" data-id="'+r.student_id+'">'+userAvatar({ id:r.student_id, name:r.student_name, avatar_url:r.avatar_url })+'<div class="ow-t"><b>'+escapeHtml(r.student_name)+'</b><span>'+timeSince(r.created_at)+'</span></div><em>Профиль →</em></div>';
-    });
   }
   return body;
+}
+// Левая колонка под списком анкет: кто ответил и кто ещё нет. Карточка
+// тянется до низа результатов справа, список внутри прокручивается.
+function renderSurveyPeople(){
+  var R = toolsState.surveys.results;
+  if(!R) return '';
+  var person = function(r, sub){ return '<div class="sr-person" data-action="open-student" data-id="'+r.student_id+'">'+userAvatar({ id:r.student_id, name:r.student_name, avatar_url:r.avatar_url })+'<div class="ow-t"><b>'+escapeHtml(r.student_name)+'</b><span>'+sub+'</span></div><em>→</em></div>'; };
+  var pend = R.pending || [];
+  var h = '<div class="card co-card sv-people"><div class="sv-people-body">' +
+    '<div class="co-head"><b>Кто ответил</b><span class="courses-count">'+R.responses.length+'</span></div>';
+  h += R.responses.length ? R.responses.map(function(r){ return person(r, timeSince(r.created_at)); }).join('') : '<p class="set-muted" style="margin:8px 0 0;">Пока никто.</p>';
+  h += '<div class="co-head" style="margin-top:18px;"><b>Ещё не ответили</b><span class="courses-count">'+pend.length+'</span></div>';
+  h += pend.length ? pend.map(function(r){ return person(r, "анкета ждёт на главной"); }).join('') : '<p class="set-muted" style="margin:8px 0 0;">Ответили все.</p>';
+  return h + '</div></div>';
 }
 
 /* ---------- Врач: задание в уроке, анкеты, оплаты ---------- */

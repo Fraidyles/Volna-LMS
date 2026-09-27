@@ -235,6 +235,10 @@ describe("Анкеты и опросы", () => {
     expect(res.body.summary[0].counts).toEqual([0, 1, 0]);
     expect(res.body.summary[2].avg).toBe(4);
     expect(res.body.responses[0].student_name).toBe(student.name);
+    expect(res.body.pending.some((x) => x.student_id === student.id)).toBe(false);
+    const notYet = await createUser({ courseId: course.courseId });
+    const res2 = await api("get", `/api/surveys/${s.id}/results`, ac);
+    expect(res2.body.pending.some((x) => x.student_id === notYet.id)).toBe(true);
 
     const feed = await api("get", "/api/assignments/feed", ac).query({ type: "survey" });
     const item = feed.body.items.find((i) => i.survey_id === s.id);
