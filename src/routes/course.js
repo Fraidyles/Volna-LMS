@@ -350,7 +350,30 @@ router.get("/protocols", authRequired, requireRole("student"), async (req, res) 
   if (!progressRow.rowCount) return res.status(404).json({ error: "no_progress" });
   const completedLessons = progressRow.rows[0].completed_lessons || [];
 
-  if (!completedLessons.length) return res.json({ forYou: [], additional: [] });
+  // Для страницы коллекции: сколько протоколов всего привязано к урокам курса,
+  // из какого урока открывается каждый и сколько откроет следующий урок.
+  const courseMap = await pool.query(
+    `SELECT lp.protocol_id, l.id AS lesson_id, l.idx, l.title FROM lesson_protocols lp
+     JOIN lessons l ON l.id = lp.lesson_id WHERE l.course_id = $1 ORDER BY l.idx`,
+    [courseId]
+  );
+  const firstLesson = {};
+  courseMap.rows.forEach((r) => { if (!firstLesson[r.protocol_id]) firstLesson[r.protocol_id] = r; });
+  const totalInCourse = Object.keys(firstLesson).length;
+  const doneSet = new Set(completedLessons);
+  const nextLesson = courseMap.rows.length
+    ? (await pool.query("SELECT id, idx, title FROM lessons WHERE course_id=$1 ORDER BY idx", [courseId])).rows.find((l) => !doneSet.has(l.id))
+    : null;
+  const unlockedIds = new Set(courseMap.rows.filter((r) => doneSet.has(r.lesson_id)).map((r) => r.protocol_id));
+  const nextUnlocks = nextLesson
+    ? new Set(courseMap.rows.filter((r) => r.lesson_id === nextLesson.id && !unlockedIds.has(r.protocol_id)).map((r) => r.protocol_id)).size
+    : 0;
+  const meta = {
+    totalInCourse,
+    nextLesson: nextLesson && nextUnlocks ? { idx: nextLesson.idx, title: nextLesson.title, unlocks: nextUnlocks } : null
+  };
+
+  if (!completedLessons.length) return res.json(Object.assign({ forYou: [], additional: [] }, meta));
 
   const mySpecs = await pool.query("SELECT specialization_id FROM user_specializations WHERE user_id=$1", [req.user.id]);
   const interests = await pool.query(
@@ -365,7 +388,7 @@ router.get("/protocols", authRequired, requireRole("student"), async (req, res) 
      WHERE lp.lesson_id = ANY($1::text[])`,
     [completedLessons]
   );
-  if (!protocolRows.rowCount) return res.json({ forYou: [], additional: [] });
+  if (!protocolRows.rowCount) return res.json(Object.assign({ forYou: [], additional: [] }, meta));
 
   const ids = protocolRows.rows.map((p) => p.id);
   const guides = await pool.query(
@@ -401,11 +424,13 @@ router.get("/protocols", authRequired, requireRole("student"), async (req, res) 
   const additional = [];
   protocolRows.rows.forEach((p) => {
     const protoGuides = guidesByProtocol[p.id] || [];
-    const out = { id: p.id, title: p.title, summary: p.summary, guides: protoGuides };
+    const src = firstLesson[p.id];
+    const out = { id: p.id, title: p.title, summary: p.summary, guides: protoGuides,
+      lessonIdx: src ? src.idx : null, lessonTitle: src ? src.title : null };
     const matches = protoGuides.some((g) => relevantIds.has(g.specializationId));
     (matches ? forYou : additional).push(out);
   });
-  res.json({ forYou, additional });
+  res.json(Object.assign({ forYou, additional }, meta));
 });
 
 // «Мои материалы»: врач сохраняет урок к себе для быстрого доступа отдельно от

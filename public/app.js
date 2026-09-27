@@ -62,6 +62,7 @@ var mySessionsList = [];
 var mySessionsLoaded = false, mySessionsLoading = false;
 var studentProtocols = { forYou:[], additional:[] };
 var protocolExpanded = {}; // id протокола -> открыта ли карточка гайда
+var protocolReader = { id:null, mine:false }; // окно чтения гайда на странице протоколов
 var protocolGuideTab = {}; // id протокола -> id специализации выбранного гайда (переключатель "показать другие")
 var notifPollTimer = null;
 var courseVisibility = {}; // {lessonId|"quiz": [uid,...]} — для вкладки «Материалы» у персонала
@@ -374,7 +375,7 @@ async function loadNotifications(){
 // каждом входе (в отличие от чатов/уведомлений, тут нет бейджа, который нужно
 // держать актуальным постоянно).
 async function loadProtocols(){
-  try{ var d = await api("/course/protocols?courseId="+encodeURIComponent(activeCourseId)); studentProtocols = { forYou:d.forYou, additional:d.additional }; }
+  try{ var d = await api("/course/protocols?courseId="+encodeURIComponent(activeCourseId)); studentProtocols = { forYou:d.forYou, additional:d.additional, totalInCourse:d.totalInCourse||0, nextLesson:d.nextLesson||null }; }
   catch(e){ studentProtocols = { forYou:[], additional:[] }; }
   studentState.protocolsLoaded = true;
 }
@@ -830,6 +831,9 @@ function render(){
   // чтобы его оверлей всегда оказывался сверху и не перекрывался открывшей его модалкой.
   if(quizEditor.open && view==="staff"){
     app.appendChild(renderQuizEditorModal());
+  }
+  if(protocolReader.id && view==="student" && studentState.tab==="protocols"){
+    app.appendChild(renderProtocolReaderModal());
   }
   if(unlockCelebration.open && view==="student"){
     app.appendChild(renderUnlockCelebrationModal());
@@ -2331,8 +2335,8 @@ function renderPointTiersCta(points){
 // (каждый пройденный урок может открыть свои протоколы — см. lesson_protocols).
 // Разбивка на «по вашей специализации» / «дополнительные» приходит уже готовой
 // с бэкенда (GET /course/protocols), тут только рендер и переключение гайдов.
-function renderProtocolCard(p, isForYou){
-  var expanded = !!protocolExpanded[p.id];
+function renderProtocolCard(p, isForYou, readerMode){
+  var expanded = readerMode || !!protocolExpanded[p.id];
   var myIds = (me.specializationIds||[]).concat(me.interestIds||[]);
   var defaultGuide = null;
   if(isForYou){
@@ -2341,7 +2345,7 @@ function renderProtocolCard(p, isForYou){
   var activeSpecId = protocolGuideTab[p.id] || (defaultGuide ? defaultGuide.specializationId : (p.guides[0] ? p.guides[0].specializationId : null));
   var activeGuide = p.guides.find(function(g){ return g.specializationId===activeSpecId; });
 
-  var html = '<div class="card" style="padding:18px 20px;margin-bottom:12px;">' +
+  var html = readerMode ? '<div>' + (p.summary ? '<div class="prose proto-reader-sum">'+renderPlainToProse(p.summary)+'</div>' : '') : '<div class="card" style="padding:18px 20px;margin-bottom:12px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;cursor:pointer;" data-action="toggle-protocol" data-id="'+p.id+'">' +
       '<div><b style="font-size:14.5px;display:block;">'+escapeHtml(p.title)+'</b>' +
         (p.summary ? '<p style="font-size:13px;color:var(--muted);margin:4px 0 0;">'+renderPlainToProse(p.summary)+'</p>' : '') +
@@ -2377,29 +2381,54 @@ function renderProtocolCard(p, isForYou){
 }
 
 function renderProtocolsPage(){
-  var html = '<div style="margin-top:6px;max-width:760px;">' +
-    '<div class="card" style="padding:18px 20px;margin-bottom:16px;background:var(--primary-tint);border-color:transparent;">' +
-      '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Ваша коллекция протоколов</b>' +
-      '<p style="font-size:13px;color:var(--muted);margin:0;">После каждого пройденного урока сюда добавляются протоколы, о которых говорил спикер — с готовым гайдом по внедрению именно в рамках вашей специализации.</p>' +
-    '</div>';
-
+  // Коллекция: шапка с прогрессом сбора (открыто X из Y, что откроет следующий
+  // урок), ниже — плитки протоколов; гайд открывается в окне для чтения.
   var forYou = studentProtocols.forYou||[], additional = studentProtocols.additional||[];
-  if(!forYou.length && !additional.length){
-    html += '<div class="empty-state" style="padding:40px 10px;">'+icon("doctor","ic-lg")+'<p style="margin-top:10px;">Пока пусто — пройдите первый урок, чтобы начать собирать протоколы.</p></div>';
+  var opened = forYou.length + additional.length, total = Math.max(studentProtocols.totalInCourse||0, opened);
+  var pct = total ? Math.round(opened/total*100) : 0;
+  var nl = studentProtocols.nextLesson;
+  var html = '<div class="page-wide"><div class="card proto-hero">' +
+    '<div class="proto-hero-glow aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
+    '<div class="proto-hero-main"><span class="profile-kicker">Ваша коллекция</span><h1>Протоколы</h1>' +
+      '<p>После каждого пройденного урока сюда добавляются протоколы, о которых говорил спикер, — с готовым гайдом применения под вашу специализацию.</p>' +
+      (nl ? '<div class="proto-next">'+icon("lock","ic-sm")+'Урок '+(nl.idx+1)+' «'+escapeHtml(nl.title)+'» откроет ещё <b>'+nl.unlocks+'</b> '+ruPluralClient(nl.unlocks,"протокол","протокола","протоколов")+'</div>' : '') +
+    '</div>' +
+    '<div class="proto-count"><div class="progress-ring" data-anim="ring" style="--ring-p:'+pct+'%;"><div class="progress-ring-inner"><span data-count="'+opened+'">'+opened+'</span></div></div>' +
+      '<span>открыто из '+total+'</span></div>' +
+  '</div>';
+  if(!opened){
+    html += '<div class="card proto-empty">'+icon("doctor","ic-lg")+'<b>Пока пусто</b><p>Пройдите первый урок — и здесь появятся первые протоколы.</p>' +
+      '<button class="btn btn-primary" data-action="open-course">Перейти к курсу</button></div></div>';
     return el(html);
   }
-
-  if(forYou.length){
-    html += '<b style="font-size:13.5px;display:block;margin:6px 0 10px;">По вашей специализации</b>';
-    forYou.forEach(function(p){ html += renderProtocolCard(p, true); });
+  function tiles(list, isForYou){
+    var h = '<div class="proto-grid">';
+    list.forEach(function(p, i){
+      var files = p.guides.reduce(function(n,g){ return n + (g.files||[]).length; }, 0);
+      h += '<div class="card proto-tile'+(isForYou?' mine':'')+'" data-action="open-protocol" data-id="'+p.id+'" data-mine="'+(isForYou?1:0)+'" style="animation-delay:'+(i*60)+'ms">' +
+        '<div class="proto-tile-top"><span class="proto-ic">'+icon("doctor")+'</span>'+(p.lessonIdx!=null?'<span class="proto-src">из урока '+(p.lessonIdx+1)+'</span>':'')+'</div>' +
+        '<b class="proto-title">'+escapeHtml(p.title)+'</b>' +
+        (p.summary ? '<p class="proto-sum">'+escapeHtml(stripHtml(renderPlainToProse(p.summary)))+'</p>' : '') +
+        '<div class="proto-foot"><span>'+p.guides.length+' '+ruPluralClient(p.guides.length,"гайд","гайда","гайдов")+(files?' · '+files+' '+ruPluralClient(files,"файл","файла","файлов"):'')+'</span><span class="proto-open">Открыть гайд →</span></div>' +
+      '</div>';
+    });
+    return h + '</div>';
   }
-  if(additional.length){
-    html += '<b style="font-size:13.5px;display:block;margin:18px 0 10px;color:var(--muted);">Дополнительные протоколы</b>' +
-      '<p class="hint" style="margin:-4px 0 10px;">Тоже из пройденных уроков, но не по вашему профилю — можно посмотреть гайд для любой специализации.</p>';
-    additional.forEach(function(p){ html += renderProtocolCard(p, false); });
-  }
+  if(forYou.length) html += '<div class="courses-head" style="margin-top:22px;"><b class="page-h" style="margin:0;">По вашей специализации</b><span class="courses-count">'+forYou.length+'</span></div>' + tiles(forYou, true);
+  if(additional.length) html += '<div class="courses-head" style="margin-top:22px;"><b class="page-h" style="margin:0;">Дополнительные</b><span class="courses-count">не по вашему профилю — гайд можно открыть для любой специализации</span></div>' + tiles(additional, false);
   html += '</div>';
   return el(html);
+}
+
+// Окно чтения гайда протокола (по центру экрана).
+function renderProtocolReaderModal(){
+  var all = (studentProtocols.forYou||[]).concat(studentProtocols.additional||[]);
+  var p = all.find(function(x){ return x.id===protocolReader.id; });
+  if(!p) return el('<div></div>');
+  var inner = renderProtocolCard(p, protocolReader.mine, true);
+  return el('<div class="overlay overlay-center" data-action="overlay-close-protocol-reader"><div class="drawer modal proto-reader" data-stop="1">' +
+    '<div class="drawer-head"><div><span class="profile-kicker">Протокол'+(p.lessonIdx!=null?' · из урока '+(p.lessonIdx+1):'')+'</span><b style="font-size:17px;display:block;margin-top:4px;">'+escapeHtml(p.title)+'</b></div>' +
+    '<button class="btn btn-ghost btn-sm" data-action="close-protocol-reader">Закрыть ✕</button></div><div class="drawer-body">'+inner+'</div></div></div>');
 }
 
 function renderMyProgressPage(){
@@ -4457,6 +4486,8 @@ function wireEvents(root){
     if(action==="go-register"){ view="register"; registerDraft={name:"",email:"",phone:"",password:"",staffInviteCode:"",specializationIds:[],interestIds:[]}; specPickerOpen=null; render(); return; }
     if(action==="go-login"){ view="login"; render(); return; }
     if(action==="logout"){ stopNotificationPolling(); stopHeartbeat(); sendOfflineBeacon(); await api("/auth/logout", { method:"POST" }); me=null; course=null; view="login"; mySessionsList=[]; mySessionsLoaded=false; studentProtocols={forYou:[],additional:[]}; protocolExpanded={}; protocolGuideTab={}; render(); return; }
+    if(action==="open-protocol"){ protocolReader = { id:t.getAttribute("data-id"), mine:t.getAttribute("data-mine")==="1" }; render(); return; }
+    if(action==="close-protocol-reader" || (action==="overlay-close-protocol-reader" && !e.target.closest("[data-stop]"))){ protocolReader.id=null; render(); return; }
     if(action==="pick-avatar"){ var fi=document.getElementById("avatarFileInput"); if(fi) fi.click(); return; }
     if(action==="remove-avatar"){
       askConfirm({ title:"Убрать фото?", body:"Вы уверены, что хотите убрать фото профиля? Вместо него будут показаны инициалы.", confirmLabel:"Убрать фото",
@@ -6082,6 +6113,7 @@ document.addEventListener("keydown", function(e){
   if(videoEditor.open){ videoEditor.open=false; render(); return; }
   if(lessonEditor.open){ lessonEditor.open=false; render(); return; }
   if(tempPasswordResult){ tempPasswordResult=null; render(); return; }
+  if(protocolReader.id){ protocolReader.id=null; render(); return; }
   if(telegramModal.open){ telegramModal.open=false; render(); return; }
   if(profileEditor.open){ profileEditor.open=false; render(); return; }
   if(changePasswordOpen){ changePasswordOpen=false; render(); return; }
