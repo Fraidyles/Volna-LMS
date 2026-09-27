@@ -1,5 +1,6 @@
 const express = require("express");
 const crypto = require("crypto");
+const { validateQuestion, publicQuestion, gradeAll } = require("../quiz");
 const fs = require("fs");
 const path = require("path");
 const multer = require("multer");
@@ -188,29 +189,29 @@ router.get("/content/:courseId", authRequired, requireRole("student"), async (re
     [courseId]
   );
   const quiz = await pool.query(
-    "SELECT id, idx, question, options FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL ORDER BY idx",
+    "SELECT id, idx, question, options, qtype, payload FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL ORDER BY idx",
     [courseId]
   );
   // Поурочные тесты — без правильных ответов, сгруппированы по lesson_id, чтобы
   // фронтенду не пришлось делать отдельный запрос на каждый урок.
   const lessonQuizRows = await pool.query(
-    "SELECT id, lesson_id, idx, question, options FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NOT NULL ORDER BY idx",
+    "SELECT id, lesson_id, idx, question, options, qtype, payload FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NOT NULL ORDER BY idx",
     [courseId]
   );
   const lessonQuizzes = {};
   lessonQuizRows.rows.forEach((q) => {
     if (!lessonQuizzes[q.lesson_id]) lessonQuizzes[q.lesson_id] = [];
-    lessonQuizzes[q.lesson_id].push({ id: q.id, question: q.question, options: q.options });
+    lessonQuizzes[q.lesson_id].push(publicQuestion(q));
   });
   // Тесты по модулям — та же идея, сгруппированы по module_id.
   const moduleQuizRows = await pool.query(
-    "SELECT id, module_id, idx, question, options FROM quiz_questions WHERE course_id=$1 AND module_id IS NOT NULL ORDER BY idx",
+    "SELECT id, module_id, idx, question, options, qtype, payload FROM quiz_questions WHERE course_id=$1 AND module_id IS NOT NULL ORDER BY idx",
     [courseId]
   );
   const moduleQuizzes = {};
   moduleQuizRows.rows.forEach((q) => {
     if (!moduleQuizzes[q.module_id]) moduleQuizzes[q.module_id] = [];
-    moduleQuizzes[q.module_id].push({ id: q.id, question: q.question, options: q.options });
+    moduleQuizzes[q.module_id].push(publicQuestion(q));
   });
   const modulesRows = await pool.query("SELECT id, idx, title FROM modules WHERE course_id=$1 ORDER BY idx", [courseId]);
   const moduleFeedbackGiven = await pool.query(
@@ -273,7 +274,7 @@ router.get("/content/:courseId", authRequired, requireRole("student"), async (re
     moduleFeedbackGiven: moduleFeedbackGiven.rows.map((r) => r.module_id),
     bookmarkedLessonIds: bookmarks.rows.map((r) => r.lesson_id),
     assignments,
-    quiz: quiz.rows.map((q) => ({ id: q.id, question: q.question, options: q.options })),
+    quiz: quiz.rows.map(publicQuestion),
     quizHiddenForMe: (hiddenFor.quiz || []).indexOf(req.user.id) !== -1,
     progress: pr,
     locked: computeLocked(pr),
@@ -359,13 +360,10 @@ router.post("/quiz-submit", authRequired, requireRole("student"), async (req, re
     return res.status(409).json({ error: "assignments_pending", message: "Сначала куратор должен принять ответы на обязательные задания: " + stops.map((l) => "«" + l.title + "»").join(", "), lessons: stops });
   }
 
-  const questions = await pool.query("SELECT id, correct FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL", [pr.course_id]);
+  const questions = await pool.query("SELECT id, options, correct, qtype, payload FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL", [pr.course_id]);
 
-  let correctCount = 0;
-  questions.rows.forEach((q) => {
-    if (answers[q.id] === q.correct) correctCount++;
-  });
-  const score = questions.rowCount ? Math.round((correctCount / questions.rowCount) * 100) : 0;
+  const graded = gradeAll(questions.rows, answers);
+  const score = graded.score;
   const completed = score >= 60;
   const certificateStatus =
     completed && pr.certificate_status !== "issued" ? "pending" : pr.certificate_status;
@@ -373,10 +371,10 @@ router.post("/quiz-submit", authRequired, requireRole("student"), async (req, re
   const streak = nextStreak(pr);
   await pool.query(
     `UPDATE progress SET quiz_answers=$1, quiz_score=$2, completed=$3, certificate_status=$4, last_active_at=now(),
-     current_streak=$5, longest_streak=$6, last_streak_date=$7
+     current_streak=$5, longest_streak=$6, last_streak_date=$7, quiz_results=$10
      WHERE user_id=$8 AND course_id=$9`,
     [JSON.stringify(answers), score, completed, certificateStatus,
-      streak.currentStreak, streak.longestStreak, streak.lastStreakDate, req.user.id, pr.course_id]
+      streak.currentStreak, streak.longestStreak, streak.lastStreakDate, req.user.id, pr.course_id, JSON.stringify(graded.results)]
   );
 
   res.json({ score, completed, certificateStatus, gamification: { currentStreak: streak.currentStreak, longestStreak: streak.longestStreak } });
@@ -1002,7 +1000,7 @@ router.get("/quiz-admin", authRequired, requireRole("admin", "super_admin"), asy
   const courseId = req.query.courseId;
   if (!courseId) return res.json({ quiz: [] });
   const quiz = await pool.query(
-    "SELECT id, idx, question, options, correct FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL ORDER BY idx",
+    "SELECT id, idx, question, options, correct, qtype, payload FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL ORDER BY idx",
     [courseId]
   );
   res.json({ quiz: quiz.rows });
@@ -1030,46 +1028,36 @@ router.put("/quiz-admin/reorder", authRequired, requireRole("admin", "super_admi
 });
 
 router.put("/quiz-admin/:id", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
-  const { question, options, correct } = req.body || {};
-  if (!question || !question.trim() || !Array.isArray(options) || options.length < 2) {
-    return res.status(400).json({ error: "invalid_input", message: "Заполните вопрос и минимум 2 варианта ответа" });
-  }
-  const correctIdx = parseInt(correct, 10);
-  if (isNaN(correctIdx) || correctIdx < 0 || correctIdx >= options.length) {
-    return res.status(400).json({ error: "invalid_input", message: "Укажите корректный правильный вариант" });
-  }
-  const before = await pool.query("SELECT question, options, correct FROM quiz_questions WHERE id=$1", [req.params.id]);
+  const v = validateQuestion(req.body);
+  if (v.error) return res.status(400).json({ error: "invalid_input", message: v.error });
+  const before = await pool.query("SELECT question, options, correct, qtype, payload FROM quiz_questions WHERE id=$1", [req.params.id]);
   if (!before.rowCount) return res.status(404).json({ error: "not_found" });
   const result = await pool.query(
-    "UPDATE quiz_questions SET question=$1, options=$2, correct=$3 WHERE id=$4 RETURNING id",
-    [question.trim(), JSON.stringify(options), correctIdx, req.params.id]
+    "UPDATE quiz_questions SET question=$1, options=$2, correct=$3, qtype=$4, payload=$5 WHERE id=$6 RETURNING id",
+    [v.question, JSON.stringify(v.options), v.correct, v.qtype, JSON.stringify(v.payload), req.params.id]
   );
   if (!result.rowCount) return res.status(404).json({ error: "not_found" });
-  await logAction(req.user, "content.quiz_edited", "quiz_question", req.params.id, question.trim(), {
-    before: { question: before.rows[0].question, options: before.rows[0].options, correct: before.rows[0].correct }
+  const b = before.rows[0];
+  await logAction(req.user, "content.quiz_edited", "quiz_question", req.params.id, v.question, {
+    before: { question: b.question, options: b.options, correct: b.correct, qtype: b.qtype, payload: b.payload }
   }, true);
   res.json({ ok: true });
 });
 
 router.post("/quiz-admin", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
-  const { question, options, correct, courseId } = req.body || {};
-  if (!question || !question.trim() || !Array.isArray(options) || options.length < 2) {
-    return res.status(400).json({ error: "invalid_input", message: "Заполните вопрос и минимум 2 варианта ответа" });
-  }
-  const correctIdx = parseInt(correct, 10);
-  if (isNaN(correctIdx) || correctIdx < 0 || correctIdx >= options.length) {
-    return res.status(400).json({ error: "invalid_input", message: "Укажите корректный правильный вариант" });
-  }
+  const courseId = (req.body || {}).courseId;
+  const v = validateQuestion(req.body);
+  if (v.error) return res.status(400).json({ error: "invalid_input", message: v.error });
   const course = await pool.query("SELECT id FROM courses WHERE id=$1", [courseId]);
   if (!course.rowCount) return res.status(404).json({ error: "no_course" });
 
   const maxIdx = await pool.query("SELECT COALESCE(MAX(idx), -1) AS m FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL", [courseId]);
   const id = crypto.randomUUID();
   await pool.query(
-    "INSERT INTO quiz_questions (id, course_id, idx, question, options, correct) VALUES ($1,$2,$3,$4,$5,$6)",
-    [id, courseId, maxIdx.rows[0].m + 1, question.trim(), JSON.stringify(options), correctIdx]
+    "INSERT INTO quiz_questions (id, course_id, idx, question, options, correct, qtype, payload) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+    [id, courseId, maxIdx.rows[0].m + 1, v.question, JSON.stringify(v.options), v.correct, v.qtype, JSON.stringify(v.payload)]
   );
-  await logAction(req.user, "content.quiz_created", "quiz_question", id, question.trim(), {}, true);
+  await logAction(req.user, "content.quiz_created", "quiz_question", id, v.question, {}, true);
   res.json({ ok: true, id });
 });
 
@@ -1091,7 +1079,7 @@ router.delete("/quiz-admin/:id", authRequired, requireRole("admin", "super_admin
   }
   await pool.query("DELETE FROM quiz_questions WHERE id=$1", [req.params.id]);
   await logAction(req.user, "content.quiz_deleted", "quiz_question", q.id, q.question, {
-    before: { courseId: q.course_id, idx: q.idx, question: q.question, options: q.options, correct: q.correct, lessonId: q.lesson_id, moduleId: q.module_id }
+    before: { courseId: q.course_id, idx: q.idx, question: q.question, options: q.options, correct: q.correct, qtype: q.qtype, payload: q.payload, lessonId: q.lesson_id, moduleId: q.module_id }
   }, true);
   res.json({ ok: true });
 });
@@ -1103,31 +1091,25 @@ router.get("/lessons/:id/quiz-admin", authRequired, requireRole("admin", "super_
   const lesson = await pool.query("SELECT id FROM lessons WHERE id=$1", [req.params.id]);
   if (!lesson.rowCount) return res.status(404).json({ error: "not_found" });
   const quiz = await pool.query(
-    "SELECT id, idx, question, options, correct FROM quiz_questions WHERE lesson_id=$1 ORDER BY idx",
+    "SELECT id, idx, question, options, correct, qtype, payload FROM quiz_questions WHERE lesson_id=$1 ORDER BY idx",
     [req.params.id]
   );
   res.json({ quiz: quiz.rows });
 });
 
 router.post("/lessons/:id/quiz-admin", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
-  const { question, options, correct } = req.body || {};
-  if (!question || !question.trim() || !Array.isArray(options) || options.length < 2) {
-    return res.status(400).json({ error: "invalid_input", message: "Заполните вопрос и минимум 2 варианта ответа" });
-  }
-  const correctIdx = parseInt(correct, 10);
-  if (isNaN(correctIdx) || correctIdx < 0 || correctIdx >= options.length) {
-    return res.status(400).json({ error: "invalid_input", message: "Укажите корректный правильный вариант" });
-  }
+  const v = validateQuestion(req.body);
+  if (v.error) return res.status(400).json({ error: "invalid_input", message: v.error });
   const lesson = await pool.query("SELECT id, course_id FROM lessons WHERE id=$1", [req.params.id]);
   if (!lesson.rowCount) return res.status(404).json({ error: "not_found" });
 
   const maxIdx = await pool.query("SELECT COALESCE(MAX(idx), -1) AS m FROM quiz_questions WHERE lesson_id=$1", [req.params.id]);
   const id = crypto.randomUUID();
   await pool.query(
-    "INSERT INTO quiz_questions (id, course_id, lesson_id, idx, question, options, correct) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-    [id, lesson.rows[0].course_id, req.params.id, maxIdx.rows[0].m + 1, question.trim(), JSON.stringify(options), correctIdx]
+    "INSERT INTO quiz_questions (id, course_id, lesson_id, idx, question, options, correct, qtype, payload) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+    [id, lesson.rows[0].course_id, req.params.id, maxIdx.rows[0].m + 1, v.question, JSON.stringify(v.options), v.correct, v.qtype, JSON.stringify(v.payload)]
   );
-  await logAction(req.user, "content.lesson_quiz_created", "quiz_question", id, question.trim(), { lessonId: req.params.id }, true);
+  await logAction(req.user, "content.lesson_quiz_created", "quiz_question", id, v.question, { lessonId: req.params.id }, true);
   res.json({ ok: true, id });
 });
 
@@ -1278,12 +1260,11 @@ router.post("/lessons/:id/quiz-submit", authRequired, requireRole("student"), as
     return res.status(403).json({ error: "content_drip_locked", message: "Этот урок ещё не открылся" });
   }
 
-  const questions = await pool.query("SELECT id, correct FROM quiz_questions WHERE lesson_id=$1", [lessonId]);
+  const questions = await pool.query("SELECT id, options, correct, qtype, payload FROM quiz_questions WHERE lesson_id=$1 ORDER BY idx", [lessonId]);
   if (!questions.rowCount) return res.status(404).json({ error: "no_quiz", message: "У этого урока нет теста" });
 
-  let correctCount = 0;
-  questions.rows.forEach((q) => { if (answers[q.id] === q.correct) correctCount++; });
-  const score = Math.round((correctCount / questions.rowCount) * 100);
+  const graded = gradeAll(questions.rows, answers);
+  const score = graded.score, correctCount = graded.correctCount;
 
   const scores = pr.lesson_quiz_scores || {};
   scores[lessonId] = score;
@@ -1302,7 +1283,7 @@ router.post("/lessons/:id/quiz-submit", authRequired, requireRole("student"), as
   // Поурочный тест — только для закрепления (на сертификат не влияет), поэтому
   // после отправки показываем разбор: какой ответ был верным. Итоговый тест курса
   // и тесты модулей правильные ответы не раскрывают.
-  const review = questions.rows.map((q) => ({ id: q.id, correct: q.correct, chosen: Number.isInteger(answers[q.id]) ? answers[q.id] : null }));
+  const review = graded.review;
   res.json({
     score, correctCount, total: questions.rowCount, review, completedLessons: list,
     gamification: { currentStreak: streak.currentStreak, longestStreak: streak.longestStreak, points }
@@ -1329,12 +1310,10 @@ router.post("/modules/:id/quiz-submit", authRequired, requireRole("student"), as
   const lock = computeLocked(pr);
   if (lock.locked) return res.status(403).json({ error: "access_locked", message: "Доступ к курсу ограничен" });
 
-  const questions = await pool.query("SELECT id, correct FROM quiz_questions WHERE module_id=$1", [req.params.id]);
+  const questions = await pool.query("SELECT id, options, correct, qtype, payload FROM quiz_questions WHERE module_id=$1", [req.params.id]);
   if (!questions.rowCount) return res.status(404).json({ error: "no_quiz", message: "У этого модуля нет теста" });
 
-  let correctCount = 0;
-  questions.rows.forEach((q) => { if (answers[q.id] === q.correct) correctCount++; });
-  const score = Math.round((correctCount / questions.rowCount) * 100);
+  const score = gradeAll(questions.rows, answers).score;
 
   const scores = pr.module_quiz_scores || {};
   scores[req.params.id] = score;
@@ -1458,31 +1437,25 @@ router.get("/modules/:id/quiz-admin", authRequired, requireRole("admin", "super_
   const module = await pool.query("SELECT id FROM modules WHERE id=$1", [req.params.id]);
   if (!module.rowCount) return res.status(404).json({ error: "not_found" });
   const quiz = await pool.query(
-    "SELECT id, idx, question, options, correct FROM quiz_questions WHERE module_id=$1 ORDER BY idx",
+    "SELECT id, idx, question, options, correct, qtype, payload FROM quiz_questions WHERE module_id=$1 ORDER BY idx",
     [req.params.id]
   );
   res.json({ quiz: quiz.rows });
 });
 
 router.post("/modules/:id/quiz-admin", authRequired, requireRole("admin", "super_admin"), async (req, res) => {
-  const { question, options, correct } = req.body || {};
-  if (!question || !question.trim() || !Array.isArray(options) || options.length < 2) {
-    return res.status(400).json({ error: "invalid_input", message: "Заполните вопрос и минимум 2 варианта ответа" });
-  }
-  const correctIdx = parseInt(correct, 10);
-  if (isNaN(correctIdx) || correctIdx < 0 || correctIdx >= options.length) {
-    return res.status(400).json({ error: "invalid_input", message: "Укажите корректный правильный вариант" });
-  }
+  const v = validateQuestion(req.body);
+  if (v.error) return res.status(400).json({ error: "invalid_input", message: v.error });
   const module = await pool.query("SELECT id, course_id FROM modules WHERE id=$1", [req.params.id]);
   if (!module.rowCount) return res.status(404).json({ error: "not_found" });
 
   const maxIdx = await pool.query("SELECT COALESCE(MAX(idx), -1) AS m FROM quiz_questions WHERE module_id=$1", [req.params.id]);
   const id = crypto.randomUUID();
   await pool.query(
-    "INSERT INTO quiz_questions (id, course_id, module_id, idx, question, options, correct) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-    [id, module.rows[0].course_id, req.params.id, maxIdx.rows[0].m + 1, question.trim(), JSON.stringify(options), correctIdx]
+    "INSERT INTO quiz_questions (id, course_id, module_id, idx, question, options, correct, qtype, payload) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+    [id, module.rows[0].course_id, req.params.id, maxIdx.rows[0].m + 1, v.question, JSON.stringify(v.options), v.correct, v.qtype, JSON.stringify(v.payload)]
   );
-  await logAction(req.user, "content.module_quiz_created", "quiz_question", id, question.trim(), { moduleId: req.params.id }, true);
+  await logAction(req.user, "content.module_quiz_created", "quiz_question", id, v.question, { moduleId: req.params.id }, true);
   res.json({ ok: true, id });
 });
 

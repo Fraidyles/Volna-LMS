@@ -13,6 +13,7 @@ const { buildDailyDigest } = require("../dailyDigest");
 const { getStaffInviteCode, TTL_MS } = require("../staffInviteCode");
 const { generateCertificatePdf } = require("../certificate");
 const { toCsv, parseCsvToObjects } = require("../csv");
+const { publicQuestion } = require("../quiz");
 const jwt = require("jsonwebtoken");
 const { COOKIE_OPTS } = require("./auth");
 
@@ -53,7 +54,7 @@ const STUDENT_FIELDS = `
   COALESCE((SELECT array_agg(us.specialization_id) FROM user_specializations us WHERE us.user_id = u.id), '{}') AS specialization_ids,
   p.course_id, p.completed_lessons, p.quiz_score, p.completed, p.certificate_status,
   p.certificate_issued_at, p.certificate_issued_by, p.requested_full_access,
-  p.access_expires_at, p.access_blocked, p.quiz_answers, p.last_seen_at, p.is_online
+  p.access_expires_at, p.access_blocked, p.quiz_answers, p.quiz_results, p.last_seen_at, p.is_online
 `;
 
 // "Онлайн" как в Telegram/VK: is_online — явный флаг (включается хартбитом,
@@ -715,24 +716,24 @@ router.get("/course-preview", authRequired, requireRole("curator", "admin", "sup
     [course.rows[0].id]
   );
   const quiz = await pool.query(
-    "SELECT id, idx, question, options FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL ORDER BY idx",
+    "SELECT id, idx, question, options, qtype, payload FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL ORDER BY idx",
     [course.rows[0].id]
   );
   const lessonQuizRows = await pool.query(
-    "SELECT id, lesson_id, question, options FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NOT NULL ORDER BY idx",
+    "SELECT id, lesson_id, question, options, qtype, payload FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NOT NULL ORDER BY idx",
     [course.rows[0].id]
   );
   const lessonQuizzes = {};
   lessonQuizRows.rows.forEach((q) => {
     if (!lessonQuizzes[q.lesson_id]) lessonQuizzes[q.lesson_id] = [];
-    lessonQuizzes[q.lesson_id].push({ id: q.id, question: q.question, options: q.options });
+    lessonQuizzes[q.lesson_id].push(publicQuestion(q));
   });
   res.json({
     course: course.rows[0],
     lessons: lessons.rows.map((l) => Object.assign({}, l, {
       hiddenForMe: false, videoUrl: l.video_url, videoTimecodes: l.video_timecodes || [], quiz: lessonQuizzes[l.id] || []
     })),
-    quiz: quiz.rows.map((q) => ({ id: q.id, question: q.question, options: q.options })),
+    quiz: quiz.rows.map(publicQuestion),
     quizHiddenForMe: false,
     modules: [], // предпросмотр не собирает модули: гейт «тест + отзыв» тут не нужен
     moduleFeedbackGiven: [],
