@@ -7,7 +7,7 @@ const CACHE_NAME = "lms-shell-v2";
 // Относительные пути — резолвятся от собственного URL service worker'а (self.registration.scope),
 // а не от корня домена: так кэш работает и при монтировании платформы в подпапку (например /lms/),
 // не только при отдельном (под)домене.
-const SHELL_FILES = ["./", "app.js", "styles.css", "manifest.json"];
+const SHELL_FILES = ["./", "app.js", "styles.css", "manifest.json", "favicon.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
