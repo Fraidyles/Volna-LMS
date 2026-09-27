@@ -643,7 +643,7 @@ function runEntranceAnimations(){
 
 // Отклик карточек на курсор: координаты для подсветки рамки (.board-strip > .card).
 document.addEventListener("pointermove", function(e){
-  var c = e.target && e.target.closest && e.target.closest(".board-strip > .card");
+  var c = e.target && e.target.closest && e.target.closest(".card");
   if(!c) return;
   var r = c.getBoundingClientRect();
   c.style.setProperty("--mx", (e.clientX - r.left)+"px");
@@ -1957,7 +1957,7 @@ function renderStudentHome(){
     '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2);">' +
       '<span style="font-family:var(--sans);font-weight:800;font-size:18px;" data-count="'+(gam.points||0)+'">'+(gam.points||0)+'</span>' +
       '<span style="font-size:12px;color:var(--muted);"> / 1000 очков</span>' +
-      '<button class="btn btn-sm btn-ghost" style="display:block;margin-top:8px;padding:4px 0;" data-action="student-tab" data-tab="progress">Как получить скидку →</button>' +
+      '<button class="btn btn-sm btn-ghost" style="margin-top:10px;display:flex;width:max-content;" data-action="student-tab" data-tab="progress">Как получить скидку →</button>' +
     '</div>' +
   '</div>';
 
@@ -1968,7 +1968,7 @@ function renderStudentHome(){
   var homeReminders = upcomingEventReminders();
   var homeNotifItems = homeReminders.concat(notifState.items.filter(function(n){ return !n.read_at; }));
   html += '<div class="grid-2" style="margin-top:14px;">';
-  html += '<div class="card" style="padding:18px 20px;">' +
+  html += '<div class="card home-tile" style="padding:18px 20px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
       '<b style="font-size:14px;">Уведомления</b>' +
       (homeNotifItems.length ? '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="notifications">Все →</button>' : '') +
@@ -1981,7 +1981,7 @@ function renderStudentHome(){
     });
   }
   html += '</div>';
-  html += '<div class="card" style="padding:18px 20px;">' +
+  html += '<div class="card home-tile" style="padding:18px 20px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
       '<b style="font-size:14px;">Общение</b>' +
       '<button class="btn btn-sm btn-ghost" data-action="open-telegram-modal">Открыть →</button>' +
@@ -1990,8 +1990,10 @@ function renderStudentHome(){
   '</div></div>';
 
   if(me.referral_code){
-    var refLink = window.location.origin + "/?ref=" + me.referral_code;
-    html += '<div class="card" style="padding:18px;margin-top:14px;max-width:520px;">' +
+    // От адреса самой платформы, а не корня домена — иначе при установке в
+    // подпапку (/lms/) ссылка вела бы на главную основного сайта.
+    var refLink = window.location.origin + window.location.pathname.replace(/[^/]*$/, "") + "?ref=" + me.referral_code;
+    html += '<div class="card home-tile" style="padding:18px 20px;margin-top:14px;">' +
       '<b style="font-size:14px;display:block;margin-bottom:4px;">Пригласите коллегу</b>' +
       '<p style="font-size:12.5px;color:var(--muted);margin:0 0 12px;">Поделитесь ссылкой — когда коллега зарегистрируется по ней, мы это увидим.</p>' +
       '<div style="display:flex;gap:6px;">' +
@@ -3051,7 +3053,7 @@ function renderStaffHome(container){
 
   var reminders = upcomingEventReminders();
   var gridHtml = '<div class="grid-2" style="margin-top:20px;">';
-  gridHtml += '<div class="card" style="padding:18px 20px;">' +
+  gridHtml += '<div class="card home-tile" style="padding:18px 20px;">' +
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">' +
       '<div class="tile-icon" style="background:var(--primary-tint);color:var(--primary);">'+icon("bell")+'</div>' +
       '<b style="font-size:14px;">Уведомления</b>' +
@@ -3064,7 +3066,7 @@ function renderStaffHome(container){
     });
   }
   gridHtml += '</div>';
-  gridHtml += '<div class="card" style="padding:18px 20px;">' +
+  gridHtml += '<div class="card home-tile" style="padding:18px 20px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
       '<div style="display:flex;align-items:center;gap:10px;">' +
         '<div class="tile-icon" style="background:var(--primary-tint);color:var(--primary);">'+icon("message")+'</div>' +
@@ -3077,7 +3079,7 @@ function renderStaffHome(container){
   container.appendChild(el(gridHtml));
 
   var d = staffState.digest;
-  var digestHtml = '<div class="card" style="padding:18px 20px;margin-top:20px;max-width:640px;">' +
+  var digestHtml = '<div class="card home-tile" style="padding:18px 20px;margin-top:20px;">' +
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">' +
       '<div class="tile-icon" style="background:var(--status-done-tint);color:var(--status-done);">'+icon("chartbar")+'</div>' +
       '<b style="font-size:14px;">ИИ-ассистент — отчёт за вчера</b>' +

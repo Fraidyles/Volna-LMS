@@ -1629,3 +1629,27 @@ tr.ord-off td{opacity:.55;}
 /* Кнопка «Закрыть ✕» в шапке окна не сжимается и не ломается на две строки при длинном заголовке. */
 .drawer-head{gap:14px;}
 .drawer-head > .btn{flex-shrink:0;white-space:nowrap;}
+
+/* ===== Единый отклик карточек на курсор =====
+   Раньше подсветку получали только плитки верхнего ряда главной (.board-strip),
+   а соседние блоки оставались плоскими — разнобой. Теперь правило общее:
+   у любой информационной карточки рамка подсвечивается там, где курсор, изнутри —
+   мягкое пятно света. Без подсветки — только карточки, где работают руками:
+   с полями ввода (кроме только-для-чтения), таблицами и редактором — там
+   переливание мешало бы. Плитки главных экранов (.board-strip и .home-tile) ещё
+   и стеклянные и чуть приподнимаются. */
+.card:not(:has(input:not([readonly]):not([type=checkbox]):not([type=radio]), textarea, select, table, .wysiwyg-editor)):not(.proto-tile){position:relative;}
+.card:not(:has(input:not([readonly]):not([type=checkbox]):not([type=radio]), textarea, select, table, .wysiwyg-editor)):not(.proto-tile)::after{
+  content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;opacity:0;transition:opacity .35s ease;z-index:1;
+  background:radial-gradient(260px circle at var(--mx,50%) var(--my,50%),color-mix(in srgb,var(--primary) 85%,transparent),color-mix(in srgb,var(--teal) 55%,transparent) 45%,transparent 75%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+  mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0);}
+.card:not(:has(input:not([readonly]):not([type=checkbox]):not([type=radio]), textarea, select, table, .wysiwyg-editor)):not(.proto-tile)::before{
+  content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .35s ease;
+  background:radial-gradient(420px circle at var(--mx,50%) var(--my,50%),color-mix(in srgb,var(--primary) 9%,transparent),transparent 60%);}
+@media (hover:hover){
+  .card:not(:has(input:not([readonly]):not([type=checkbox]):not([type=radio]), textarea, select, table, .wysiwyg-editor)):not(.proto-tile):hover::after,
+  .card:not(:has(input:not([readonly]):not([type=checkbox]):not([type=radio]), textarea, select, table, .wysiwyg-editor)):not(.proto-tile):hover::before{opacity:1;}
+  .home-tile:hover{transform:translateY(-2px);}
+}
+.home-tile{background:var(--glass-bg);border:var(--glass-border);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));box-shadow:none;transition:transform .25s cubic-bezier(.16,1,.3,1);}
