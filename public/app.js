@@ -1196,7 +1196,7 @@ function renderLessonEditorModal(){
       } else {
         lessonEditor.history.forEach(function(h){
           body += '<div class="adm-row" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);">' +
-            '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(h.title)+'</b><span style="font-size:11.5px;color:var(--muted);">до '+fmtDate(h.edited_at)+' '+fmtTime(h.edited_at)+' · '+escapeHtml(h.edited_by||"")+'</span></div>' +
+            '<div style="flex:1;"><b style="font-size:14px;display:block;">'+escapeHtml(h.title)+'</b><span style="font-size:12px;color:var(--muted);">до '+fmtDate(h.edited_at)+' '+fmtTime(h.edited_at)+' · '+escapeHtml(h.edited_by||"")+'</span></div>' +
             '<button class="btn btn-sm btn-ghost" data-action="restore-lesson-history" data-history-id="'+h.id+'">Восстановить</button></div>';
         });
       }
@@ -1279,7 +1279,7 @@ function renderVideoEditorModal(){
         '</div>' +
         (uploading ? '<div style="margin-top:8px;height:6px;border-radius:3px;background:var(--line-2);overflow:hidden;"><div id="videoUploadProgressFill" style="height:100%;width:100%;background:var(--primary);transform:scaleX('+(videoEditor.uploadProgress/100)+');transform-origin:left;transition:transform .15s;"></div></div>' : '') +
       '</div>' +
-      '<div style="display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--muted-2);font-size:12.5px;"><span style="flex:1;height:1px;background:var(--line-2);"></span>или<span style="flex:1;height:1px;background:var(--line-2);"></span></div>' +
+      '<div style="display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--muted-2);font-size:13px;"><span style="flex:1;height:1px;background:var(--line-2);"></span>или<span style="flex:1;height:1px;background:var(--line-2);"></span></div>' +
     '<form id="videoEditorForm">' +
       '<div class="field"><label>Ссылка на видео <span style="font-weight:400;color:var(--muted-2);">(прямой URL на mp4-файл)</span></label><input class="input" name="videoUrl" value="'+escapeHtml(videoEditor.videoUrl||"")+'" placeholder="https://…/video.mp4"></div>' +
       '<label>Главы по таймкодам <span style="font-weight:400;color:var(--muted-2);">(необязательно — под видео появится сводка по текущей главе)</span></label>';
@@ -1317,7 +1317,7 @@ function renderLessonQuizManagerDrawer(){
         '<div style="display:flex;flex-direction:column;gap:2px;">' +
           '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-lesson-quiz-question" data-idx="'+i+'" data-dir="up"'+(qIsFirst?' disabled':'')+' title="Выше">↑</button>' +
           '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-lesson-quiz-question" data-idx="'+i+'" data-dir="down"'+(qIsLast?' disabled':'')+' title="Ниже">↓</button></div>' +
-        '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+(i+1)+'. '+escapeHtml(q.question)+'</b><span style="font-size:12px;color:var(--muted);">'+q.options.length+' варианта, правильный: «'+escapeHtml(q.options[q.correct]||"")+'»</span></div>' +
+        '<div style="flex:1;"><b style="font-size:14px;display:block;">'+(i+1)+'. '+escapeHtml(q.question)+'</b><span style="font-size:12px;color:var(--muted);">'+q.options.length+' варианта, правильный: «'+escapeHtml(q.options[q.correct]||"")+'»</span></div>' +
         '<button class="btn btn-sm btn-ghost" data-action="open-lesson-quiz-editor" data-id="'+q.id+'">Редактировать</button>' +
         '<button class="btn btn-sm btn-ghost" data-action="delete-quiz-question" data-id="'+q.id+'" title="Удалить вопрос">'+icon("trash","ic-sm")+'</button></div>';
     });
@@ -1340,7 +1340,7 @@ function renderModuleQuizManagerDrawer(){
         '<div style="display:flex;flex-direction:column;gap:2px;">' +
           '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-module-quiz-question" data-idx="'+i+'" data-dir="up"'+(qIsFirst?' disabled':'')+' title="Выше">↑</button>' +
           '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-module-quiz-question" data-idx="'+i+'" data-dir="down"'+(qIsLast?' disabled':'')+' title="Ниже">↓</button></div>' +
-        '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+(i+1)+'. '+escapeHtml(q.question)+'</b><span style="font-size:12px;color:var(--muted);">'+q.options.length+' варианта, правильный: «'+escapeHtml(q.options[q.correct]||"")+'»</span></div>' +
+        '<div style="flex:1;"><b style="font-size:14px;display:block;">'+(i+1)+'. '+escapeHtml(q.question)+'</b><span style="font-size:12px;color:var(--muted);">'+q.options.length+' варианта, правильный: «'+escapeHtml(q.options[q.correct]||"")+'»</span></div>' +
         '<button class="btn btn-sm btn-ghost" data-action="open-module-quiz-editor" data-id="'+q.id+'">Редактировать</button>' +
         '<button class="btn btn-sm btn-ghost" data-action="delete-quiz-question" data-id="'+q.id+'" title="Удалить вопрос">'+icon("trash","ic-sm")+'</button></div>';
     });
@@ -1364,7 +1364,7 @@ function renderModuleFeedbackViewerDrawer(){
       body += '<div style="padding:10px 0;border-bottom:1px solid var(--line-2);">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
           '<b style="font-size:13px;">'+escapeHtml(f.userName)+'</b>' +
-          '<span style="font-size:12.5px;color:var(--status-attention);">'+'★'.repeat(f.rating)+'<span style="color:var(--line-2);">'+'★'.repeat(5-f.rating)+'</span></span>' +
+          '<span style="font-size:13px;color:var(--status-attention);">'+'★'.repeat(f.rating)+'<span style="color:var(--line-2);">'+'★'.repeat(5-f.rating)+'</span></span>' +
         '</div>' +
         (f.comment ? '<p style="font-size:13px;margin:0;color:var(--muted);">'+escapeHtml(f.comment)+'</p>' : '') +
       '</div>';
@@ -1377,7 +1377,7 @@ function renderModuleFeedbackViewerDrawer(){
 function renderTempPasswordModal(){
   var body = '<div class="drawer-head"><b style="font-size:16px;">Новый пароль создан</b><button class="btn btn-ghost btn-sm" data-action="close-temp-password">Закрыть ✕</button></div>' +
     '<div class="drawer-body">' +
-      '<p style="font-size:13.5px;color:var(--muted);margin:0 0 14px;">Сообщите этот пароль <b style="color:var(--ink);">'+escapeHtml(tempPasswordResult.name)+'</b> лично или через Telegram — он больше нигде не отобразится.</p>' +
+      '<p style="font-size:14px;color:var(--muted);margin:0 0 14px;">Сообщите этот пароль <b style="color:var(--ink);">'+escapeHtml(tempPasswordResult.name)+'</b> лично или через Telegram — он больше нигде не отобразится.</p>' +
       '<div class="card" style="padding:16px;text-align:center;background:var(--primary-tint);border-color:transparent;margin-bottom:16px;">' +
         '<code style="font-size:20px;font-weight:700;letter-spacing:1px;color:var(--primary-dark);">'+escapeHtml(tempPasswordResult.tempPassword)+'</code>' +
       '</div>' +
@@ -1461,7 +1461,7 @@ function renderTelegramModal(){
     } else if(!myStream || !myStream.telegram_url){
       body += '<div class="empty-state" style="padding:30px 10px;">Куратор ещё не добавил ссылку на Telegram-группу вашего потока — уточните у него лично.</div>';
     } else {
-      body += '<p style="font-size:13.5px;color:var(--muted);margin:0 0 14px;">Куратор, преподаватели и другие врачи вашего потока «'+escapeHtml(myStream.name)+'» — в этой группе.</p>' +
+      body += '<p style="font-size:14px;color:var(--muted);margin:0 0 14px;">Куратор, преподаватели и другие врачи вашего потока «'+escapeHtml(myStream.name)+'» — в этой группе.</p>' +
         '<a class="btn btn-primary btn-block" href="'+escapeHtml(myStream.telegram_url)+'" target="_blank" rel="noopener">Открыть Telegram-группу →</a>';
     }
   } else {
@@ -1469,10 +1469,10 @@ function renderTelegramModal(){
     if(!streams.length){
       body += '<div class="empty-state" style="padding:30px 10px;">Потоков пока нет — создайте их на странице «Ученики».</div>';
     } else {
-      body += '<p style="font-size:13.5px;color:var(--muted);margin:0 0 14px;">Общение с врачами — в Telegram-группах их потоков.</p>';
+      body += '<p style="font-size:14px;color:var(--muted);margin:0 0 14px;">Общение с врачами — в Telegram-группах их потоков.</p>';
       streams.forEach(function(s){
         body += '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line-2);gap:10px;">' +
-          '<b style="font-size:13.5px;">'+escapeHtml(s.name)+'</b>' +
+          '<b style="font-size:14px;">'+escapeHtml(s.name)+'</b>' +
           (s.telegram_url
             ? '<a class="btn btn-sm btn-primary" href="'+escapeHtml(s.telegram_url)+'" target="_blank" rel="noopener">Открыть →</a>'
             : '<span style="font-size:12px;color:var(--muted);">ссылка не добавлена</span>') +
@@ -1605,7 +1605,7 @@ function renderAuthScreen(mode){
     right =
       '<div class="onb-right"><div class="onb-box">' +
         '<div class="brand" style="margin-bottom:28px;">'+brandMark()+'Медицина Долголетия</div>' +
-        '<h2 style="font-size:19px;margin:0 0 20px;">Вход</h2>' +
+        '<h2 style="font-size:20px;margin:0 0 20px;">Вход</h2>' +
         '<form id="loginForm">' +
           '<div class="field"><label>Email</label><input class="input" type="email" name="email" required></div>' +
           '<div class="field"><label>Пароль</label><input class="input" type="password" name="password" required></div>' +
@@ -1619,7 +1619,7 @@ function renderAuthScreen(mode){
       '<div class="onb-right"><div class="onb-box">' +
         '<button class="back-link" data-action="go-login">← Уже есть аккаунт? Войти</button>' +
         '<div class="brand" style="margin-bottom:20px;">'+brandMark()+'Медицина Долголетия</div>' +
-        '<h2 style="font-size:19px;margin:0 0 14px;">Расскажите о себе</h2>' +
+        '<h2 style="font-size:20px;margin:0 0 14px;">Расскажите о себе</h2>' +
         // Врач и сотрудник регистрируются по-разному: врачу нужна специализация
         // (от неё зависят протоколы), сотруднику — приглашение на email и код.
         '<div class="seg" role="tablist"><button type="button" class="seg-btn'+(registerDraft.asStaff?'':' on')+'" data-action="register-as" data-staff="0">Я врач</button>' +
@@ -1904,7 +1904,7 @@ function renderStudentShell(){
   var main = el('<div class="app-main"></div>');
   wrap.appendChild(main);
   if(previewMode){
-    main.appendChild(el('<div style="background:var(--accent);color:#1B1A14;text-align:center;padding:10px 16px;font-size:13.5px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;">'+icon("eye")+' Режим просмотра «глазами врача» — изменения не сохраняются</div>'));
+    main.appendChild(el('<div style="background:var(--accent);color:#1B1A14;text-align:center;padding:10px 16px;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;">'+icon("eye")+' Режим просмотра «глазами врача» — изменения не сохраняются</div>'));
   }
   if(course && studentState.tab === "lesson") addSideFlow(main);
   // Внизу «Моего прогресса» под карточками — анимированная спираль ДНК (декор).
@@ -2031,16 +2031,19 @@ function renderStudentSchedule(){
     var nx = upcoming[0], nxLive = isLiveNow(nx);
     // Карточка по зонам: статус и отсчёт → что за эфир → факты подписанными
     // ячейками → действия в подвале. Раньше всё шло одной колонкой мелким текстом.
-    var nxStart = startOf(nx), nxMs = nxStart - new Date();
-    var cd = nxLive ? ['идёт', 'сейчас'] : (nxMs < 3600000 ? [Math.max(1, Math.round(nxMs/60000)), 'мин до начала']
-      : (nxMs < 86400000 ? [Math.round(nxMs/3600000), ruPluralClient(Math.round(nxMs/3600000),"час","часа","часов")+' до начала']
-      : [Math.round(nxMs/86400000), ruPluralClient(Math.round(nxMs/86400000),"день","дня","дней")+' до эфира']));
+    // Когда — одной спокойной фразой того же кегля, что статус, а не огромной цифрой.
+    var nxStart = startOf(nx), nxMs = nxStart - new Date(), wl = whenLabel(nx);
+    var cd = nxLive ? "идёт сейчас"
+      : nxMs < 3600000 ? "через "+Math.max(1, Math.round(nxMs/60000))+" мин"
+      : wl==="сегодня" ? "сегодня в "+escapeHtml(nx.event_time||"")
+      : wl==="завтра" ? "завтра в "+escapeHtml(nx.event_time||"")
+      : (function(){ var dd = Math.round((new Date(nxStart.getFullYear(),nxStart.getMonth(),nxStart.getDate()) - new Date(new Date().setHours(0,0,0,0)))/86400000); return "через "+dd+" "+ruPluralClient(dd,"день","дня","дней"); })();
     var nxStream = nx.stream_id ? (calendarState.streams||[]).find(function(x){ return x.id===nx.stream_id; }) : null;
     var fact = function(lbl, val){ return '<div class="sh-fact"><span>'+lbl+'</span><b>'+val+'</b></div>'; };
     html += '<div class="sched-top">' +
       '<div class="card sched-hero">' +
         '<div class="sh-top">' + (nxLive ? magnet("live","Идёт сейчас") : magnet("attention","Ближайший эфир")) +
-          '<div class="sh-count'+(nxLive?' live':'')+'"><b>'+cd[0]+'</b><span>'+cd[1]+'</span></div></div>' +
+          '<span class="sh-when'+(nxLive?' live':'')+'">'+icon("clock","ic-sm")+cd+'</span></div>' +
         '<h2>'+escapeHtml(nx.title)+'</h2>' +
         '<div class="sh-facts">' +
           fact('Дата', WD[nxStart.getDay()]+', '+nxStart.toLocaleDateString("ru-RU",{day:"numeric",month:"long"})) +
@@ -2095,7 +2098,7 @@ function renderOnboardingCard(){
   items.forEach(function(i,idx){
     html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;'+(idx<items.length-1?'border-bottom:1px solid var(--line-2);':'')+(i.done?'':'cursor:pointer;')+'" '+(i.done?'':'data-action="'+i.action+'"'+(i.tab?' data-tab="'+i.tab+'"':''))+'>' +
       '<span style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;background:'+(i.done?'var(--status-done)':'var(--line-2)')+';">'+(i.done?icon("check","ic-sm"):'')+'</span>' +
-      '<span style="font-size:13.5px;'+(i.done?'color:var(--muted);text-decoration:line-through;':'')+'">'+escapeHtml(i.label)+'</span>' +
+      '<span style="font-size:14px;'+(i.done?'color:var(--muted);text-decoration:line-through;':'')+'">'+escapeHtml(i.label)+'</span>' +
     '</div>';
   });
   html += '</div>';
@@ -2144,7 +2147,7 @@ function renderStudentHome(){
     var nextStepLabel = null;
     if(done < total) nextStepLabel = "Урок "+(done+1)+": "+course.lessons[done].title;
     else if(!quizDone) nextStepLabel = "Итоговый тест";
-    html += (nextStepLabel ? '<div style="font-size:12.5px;color:var(--muted);margin-bottom:12px;">Далее: '+escapeHtml(nextStepLabel)+'</div>' : '') +
+    html += (nextStepLabel ? '<div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Далее: '+escapeHtml(nextStepLabel)+'</div>' : '') +
       '<button class="btn btn-primary" data-action="open-course">'+(done>0?'Продолжить курс':'Начать курс')+'</button>' +
       '</div>';
   }
@@ -2167,11 +2170,11 @@ function renderStudentHome(){
   if(nextEvent){
     html += (liveNow ? magnet("live","Идёт сейчас") : magnet("attention","Ближайший эфир")) +
       '<b style="font-size:14px;display:block;margin:10px 0 2px;">'+escapeHtml(nextEvent.title)+'</b>' +
-      '<span style="font-size:12.5px;color:var(--muted);">'+fmtDate(nextEvent.event_date)+' · '+escapeHtml(nextEvent.event_time||"")+'</span>' +
+      '<span style="font-size:13px;color:var(--muted);">'+fmtDate(nextEvent.event_date)+' · '+escapeHtml(nextEvent.event_time||"")+'</span>' +
       (liveNow && nextEvent.join_url ? '<a class="btn btn-sm btn-primary" style="margin-top:12px;" href="'+escapeHtml(nextEvent.join_url)+'" target="_blank" rel="noopener">Подключиться</a>' :
         '<button class="btn btn-sm btn-ghost" style="margin-top:12px;" data-action="student-tab" data-tab="schedule">Все эфиры →</button>');
   } else {
-    html += magnet("neutral","Эфиры") + '<p style="font-size:12.5px;color:var(--muted);margin:10px 0 0;">Пока не запланированы.</p>';
+    html += magnet("neutral","Эфиры") + '<p style="font-size:13px;color:var(--muted);margin:10px 0 0;">Пока не запланированы.</p>';
   }
   html += '</div>';
 
@@ -2181,7 +2184,7 @@ function renderStudentHome(){
     if(certsOn){
       var issued = pr.certificate_status==="issued";
       html += magnet(issued?"done":"attention", issued?"Сертификат выдан":"На проверке") +
-        '<div style="font-family:var(--sans);font-weight:800;font-size:26px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
+        '<div style="font-family:var(--sans);font-weight:700;font-size:28px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
         '<span style="font-size:12px;color:var(--muted);">результат теста</span>';
       if(!issued && !pr.requested_full_access){
         html += '<button class="btn btn-sm btn-primary btn-block" style="margin-top:12px;" data-action="request-full">Заявка на полную программу</button>';
@@ -2190,7 +2193,7 @@ function renderStudentHome(){
       }
     } else {
       html += magnet("done","Демо пройдено") +
-        '<div style="font-family:var(--sans);font-weight:800;font-size:26px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
+        '<div style="font-family:var(--sans);font-weight:700;font-size:28px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
         '<span style="font-size:12px;color:var(--muted);">результат теста · скидка 10% на полный курс</span>';
       if(!pr.requested_full_access){
         html += '<button class="btn btn-sm btn-primary btn-block" style="margin-top:12px;" data-action="request-full">Хочу полное обучение</button>';
@@ -2212,12 +2215,12 @@ function renderStudentHome(){
     magnet("neutral","Прогресс") +
     '<div style="display:flex;align-items:baseline;gap:6px;margin-top:10px;">' +
       icon("flame","ic-sm streak-flame") +
-      '<span style="font-family:var(--sans);font-weight:800;font-size:22px;letter-spacing:-.02em;" data-count="'+(gam.currentStreak||0)+'">'+(gam.currentStreak||0)+'</span>' +
+      '<span style="font-family:var(--sans);font-weight:700;font-size:22px;letter-spacing:-.02em;" data-count="'+(gam.currentStreak||0)+'">'+(gam.currentStreak||0)+'</span>' +
       '<span style="font-size:12px;color:var(--muted);">'+(gam.currentStreak===1?"день подряд":"дней подряд")+'</span>' +
     '</div>' +
     '<span style="font-size:12px;color:var(--muted);display:block;margin-top:2px;">рекорд: '+(gam.longestStreak||0)+'</span>' +
     '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2);">' +
-      '<span style="font-family:var(--sans);font-weight:800;font-size:18px;" data-count="'+(gam.points||0)+'">'+(gam.points||0)+'</span>' +
+      '<span style="font-family:var(--sans);font-weight:700;font-size:18px;" data-count="'+(gam.points||0)+'">'+(gam.points||0)+'</span>' +
       '<span style="font-size:12px;color:var(--muted);"> / 1000 очков</span>' +
       '<button class="btn btn-sm btn-ghost" style="margin-top:10px;display:flex;width:max-content;" data-action="student-tab" data-tab="progress">Как получить скидку →</button>' +
     '</div>' +
@@ -2239,7 +2242,7 @@ function renderStudentHome(){
     html += '<p style="font-size:13px;color:var(--muted);margin:0;">У вас нет новых уведомлений.</p>';
   } else {
     homeNotifItems.slice(0,3).forEach(function(n){
-      html += '<div style="padding:8px 0;border-bottom:1px solid var(--line-2);"><b style="font-size:12.5px;display:block;">'+escapeHtml(n.title)+'</b></div>';
+      html += '<div style="padding:8px 0;border-bottom:1px solid var(--line-2);"><b style="font-size:13px;display:block;">'+escapeHtml(n.title)+'</b></div>';
     });
   }
   html += '</div>';
@@ -2257,7 +2260,7 @@ function renderStudentHome(){
     var refLink = window.location.origin + window.location.pathname.replace(/[^/]*$/, "") + "?ref=" + me.referral_code;
     html += '<div class="card home-tile" style="padding:18px 20px;margin-top:14px;">' +
       '<b style="font-size:14px;display:block;margin-bottom:4px;">Пригласите коллегу</b>' +
-      '<p style="font-size:12.5px;color:var(--muted);margin:0 0 12px;">Поделитесь ссылкой — когда коллега зарегистрируется по ней, мы это увидим.</p>' +
+      '<p style="font-size:13px;color:var(--muted);margin:0 0 12px;">Поделитесь ссылкой — когда коллега зарегистрируется по ней, мы это увидим.</p>' +
       '<div style="display:flex;gap:6px;">' +
         '<input class="input" readonly value="'+escapeHtml(refLink)+'" style="font-size:12px;" id="refLinkInput">' +
         '<button class="btn btn-sm btn-ghost" data-action="copy-ref-link">Скопировать</button>' +
@@ -2303,7 +2306,7 @@ function renderStudentMaterials(){
   course.lessons.forEach(function(l,i){ if(nextIdx<0 && doneIds.indexOf(l.id)===-1 && !l.hiddenForMe && !l.dripLockedForMe) nextIdx = i; });
   var html = '<div class="page-wide">' +
     '<div class="card" style="padding:18px 20px;">' +
-      '<b style="font-size:14.5px;display:block;margin-bottom:12px;">Материалы обучения</b>' +
+      '<b style="font-size:15px;display:block;margin-bottom:12px;">Материалы обучения</b>' +
       '<input class="input" id="materialsSearchInput" placeholder="Искать по названию или тексту урока…" value="'+escapeHtml(studentState.materialsSearch)+'" style="margin-bottom:12px;">' +
       '<div class="tabs" style="margin-top:0;margin-bottom:14px;">' +
         '<button class="tab'+(studentState.materialsFilter==="all"?' active':'')+'" data-action="materials-filter" data-filter="all">Все материалы</button>' +
@@ -2475,7 +2478,7 @@ function renderCoursePlayer(){
       (previewMode ? '' : '<p class="sel-hint">'+icon("star","ic-sm")+' Выделите фрагмент текста — его можно отметить маркером, добавить в заметку или задать по нему вопрос куратору.</p>') +
       '<div class="lesson-note">' +
         '<label>Ваша заметка к уроку <span style="font-weight:400;color:var(--muted-2);">(видна только вам)</span></label>' +
-        '<textarea class="input" id="lessonNoteInput" style="height:64px;font-size:13.5px;" placeholder="Например: спросить куратора про дозировки">'+escapeHtml(noteVal)+'</textarea>' +
+        '<textarea class="input" id="lessonNoteInput" style="height:64px;font-size:14px;" placeholder="Например: спросить куратора про дозировки">'+escapeHtml(noteVal)+'</textarea>' +
         '<button class="btn btn-sm btn-ghost" style="margin-top:8px;" data-action="save-lesson-note" data-id="'+lesson.id+'">Сохранить заметку</button>' +
       '</div>';
     if(stages.length>1){
@@ -2667,7 +2670,7 @@ function renderCertificate(){
       '<p style="color:var(--muted);font-size:14px;">'+escapeHtml(me.name)+', «'+escapeHtml(course.course.title)+'»</p>' +
       '<div class="score">'+pr.quiz_score+'%</div>' +
       '<p style="color:var(--muted);font-size:13px;margin-bottom:24px;">правильных ответов в итоговом тесте</p>' +
-      '<p style="font-size:13.5px;color:var(--muted);max-width:380px;margin:0 auto 24px;">Вы получили скидку 10% на обучение по курсу «Медицина Долголетия». Желаете присоединиться к полноценному обучению?</p>';
+      '<p style="font-size:14px;color:var(--muted);max-width:380px;margin:0 auto 24px;">Вы получили скидку 10% на обучение по курсу «Медицина Долголетия». Желаете присоединиться к полноценному обучению?</p>';
     if(requested){
       html += '<div style="margin-bottom:16px;">'+magnet("done","Заявка отправлена")+'</div>';
     } else {
@@ -2684,9 +2687,9 @@ function renderCertificate(){
     '<div class="score">'+pr.quiz_score+'%</div>' +
     '<p style="color:var(--muted);font-size:13px;margin-bottom:24px;">правильных ответов в итоговом тесте</p>';
   if(!issued){
-    html += '<p style="font-size:13.5px;color:var(--muted);max-width:360px;margin:0 auto 24px;">Куратор проверит результат и выдаст сертификат — он появится здесь автоматически.</p>';
+    html += '<p style="font-size:14px;color:var(--muted);max-width:360px;margin:0 auto 24px;">Куратор проверит результат и выдаст сертификат — он появится здесь автоматически.</p>';
   } else {
-    html += '<p style="font-size:12.5px;color:var(--muted);margin:0 0 24px;">Выдан '+fmtDate(pr.certificate_issued_at)+(pr.certificate_issued_by?(' · '+escapeHtml(pr.certificate_issued_by)):'')+'</p>';
+    html += '<p style="font-size:13px;color:var(--muted);margin:0 0 24px;">Выдан '+fmtDate(pr.certificate_issued_at)+(pr.certificate_issued_by?(' · '+escapeHtml(pr.certificate_issued_by)):'')+'</p>';
   }
   if(issued){
     html += '<a class="btn btn-primary" href="api/course/certificate/download?courseId='+encodeURIComponent(activeCourseId)+'" target="_blank" rel="noopener" style="margin-right:8px;">'+icon("download")+' Скачать сертификат (PDF)</a>';
@@ -2703,8 +2706,8 @@ function renderPointTiers(points){
     var unlocked = points >= t.points;
     html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;'+(idx<POINT_TIERS.length-1?'border-bottom:1px solid var(--line-2);':'')+'">' +
       '<span style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;background:'+(unlocked?'var(--status-done)':'var(--line-2)')+';">'+(unlocked?icon("check","ic-sm"):'')+'</span>' +
-      '<span style="font-size:13.5px;flex:1;'+(unlocked?'':'color:var(--muted);')+'">'+t.points+' очков</span>' +
-      '<b style="font-size:13.5px;'+(unlocked?'color:var(--ink);':'color:var(--muted);')+'">скидка '+t.discount+'%</b>' +
+      '<span style="font-size:14px;flex:1;'+(unlocked?'':'color:var(--muted);')+'">'+t.points+' очков</span>' +
+      '<b style="font-size:14px;'+(unlocked?'color:var(--ink);':'color:var(--muted);')+'">скидка '+t.discount+'%</b>' +
     '</div>';
   });
   html += '</div>';
@@ -2720,9 +2723,9 @@ function renderPointTiersCta(points){
       magnet("done","Доступна скидка "+current.discount+"%") +
       '<button class="btn btn-sm btn-primary" data-action="open-telegram-modal">Написать куратору, чтобы оформить скидку '+current.discount+'%</button>' +
     '</div>';
-    if(next) html += '<p style="font-size:12.5px;color:var(--muted-2);margin:10px 0 0;">Ещё '+(next.points-points)+' очков — и скидка вырастет до '+next.discount+'%.</p>';
+    if(next) html += '<p style="font-size:13px;color:var(--muted-2);margin:10px 0 0;">Ещё '+(next.points-points)+' очков — и скидка вырастет до '+next.discount+'%.</p>';
   } else {
-    html += '<p style="font-size:12.5px;color:var(--muted-2);margin:0;">Наберите '+POINT_TIERS[0].points+' очков, чтобы открыть первую скидку — '+POINT_TIERS[0].discount+'%. Осталось '+(POINT_TIERS[0].points-points)+'.</p>';
+    html += '<p style="font-size:13px;color:var(--muted-2);margin:0;">Наберите '+POINT_TIERS[0].points+' очков, чтобы открыть первую скидку — '+POINT_TIERS[0].discount+'%. Осталось '+(POINT_TIERS[0].points-points)+'.</p>';
   }
   return html;
 }
@@ -2743,7 +2746,7 @@ function renderProtocolCard(p, isForYou, readerMode){
 
   var html = readerMode ? '<div>' + (p.summary ? '<div class="prose proto-reader-sum">'+renderPlainToProse(p.summary)+'</div>' : '') : '<div class="card" style="padding:18px 20px;margin-bottom:12px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;cursor:pointer;" data-action="toggle-protocol" data-id="'+p.id+'">' +
-      '<div><b style="font-size:14.5px;display:block;">'+escapeHtml(p.title)+'</b>' +
+      '<div><b style="font-size:15px;display:block;">'+escapeHtml(p.title)+'</b>' +
         (p.summary ? '<p style="font-size:13px;color:var(--muted);margin:4px 0 0;">'+renderPlainToProse(p.summary)+'</p>' : '') +
       '</div>' +
       '<button type="button" class="btn btn-sm btn-ghost" style="flex-shrink:0;">'+(expanded?'Свернуть':'Открыть гайд')+'</button>' +
@@ -2823,7 +2826,7 @@ function renderProtocolReaderModal(){
   if(!p) return el('<div></div>');
   var inner = renderProtocolCard(p, protocolReader.mine, true);
   return el('<div class="overlay overlay-center" data-action="overlay-close-protocol-reader"><div class="drawer modal proto-reader" data-stop="1">' +
-    '<div class="drawer-head"><div><span class="profile-kicker">Протокол'+(p.lessonIdx!=null?' · из урока '+(p.lessonIdx+1):'')+'</span><b style="font-size:17px;display:block;margin-top:4px;">'+escapeHtml(p.title)+'</b></div>' +
+    '<div class="drawer-head"><div><span class="profile-kicker">Протокол'+(p.lessonIdx!=null?' · из урока '+(p.lessonIdx+1):'')+'</span><b style="font-size:18px;display:block;margin-top:4px;">'+escapeHtml(p.title)+'</b></div>' +
     '<button class="btn btn-ghost btn-sm" data-action="close-protocol-reader">Закрыть ✕</button></div><div class="drawer-body">'+inner+'</div></div></div>');
 }
 
@@ -2923,7 +2926,7 @@ function renderNotificationsPage(){
   var html = '<div style="margin-top:6px;max-width:760px;">' +
     '<div class="card" style="padding:18px 20px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
-        '<b style="font-size:14.5px;">Уведомления</b>' +
+        '<b style="font-size:15px;">Уведомления</b>' +
         (notifState.unreadCount>0 ? '<button class="btn btn-sm btn-ghost" data-action="mark-all-notifs-read">Пометить всё прочитанным</button>' : '') +
       '</div>';
   if(!items.length){
@@ -2933,8 +2936,8 @@ function renderNotificationsPage(){
       var unread = n.synthetic || !n.read_at;
       html += '<div class="'+(n.synthetic?'':'notif-item')+'" '+(n.synthetic?'':'data-action="mark-notif-read" data-id="'+n.id+'"')+
         ' style="padding:12px 0;border-bottom:1px solid var(--line-2);cursor:'+(n.synthetic?'default':'pointer')+';'+(unread?'':'opacity:.55;')+'">' +
-        '<b style="font-size:13.5px;display:block;">'+escapeHtml(n.title)+'</b>' +
-        (n.body?'<span style="font-size:12.5px;color:var(--muted);display:block;margin-top:3px;">'+escapeHtml(n.body)+'</span>':'') +
+        '<b style="font-size:14px;display:block;">'+escapeHtml(n.title)+'</b>' +
+        (n.body?'<span style="font-size:13px;color:var(--muted);display:block;margin-top:3px;">'+escapeHtml(n.body)+'</span>':'') +
         (n.created_at&&!n.synthetic?'<span style="font-size:11px;color:var(--muted-2);display:block;margin-top:4px;">'+fmtDate(n.created_at)+' '+fmtTime(n.created_at)+'</span>':'') +
       '</div>';
     });
@@ -3257,12 +3260,12 @@ function renderStaffHome(container){
   });
   var streamKeys = Object.keys(byStream);
 
-  var streamsHtml = '<b style="font-size:14.5px;display:block;margin-bottom:10px;">Ваши потоки</b>';
+  var streamsHtml = '<b style="font-size:15px;display:block;margin-bottom:10px;">Ваши потоки</b>';
   if(!streamKeys.length){
     streamsHtml += '<div class="card empty-state" style="padding:32px 20px;">' +
       '<div class="tile-icon" style="background:var(--primary-tint);color:var(--primary);margin:0 auto 12px;">'+icon("users")+'</div>' +
-      '<b style="font-size:13.5px;display:block;color:var(--ink);">Врачей пока нет</b>' +
-      '<p style="font-size:12.5px;margin:4px 0 0;">Как только куратор добавит первого врача в поток, здесь появится карточка с его прогрессом.</p>' +
+      '<b style="font-size:14px;display:block;color:var(--ink);">Врачей пока нет</b>' +
+      '<p style="font-size:13px;margin:4px 0 0;">Как только куратор добавит первого врача в поток, здесь появится карточка с его прогрессом.</p>' +
     '</div>';
   } else {
     streamsHtml += '<div class="board-strip">';
@@ -3276,12 +3279,12 @@ function renderStaffHome(container){
         '<div style="display:flex;align-items:center;gap:12px;">' +
           '<div class="progress-ring" data-anim="ring" style="width:46px;height:46px;--ring-p:'+avgPct+'%;"><div class="progress-ring-inner" style="width:34px;height:34px;font-size:11px;"><span data-count="'+avgPct+'" data-suffix="%">'+avgPct+'%</span></div></div>' +
           '<div>' +
-            '<b style="font-size:13.5px;display:block;">'+escapeHtml(name)+'</b>' +
+            '<b style="font-size:14px;display:block;">'+escapeHtml(name)+'</b>' +
             '<span style="font-size:12px;color:var(--muted);">средний прогресс</span>' +
           '</div>' +
         '</div>' +
         '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line-2);display:flex;align-items:baseline;gap:6px;">' +
-          '<span style="font-family:var(--sans);font-weight:800;font-size:22px;" data-count="'+list.length+'">'+list.length+'</span>' +
+          '<span style="font-family:var(--sans);font-weight:700;font-size:22px;" data-count="'+list.length+'">'+list.length+'</span>' +
           '<span style="font-size:12px;color:var(--muted);">врачей · '+activeCount+' активных</span>' +
         '</div>' +
       '</div>';
@@ -3296,7 +3299,7 @@ function renderStaffHome(container){
   container.appendChild(el(
     '<div style="display:flex;align-items:center;gap:10px;margin:20px 0 10px;">' +
       '<div class="tile-icon" style="background:var(--status-attention-tint);color:var(--status-attention);">'+icon("clipboard")+'</div>' +
-      '<b style="font-size:14.5px;">Задачи на сегодня</b>' +
+      '<b style="font-size:15px;">Задачи на сегодня</b>' +
     '</div>'
   ));
   if(pendingTasks || overdueOrders){
@@ -3309,8 +3312,8 @@ function renderStaffHome(container){
   else if(!totalTasks) container.appendChild(el(
     '<div class="card empty-state" style="padding:32px 20px;">' +
       '<div class="tile-icon" style="background:var(--status-active-tint);color:var(--status-active);margin:0 auto 12px;">'+icon("check")+'</div>' +
-      '<b style="font-size:13.5px;display:block;color:var(--ink);">Всё разобрано</b>' +
-      '<p style="font-size:12.5px;margin:4px 0 0;">Никто не ждёт ответа и не завис без активности — новые задачи появятся здесь сами.</p>' +
+      '<b style="font-size:14px;display:block;color:var(--ink);">Всё разобрано</b>' +
+      '<p style="font-size:13px;margin:4px 0 0;">Никто не ждёт ответа и не завис без активности — новые задачи появятся здесь сами.</p>' +
     '</div>'
   ));
 
@@ -3325,7 +3328,7 @@ function renderStaffHome(container){
     gridHtml += '<div style="display:flex;align-items:center;gap:8px;color:var(--status-active);">'+icon("check","ic-sm")+'<p style="font-size:13px;color:var(--muted);margin:0;">Ближайших эфиров и дедлайнов не запланировано — тут спокойно.</p></div>';
   } else {
     reminders.slice(0,3).forEach(function(n){
-      gridHtml += '<div style="padding:8px 0;border-bottom:1px solid var(--line-2);"><b style="font-size:12.5px;display:block;">'+escapeHtml(n.title)+'</b></div>';
+      gridHtml += '<div style="padding:8px 0;border-bottom:1px solid var(--line-2);"><b style="font-size:13px;display:block;">'+escapeHtml(n.title)+'</b></div>';
     });
   }
   gridHtml += '</div>';
@@ -3350,7 +3353,7 @@ function renderStaffHome(container){
   if(!d){
     digestHtml += '<div style="display:flex;align-items:center;gap:8px;color:var(--muted-2);">'+icon("clock","ic-sm")+'<p style="font-size:13px;color:var(--muted);margin:0;">Ещё не готов — соберёт итоги дня и появится здесь к 9:00 по МСК.</p></div>';
   } else {
-    digestHtml += '<p style="font-size:13.5px;margin:0;line-height:1.5;">'+escapeHtml(d.summary)+'</p>';
+    digestHtml += '<p style="font-size:14px;margin:0;line-height:1.5;">'+escapeHtml(d.summary)+'</p>';
   }
   digestHtml += '</div>';
   container.appendChild(el(digestHtml));
@@ -3367,7 +3370,7 @@ function renderStreamsPanel(){
 
   var html = '<div class="card" style="padding:18px 20px;margin-bottom:20px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">' +
-      '<b style="font-size:14.5px;">Потоки обучения</b>' +
+      '<b style="font-size:15px;">Потоки обучения</b>' +
       '<button class="btn btn-sm btn-ghost" data-action="toggle-stream-form">'+(calendarState.showStreamForm?'Скрыть':'+ Новый поток')+'</button>' +
     '</div>';
   if(calendarState.showStreamForm){
@@ -3464,7 +3467,7 @@ function renderEventModal(){
         '<div class="field"><label>Описание</label><textarea class="input" name="description" style="height:70px;"></textarea></div>' +
         '<label style="display:flex;align-items:center;gap:8px;margin-bottom:'+(calendarState.recurring?'10px':'20px')+';cursor:pointer;">' +
           '<input type="checkbox" name="recurring" data-action="toggle-recurring"'+(calendarState.recurring?' checked':'')+' style="accent-color:var(--primary);">' +
-          '<span style="font-size:13.5px;">Повторять еженедельно</span></label>' +
+          '<span style="font-size:14px;">Повторять еженедельно</span></label>' +
         (calendarState.recurring ? '<div class="field"><label>Повторять до</label><input class="input" type="date" name="recurrenceUntil" required></div>' : '') +
         '<button class="btn btn-primary btn-block" type="submit">Добавить в расписание</button></form></div>';
     return el('<div class="overlay" data-action="overlay-close-event"><div class="drawer" data-stop="1" style="width:min(480px,100%);">'+body+'</div></div>');
@@ -3473,12 +3476,12 @@ function renderEventModal(){
   if(!ev) return el('<div></div>');
   var stream = calendarState.streams.filter(function(s){ return s.id===ev.stream_id; })[0];
   var body2 = '<div class="drawer-head"><b style="font-size:16px;">'+escapeHtml(ev.title)+'</b><button class="btn btn-ghost btn-sm" data-action="close-event-modal">Закрыть ✕</button></div>' +
-    '<div class="drawer-body"><p style="font-size:13.5px;color:var(--muted);margin:0 0 4px;">'+fmtDate(ev.event_date)+' в '+escapeHtml(ev.event_time||"—")+' · '+(ev.duration_min||60)+' мин</p>' +
-    (ev.speaker?'<p style="font-size:13.5px;margin:0 0 4px;">Спикер: '+escapeHtml(ev.speaker)+'</p>':'') +
-    '<p style="font-size:13.5px;margin:0 0 4px;">Поток: '+(stream?escapeHtml(stream.name):'Все потоки')+'</p>' +
-    (ev.recurrence_group_id ? '<p style="font-size:12.5px;color:var(--accent);margin:0 0 4px;display:flex;align-items:center;gap:5px;">'+icon("repeat","ic-sm")+' Часть серии повторов</p>' : '') +
-    (ev.join_url?'<p style="font-size:13.5px;margin:0 0 12px;"><a href="'+escapeHtml(ev.join_url)+'" target="_blank" rel="noopener" style="color:var(--primary-dark);">Ссылка на подключение →</a></p>':'') +
-    (ev.description?'<p style="font-size:13.5px;color:var(--muted);margin:0 0 16px;">'+escapeHtml(ev.description)+'</p>':'') +
+    '<div class="drawer-body"><p style="font-size:14px;color:var(--muted);margin:0 0 4px;">'+fmtDate(ev.event_date)+' в '+escapeHtml(ev.event_time||"—")+' · '+(ev.duration_min||60)+' мин</p>' +
+    (ev.speaker?'<p style="font-size:14px;margin:0 0 4px;">Спикер: '+escapeHtml(ev.speaker)+'</p>':'') +
+    '<p style="font-size:14px;margin:0 0 4px;">Поток: '+(stream?escapeHtml(stream.name):'Все потоки')+'</p>' +
+    (ev.recurrence_group_id ? '<p style="font-size:13px;color:var(--accent);margin:0 0 4px;display:flex;align-items:center;gap:5px;">'+icon("repeat","ic-sm")+' Часть серии повторов</p>' : '') +
+    (ev.join_url?'<p style="font-size:14px;margin:0 0 12px;"><a href="'+escapeHtml(ev.join_url)+'" target="_blank" rel="noopener" style="color:var(--primary-dark);">Ссылка на подключение →</a></p>':'') +
+    (ev.description?'<p style="font-size:14px;color:var(--muted);margin:0 0 16px;">'+escapeHtml(ev.description)+'</p>':'') +
     '<div style="display:flex;gap:10px;flex-wrap:wrap;">' +
       '<button class="btn btn-ghost" data-action="delete-event" data-id="'+ev.id+'">Удалить эфир</button>' +
       (ev.recurrence_group_id ? '<button class="btn btn-ghost" data-action="delete-event-series" data-id="'+ev.id+'">Удалить всю серию</button>' : '') +
@@ -3597,19 +3600,19 @@ function auditExportUrl(){
 function renderAuditLogTab(){
   var html = '<div class="card" style="padding:18px 20px;margin-top:6px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
-      '<b style="font-size:14.5px;">Журнал действий персонала</b>' +
+      '<b style="font-size:15px;">Журнал действий персонала</b>' +
       '<a class="btn btn-sm btn-ghost" href="'+auditExportUrl()+'" target="_blank" rel="noopener">'+icon("download","ic-sm")+' Экспорт CSV</a>' +
     '</div>' +
-    '<p style="font-size:12.5px;color:var(--muted);margin:4px 0 16px;">Последние 100 действий (с учётом фильтров ниже) — экспорт выгружает те же фильтры, до 5000 строк. '+(me.role==="super_admin"?'Обратимые действия можно откатить — это вернёт состояние к тому, что было до изменения.':'')+'</p>';
+    '<p style="font-size:13px;color:var(--muted);margin:4px 0 16px;">Последние 100 действий (с учётом фильтров ниже) — экспорт выгружает те же фильтры, до 5000 строк. '+(me.role==="super_admin"?'Обратимые действия можно откатить — это вернёт состояние к тому, что было до изменения.':'')+'</p>';
 
   var actorOpts = auditActorOptions();
   html += '<div class="dash-filters-grid" style="margin-bottom:16px;">' +
     '<div class="dash-field" style="grid-column:span 2;"><label>Поиск</label><input class="input" id="auditSearchInput" placeholder="Кто или что" value="'+escapeHtml(auditFilters.q)+'"></div>' +
-    '<div class="dash-field"><label>Действие</label><select class="input" id="auditActionFilter" style="padding:8px 9px;font-size:12.5px;">' +
+    '<div class="dash-field"><label>Действие</label><select class="input" id="auditActionFilter" style="padding:8px 9px;font-size:13px;">' +
       '<option value="">Все</option>' +
       auditActionsList.map(function(a){ return '<option value="'+escapeHtml(a)+'"'+(auditFilters.action===a?' selected':'')+'>'+escapeHtml(auditActionLabel(a))+'</option>'; }).join('') +
     '</select></div>' +
-    '<div class="dash-field"><label>Кто</label><select class="input" id="auditActorFilter" style="padding:8px 9px;font-size:12.5px;">' +
+    '<div class="dash-field"><label>Кто</label><select class="input" id="auditActorFilter" style="padding:8px 9px;font-size:13px;">' +
       '<option value="">Все</option>' +
       actorOpts.map(function(p){ return '<option value="'+p.id+'"'+(auditFilters.actorId===p.id?' selected':'')+'>'+escapeHtml(p.name)+'</option>'; }).join('') +
     '</select></div>' +
@@ -3632,7 +3635,7 @@ function renderAuditLogTab(){
       var statusNote = l.reverted_at ? '<span style="font-size:11px;color:var(--muted-2);display:block;">откачено '+fmtDate(l.reverted_at)+(l.reverted_by?(' · '+escapeHtml(l.reverted_by)):'')+'</span>' : '';
       html += '<tr>' +
         '<td class="audit-when">'+fmtDate(l.created_at)+' '+fmtTime(l.created_at)+'</td>' +
-        '<td>'+escapeHtml(l.actor_name)+(l.actor_role?(' <span style="color:var(--muted);font-size:11.5px;">('+roleLabel(l.actor_role)+')</span>'):'')+'</td>' +
+        '<td>'+escapeHtml(l.actor_name)+(l.actor_role?(' <span style="color:var(--muted);font-size:12px;">('+roleLabel(l.actor_role)+')</span>'):'')+'</td>' +
         '<td>'+magnet(auditActionKind(l.action), auditActionLabel(l.action))+statusNote+'</td>' +
         '<td style="color:var(--muted);">'+escapeHtml(l.target_name||l.target_id||"—")+'</td>' +
         '<td style="text-align:right;">'+(canRevert ? '<button class="btn btn-sm btn-ghost" data-action="revert-log" data-id="'+l.id+'" data-label="'+escapeHtml(auditActionLabel(l.action))+'">Откатить</button>' : '')+'</td>' +
@@ -3649,10 +3652,10 @@ function renderMaterialsTab(){
   var html = '<div>' +
     '<div class="card" style="padding:18px 20px;margin-top:6px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:10px;">' +
-      '<b style="font-size:14.5px;">Доступность материалов демо-курса</b>' +
+      '<b style="font-size:15px;">Доступность материалов демо-курса</b>' +
       (canEdit ? '<button class="btn btn-sm btn-primary" data-action="open-lesson-creator">+ Добавить урок</button>' : '') +
     '</div>' +
-    '<p style="font-size:12.5px;color:var(--muted);margin:0 0 16px;">Скройте урок или тест от конкретных врачей или от всех сразу. Прогресс, который врачи уже прошли, сохранится.</p>';
+    '<p style="font-size:13px;color:var(--muted);margin:0 0 16px;">Скройте урок или тест от конкретных врачей или от всех сразу. Прогресс, который врачи уже прошли, сохранится.</p>';
   staffState.materials.forEach(function(l,i){
     var hiddenCount = (courseVisibility[l.id]||[]).length;
     var isFirst = i===0, isLast = i===staffState.materials.length-1;
@@ -3660,7 +3663,7 @@ function renderMaterialsTab(){
       (canEdit ? '<div style="display:flex;flex-direction:column;gap:2px;">' +
         '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-lesson" data-id="'+l.id+'" data-dir="up"'+(isFirst?' disabled':'')+' title="Выше">↑</button>' +
         '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-lesson" data-id="'+l.id+'" data-dir="down"'+(isLast?' disabled':'')+' title="Ниже">↓</button></div>' : '') +
-      '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+(i+1)+'. '+escapeHtml(l.title)+(l.has_draft?' '+magnet("attention","черновик"):'')+'</b><span style="font-size:12px;color:var(--muted);">'+(hiddenCount?'Скрыт от '+hiddenCount+' врачей':'Виден всем')+(l.drip_days?' · открывается через '+l.drip_days+' дн. после регистрации':'')+(l.assignment_prompt?' · есть задание'+(l.assignment_required?' (стоп-урок)':''):'')+'</span></div>' +
+      '<div style="flex:1;"><b style="font-size:14px;display:block;">'+(i+1)+'. '+escapeHtml(l.title)+(l.has_draft?' '+magnet("attention","черновик"):'')+'</b><span style="font-size:12px;color:var(--muted);">'+(hiddenCount?'Скрыт от '+hiddenCount+' врачей':'Виден всем')+(l.drip_days?' · открывается через '+l.drip_days+' дн. после регистрации':'')+(l.assignment_prompt?' · есть задание'+(l.assignment_required?' (стоп-урок)':''):'')+'</span></div>' +
       (canEdit ? '<button class="btn btn-sm btn-ghost" data-action="open-lesson-editor" data-id="'+l.id+'">Редактировать</button>' : '') +
       (canEdit ? '<button class="btn btn-sm '+(l.assignment_prompt?'btn-primary':'btn-ghost')+'" data-action="open-assign-editor" data-id="'+l.id+'">Задание</button>' : '') +
       (canEdit ? '<button class="btn btn-sm btn-ghost" data-action="open-lesson-video-editor" data-id="'+l.id+'" data-title="'+escapeHtml(l.title)+'">Видео</button>' : '') +
@@ -3672,24 +3675,24 @@ function renderMaterialsTab(){
   });
   var quizHiddenCount = (courseVisibility.quiz||[]).length;
   html += '<div class="adm-row" style="display:flex;align-items:center;gap:10px;padding:10px 0;">' +
-    '<div style="flex:1;"><b style="font-size:13.5px;display:block;">Итоговый тест</b><span style="font-size:12px;color:var(--muted);">'+(quizHiddenCount?'Скрыт от '+quizHiddenCount+' врачей':'Виден всем')+'</span></div>' +
+    '<div style="flex:1;"><b style="font-size:14px;display:block;">Итоговый тест</b><span style="font-size:12px;color:var(--muted);">'+(quizHiddenCount?'Скрыт от '+quizHiddenCount+' врачей':'Виден всем')+'</span></div>' +
     '<button class="btn btn-sm '+(quizHiddenCount?'btn-primary':'btn-ghost')+'" data-action="open-materials-picker" data-id="quiz" data-title="Итоговый тест">Настроить видимость</button></div>';
   html += '</div>';
 
   if(canEdit){
     html += '<div class="card" style="padding:18px 20px;margin-top:16px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:10px;">' +
-        '<b style="font-size:14.5px;">Вопросы итогового теста</b>' +
+        '<b style="font-size:15px;">Вопросы итогового теста</b>' +
         '<button class="btn btn-sm btn-primary" data-action="open-quiz-creator">+ Добавить вопрос</button>' +
       '</div>' +
-      '<p style="font-size:12.5px;color:var(--muted);margin:0 0 16px;">Изменение текста, вариантов ответа или правильного варианта.</p>';
+      '<p style="font-size:13px;color:var(--muted);margin:0 0 16px;">Изменение текста, вариантов ответа или правильного варианта.</p>';
     staffState.quizAdmin.forEach(function(q,i){
       var qIsFirst = i===0, qIsLast = i===staffState.quizAdmin.length-1;
       html += '<div class="adm-row" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);">' +
         '<div style="display:flex;flex-direction:column;gap:2px;">' +
           '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-quiz-question" data-id="'+q.id+'" data-dir="up"'+(qIsFirst?' disabled':'')+' title="Выше">↑</button>' +
           '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-quiz-question" data-id="'+q.id+'" data-dir="down"'+(qIsLast?' disabled':'')+' title="Ниже">↓</button></div>' +
-        '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+(i+1)+'. '+escapeHtml(q.question)+'</b><span style="font-size:12px;color:var(--muted);">'+q.options.length+' варианта, правильный: «'+escapeHtml(q.options[q.correct]||"")+'»</span></div>' +
+        '<div style="flex:1;"><b style="font-size:14px;display:block;">'+(i+1)+'. '+escapeHtml(q.question)+'</b><span style="font-size:12px;color:var(--muted);">'+q.options.length+' варианта, правильный: «'+escapeHtml(q.options[q.correct]||"")+'»</span></div>' +
         '<button class="btn btn-sm btn-ghost" data-action="open-quiz-editor" data-id="'+q.id+'">Редактировать</button>' +
         '<button class="btn btn-sm btn-ghost" data-action="delete-quiz-question" data-id="'+q.id+'" title="Удалить вопрос">'+icon("trash","ic-sm")+'</button></div>';
     });
@@ -3712,7 +3715,7 @@ function renderMaterialsPickerModal(){
     '<div class="drawer-body">' +
       '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius-s);margin-bottom:14px;cursor:pointer;background:var(--primary-tint);">' +
         '<input type="checkbox" data-action="toggle-picker-all"'+(allSelected?' checked':'')+'>' +
-        '<span style="font-size:13.5px;font-weight:600;">Скрыть от всех врачей</span></label>' +
+        '<span style="font-size:14px;font-weight:600;">Скрыть от всех врачей</span></label>' +
       '<input class="input" id="materialsPickerSearch" placeholder="Поиск по имени, email или телефону" value="'+escapeHtml(materialsPicker.search)+'" style="margin-bottom:12px;">' +
       '<div style="max-height:320px;overflow-y:auto;">';
   if(!students.length){
@@ -3723,11 +3726,11 @@ function renderMaterialsPickerModal(){
       body += '<label style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--line-2);cursor:pointer;">' +
         '<input type="checkbox" data-action="toggle-picker-student" data-id="'+s.id+'"'+(checked?' checked':'')+'>' +
         userAvatar(s,null,'width:26px;height:26px;font-size:11px;') +
-        '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:11.5px;color:var(--muted);">'+escapeHtml(s.email||s.phone||"—")+'</span></div></label>';
+        '<div style="flex:1;"><b style="font-size:14px;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:12px;color:var(--muted);">'+escapeHtml(s.email||s.phone||"—")+'</span></div></label>';
     });
   }
   body += '</div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;">' +
-    '<span style="font-size:12.5px;color:var(--muted);">Выбрано: '+materialsPicker.selectedIds.length+'</span>' +
+    '<span style="font-size:13px;color:var(--muted);">Выбрано: '+materialsPicker.selectedIds.length+'</span>' +
     '<button class="btn btn-primary" data-action="apply-materials-picker">Сохранить</button></div></div>';
 
   return el('<div class="overlay" data-action="overlay-close-materials"><div class="drawer" data-stop="1" style="width:min(440px,100%);">'+body+'</div></div>');
@@ -3750,7 +3753,7 @@ function renderScheduleModal(){
       '<div class="field"><label>Дата открытия</label><input class="input" type="date" id="scheduleUnlockDate" value="'+escapeHtml(scheduleModal.unlockDate)+'"></div>' +
       '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius-s);margin-bottom:14px;cursor:pointer;background:var(--primary-tint);">' +
         '<input type="checkbox" data-action="toggle-schedule-all"'+(scheduleModal.applyToAll?' checked':'')+'>' +
-        '<span style="font-size:13.5px;font-weight:600;">Применить ко всем врачам</span></label>' +
+        '<span style="font-size:14px;font-weight:600;">Применить ко всем врачам</span></label>' +
       (!scheduleModal.applyToAll ?
         '<input class="input" id="scheduleSearch" placeholder="Поиск по имени или email" value="'+escapeHtml(scheduleModal.search)+'" style="margin-bottom:12px;">' +
         '<div style="max-height:220px;overflow-y:auto;margin-bottom:14px;">' +
@@ -3760,7 +3763,7 @@ function renderScheduleModal(){
           return '<label style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--line-2);cursor:pointer;">' +
             '<input type="checkbox" data-action="toggle-schedule-student" data-id="'+s.id+'"'+(checked?' checked':'')+'>' +
             userAvatar(s,null,'width:26px;height:26px;font-size:11px;') +
-            '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:11.5px;color:var(--muted);">'+(current?'открыт с '+fmtDate(current):'по дрипу')+'</span></div></label>';
+            '<div style="flex:1;"><b style="font-size:14px;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:12px;color:var(--muted);">'+(current?'открыт с '+fmtDate(current):'по дрипу')+'</span></div></label>';
         }).join('') : '<div class="empty-state" style="padding:24px 10px;">Никого не нашлось.</div>') +
         '</div>'
       : '<p class="hint" style="margin-top:-6px;">Затронет всех врачей в вашей зоне ответственности ('+staffState.students.length+').</p>') +
@@ -4066,7 +4069,7 @@ function renderDashboardTab(){
 
   var html = '<div style="margin-top:6px;"><div class="card" style="padding:18px 20px;margin-bottom:20px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
-      '<b style="font-size:14.5px;">Фильтры</b><button class="btn btn-sm btn-ghost" data-action="reset-dash-filters">Сбросить всё</button></div>';
+      '<b style="font-size:15px;">Фильтры</b><button class="btn btn-sm btn-ghost" data-action="reset-dash-filters">Сбросить всё</button></div>';
 
   html += '<div class="dash-filters-grid">';
 
@@ -4092,7 +4095,7 @@ function renderDashboardTab(){
 
   html += '<div class="card" style="padding:18px 20px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">' +
-      '<b style="font-size:14.5px;">Найдено: '+filtered.length+' из '+staffState.students.length+'</b>' +
+      '<b style="font-size:15px;">Найдено: '+filtered.length+' из '+staffState.students.length+'</b>' +
       '<button class="btn btn-sm btn-ghost" data-action="export-dash-csv"'+(!filtered.length?' disabled':'')+'>Экспорт в CSV</button></div>';
 
   if(!filtered.length){
@@ -4144,7 +4147,7 @@ function renderInboxCard(){
   if(!total) return el('<div></div>');
 
   var html = '<div class="card" style="padding:18px 20px;margin-bottom:20px;">' +
-    '<b style="font-size:14.5px;display:block;margin-bottom:14px;">Требует внимания ('+total+')</b>';
+    '<b style="font-size:15px;display:block;margin-bottom:14px;">Требует внимания ('+total+')</b>';
 
   if(inbox.inactive.length){
     html += '<div class="inbox-group">'+magnet("attention","Неактивны 7+ дней");
@@ -4168,7 +4171,7 @@ function renderInboxCard(){
     inbox.pendingCertificates.forEach(function(r){
       html += '<div class="inbox-row">' +
         userAvatar(r) +
-        '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(r.name)+'</b><span style="font-size:12px;color:var(--muted);">тест: '+r.quiz_score+'%</span></div>' +
+        '<div style="flex:1;"><b style="font-size:14px;display:block;">'+escapeHtml(r.name)+'</b><span style="font-size:12px;color:var(--muted);">тест: '+r.quiz_score+'%</span></div>' +
         '<button class="btn btn-sm btn-primary" data-action="issue-certificate" data-id="'+r.id+'">Выдать</button>' +
       '</div>';
     });
@@ -4212,7 +4215,7 @@ function renderCertificateQueue(){
   var allSelected = selected.length>0 && selected.length===pending.length;
   var html = '<div class="card" style="padding:18px 20px;margin-bottom:20px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">' +
-      '<label style="display:flex;align-items:center;gap:8px;font-size:14.5px;font-weight:600;cursor:pointer;">' +
+      '<label style="display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;cursor:pointer;">' +
         '<input type="checkbox" data-action="toggle-cert-select-all"'+(allSelected?' checked':'')+' style="accent-color:var(--primary);">Очередь сертификатов</label>' +
       (selected.length ? '<button class="btn btn-sm btn-primary" data-action="bulk-issue-certificates">Выдать выбранным ('+selected.length+')</button>' : '') +
     '</div>';
@@ -4221,7 +4224,7 @@ function renderCertificateQueue(){
     html += '<div class="adm-row" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line-2);">' +
       '<input type="checkbox" data-action="toggle-cert-select" data-id="'+s.id+'"'+(checked?' checked':'')+' style="accent-color:var(--primary);">' +
       userAvatar(s) +
-      '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:12px;color:var(--muted);">тест: '+s.quiz_score+'%</span></div>' +
+      '<div style="flex:1;"><b style="font-size:14px;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:12px;color:var(--muted);">тест: '+s.quiz_score+'%</span></div>' +
       '<button class="btn btn-sm btn-ghost" data-action="open-student" data-id="'+s.id+'">Открыть</button>' +
       '<button class="btn btn-sm btn-primary" data-action="issue-certificate" data-id="'+s.id+'">Выдать</button>' +
     '</div>';
@@ -4251,8 +4254,8 @@ function renderRoster(){
 
   if(staffState.showImportStudents){
     html += '<div class="card" style="padding:14px 16px;margin-bottom:16px;background:var(--surface-2);">' +
-      '<b style="font-size:13.5px;display:block;margin-bottom:6px;">Массовый импорт врачей</b>' +
-      '<p style="font-size:12.5px;color:var(--muted);margin:0 0 10px;">CSV с заголовком: Имя, Email, Телефон, Место работы, Специализация, Поток (последние три необязательны). Записывает сразу на курс «'+escapeHtml((staffState.coursesList.find(function(c){return c.id===staffState.activeCourseId;})||{}).title||"")+'» — переключите курс сверху, если нужен другой.</p>' +
+      '<b style="font-size:14px;display:block;margin-bottom:6px;">Массовый импорт врачей</b>' +
+      '<p style="font-size:13px;color:var(--muted);margin:0 0 10px;">CSV с заголовком: Имя, Email, Телефон, Место работы, Специализация, Поток (последние три необязательны). Записывает сразу на курс «'+escapeHtml((staffState.coursesList.find(function(c){return c.id===staffState.activeCourseId;})||{}).title||"")+'» — переключите курс сверху, если нужен другой.</p>' +
       '<form id="importStudentsForm" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
         '<input class="input" type="file" name="file" accept=".csv,.txt" required style="max-width:360px;flex:1;">' +
         '<button class="btn btn-sm btn-primary" type="submit">Загрузить</button>' +
@@ -4268,7 +4271,7 @@ function renderRoster(){
         html += '</tbody></table></div><p class="hint">Сохраните пароли сейчас — повторно они не показываются, только через «Сбросить пароль».</p>';
       }
       if(ir.skipped.length){
-        html += '<div style="margin-top:8px;">'+ir.skipped.map(function(s){ return '<div style="font-size:12.5px;color:var(--muted);">Строка '+s.row+' ('+escapeHtml(s.email||"—")+'): '+escapeHtml(s.reason)+'</div>'; }).join("")+'</div>';
+        html += '<div style="margin-top:8px;">'+ir.skipped.map(function(s){ return '<div style="font-size:13px;color:var(--muted);">Строка '+s.row+' ('+escapeHtml(s.email||"—")+'): '+escapeHtml(s.reason)+'</div>'; }).join("")+'</div>';
       }
     }
     html += '</div>';
@@ -4282,7 +4285,7 @@ function renderRoster(){
     if(staffState.inviteMode==="bulk"){
       html += '<form id="inviteBulkForm" style="margin-bottom:16px;">' +
         '<div class="field"><label>Список email (по одному в строке, или вставьте из Excel/CSV)</label>' +
-        '<textarea class="input" name="emails" required style="height:110px;font-family:monospace;font-size:12.5px;" placeholder="doctor1@clinic.ru&#10;doctor2@clinic.ru&#10;doctor3@clinic.ru"></textarea></div>' +
+        '<textarea class="input" name="emails" required style="height:110px;font-family:monospace;font-size:13px;" placeholder="doctor1@clinic.ru&#10;doctor2@clinic.ru&#10;doctor3@clinic.ru"></textarea></div>' +
         '<div class="field"><label>Или загрузить .csv файл</label><input class="input" type="file" id="bulkCsvFile" accept=".csv,.txt"></div>' +
         '<div class="err-text" id="inviteBulkError" style="display:none;"></div>' +
         '<button class="btn btn-primary" type="submit">Пригласить всех</button>' +
@@ -4298,7 +4301,7 @@ function renderRoster(){
     var bulkProductOpts = Object.keys(PRODUCTS).map(function(k){ return '<option value="'+k+'">'+escapeHtml(PRODUCTS[k])+'</option>'; }).join("");
     var bulkPaymentOpts = Object.keys(PAYMENT_LABELS).map(function(k){ return '<option value="'+k+'">'+escapeHtml(PAYMENT_LABELS[k])+'</option>'; }).join("");
     html += '<div class="card" style="padding:10px 14px;margin-bottom:14px;background:var(--primary-tint);border-color:transparent;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
-      '<b style="font-size:13.5px;color:var(--primary-dark);">Выбрано: '+selected.length+'</b>' +
+      '<b style="font-size:14px;color:var(--primary-dark);">Выбрано: '+selected.length+'</b>' +
       '<select class="input" id="bulkStreamSelect" style="width:auto;font-size:13px;padding:6px 10px;">'+buildStreamOptions("", "Без потока")+'</select>' +
       '<button class="btn btn-sm btn-primary" data-action="apply-bulk-stream">В поток</button>' +
       '<select class="input" id="bulkProductSelect" style="width:auto;font-size:13px;padding:6px 10px;">'+bulkProductOpts+'</select>' +
@@ -4322,8 +4325,8 @@ function renderRoster(){
         '<td class="nowrap" data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+done+'/'+((staffState.materials||[]).length||5)+'</td>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+(typeof s.quiz_score==="number"?s.quiz_score+'%':'—')+'</td>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+status+'</td>' +
-        '<td><select class="input" style="font-size:12.5px;padding:5px 8px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" data-stream-select data-id="'+s.id+'">'+buildStreamOptions(s.stream_id||"", "Без потока")+'</select></td>' +
-        '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+(s.online?magnet("active","В сети"):'<span style="color:var(--muted);font-size:12.5px;">'+escapeHtml(timeSince(s.last_seen_at))+'</span>')+'</td>' +
+        '<td><select class="input" style="font-size:13px;padding:5px 8px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" data-stream-select data-id="'+s.id+'">'+buildStreamOptions(s.stream_id||"", "Без потока")+'</select></td>' +
+        '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+(s.online?magnet("active","В сети"):'<span style="color:var(--muted);font-size:13px;">'+escapeHtml(timeSince(s.last_seen_at))+'</span>')+'</td>' +
         '<td class="nowrap" style="color:var(--muted);">'+fmtDateShort(s.created_at)+'</td>' +
         '<td class="nowrap" style="text-align:right;"><button class="btn btn-sm btn-ghost row-open" data-action="open-student" data-id="'+s.id+'">Открыть →</button></td>' +
       '</tr>';
@@ -4339,11 +4342,11 @@ function renderRoster(){
 // им управляет, отсюда же их читают форма регистрации и профиль врача.
 function renderSpecializationsCard(){
   var html = '<div class="card" style="padding:18px 20px;margin-bottom:16px;">' +
-    '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Специализации</b>' +
-    '<p style="font-size:12.5px;color:var(--muted);margin:0 0 14px;">Справочник, из которого врач выбирает специализацию при регистрации — на нём же основан подбор протоколов.</p>';
+    '<b style="font-size:15px;display:block;margin-bottom:4px;">Специализации</b>' +
+    '<p style="font-size:13px;color:var(--muted);margin:0 0 14px;">Справочник, из которого врач выбирает специализацию при регистрации — на нём же основан подбор протоколов.</p>';
   specializationsList.forEach(function(s){
     html += '<div class="adm-row" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line-2);">' +
-      '<span style="flex:1;font-size:13.5px;">'+escapeHtml(s.name)+'</span>' +
+      '<span style="flex:1;font-size:14px;">'+escapeHtml(s.name)+'</span>' +
       '<button class="btn btn-sm btn-ghost" data-action="open-specialization-editor" data-id="'+s.id+'" data-name="'+escapeHtml(s.name)+'">Переименовать</button>' +
       '<button class="btn btn-sm btn-ghost" data-action="delete-specialization" data-id="'+s.id+'" data-name="'+escapeHtml(s.name)+'" title="Удалить">'+icon("trash","ic-sm")+'</button>' +
     '</div>';
@@ -4362,8 +4365,8 @@ function renderSpecializationsCard(){
 // поэтому «добавление» урока в один модуль автоматически убирает его из другого.
 function renderModulesAdminTab(){
   var html = '<div class="card" style="padding:18px 20px;">' +
-    '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Модули курса</b>' +
-    '<p style="font-size:12.5px;color:var(--muted);margin:0 0 14px;">Группа уроков — например, 8 подряд. По прохождении всех уроков модуля врачу показывается итоговый тест модуля (если вы его добавили) и короткий обязательный отзыв.</p>' +
+    '<b style="font-size:15px;display:block;margin-bottom:4px;">Модули курса</b>' +
+    '<p style="font-size:13px;color:var(--muted);margin:0 0 14px;">Группа уроков — например, 8 подряд. По прохождении всех уроков модуля врачу показывается итоговый тест модуля (если вы его добавили) и короткий обязательный отзыв.</p>' +
     '<form id="moduleCreateForm" style="display:flex;gap:8px;">' +
       '<input class="input" name="title" placeholder="Название модуля" required style="flex:1;">' +
       '<button class="btn btn-sm btn-primary" type="submit">Добавить модуль</button>' +
@@ -4379,7 +4382,7 @@ function renderModulesAdminTab(){
       var avgLabel = m.feedback.average!==null ? ' · ★'+m.feedback.average.toFixed(1) : '';
       html += '<div class="card" style="padding:14px 16px;margin-top:12px;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">' +
-          '<b style="font-size:13.5px;">'+escapeHtml(m.title)+'</b>' +
+          '<b style="font-size:14px;">'+escapeHtml(m.title)+'</b>' +
           '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
             '<button class="btn btn-sm btn-ghost" data-action="open-module-quiz-manager" data-id="'+m.id+'" data-title="'+escapeHtml(m.title)+'">Тест ('+m.quizCount+')</button>' +
             '<button class="btn btn-sm btn-ghost" data-action="open-module-feedback-viewer" data-id="'+m.id+'" data-title="'+escapeHtml(m.title)+'">Отзывы ('+m.feedback.count+avgLabel+')</button>' +
@@ -4392,7 +4395,7 @@ function renderModulesAdminTab(){
       } else {
         html += '<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px;">';
         lessonsInModule.forEach(function(l){
-          html += '<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;padding:4px 0;border-bottom:1px solid var(--line-2);">' +
+          html += '<div style="display:flex;align-items:center;gap:8px;font-size:13px;padding:4px 0;border-bottom:1px solid var(--line-2);">' +
             '<span style="flex:1;">'+escapeHtml(l.title)+'</span>' +
             '<button class="btn btn-sm btn-ghost" data-action="unassign-module-lesson" data-id="'+l.id+'" title="Убрать из модуля">'+icon("trash","ic-sm")+'</button>' +
           '</div>';
@@ -4418,16 +4421,16 @@ function renderProtocolsAdminTab(){
   var html = isProtocolAdmin ? renderSpecializationsCard() : '';
   html += '<div class="card" style="padding:18px 20px;">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:10px;">' +
-      '<b style="font-size:14.5px;">Протоколы</b>' +
+      '<b style="font-size:15px;">Протоколы</b>' +
       (isProtocolAdmin ? '<button class="btn btn-sm btn-primary" data-action="open-protocol-creator">+ Добавить протокол</button>' : '') +
     '</div>' +
-    '<p style="font-size:12.5px;color:var(--muted);margin:0 0 14px;">Разблокируются врачу после прохождения привязанных уроков — с гайдом применения под его специализацию (см. «Ваши протоколы» у врача).'+(isProtocolAdmin?'':' Вы можете редактировать текст гайдов и прикладывать к ним файлы.')+'</p>';
+    '<p style="font-size:13px;color:var(--muted);margin:0 0 14px;">Разблокируются врачу после прохождения привязанных уроков — с гайдом применения под его специализацию (см. «Ваши протоколы» у врача).'+(isProtocolAdmin?'':' Вы можете редактировать текст гайдов и прикладывать к ним файлы.')+'</p>';
   if(!adminProtocolsState.list.length){
     html += '<div class="empty-state" style="padding:30px 10px;">Протоколов пока нет.</div>';
   } else {
     adminProtocolsState.list.forEach(function(p){
       html += '<div class="adm-row" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);">' +
-        '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(p.title)+'</b>' +
+        '<div style="flex:1;"><b style="font-size:14px;display:block;">'+escapeHtml(p.title)+'</b>' +
           '<span style="font-size:12px;color:var(--muted);">'+p.guides.length+' гайд(ов) · '+p.lessonIds.length+' урок(ов) открывают</span></div>' +
         '<button class="btn btn-sm btn-ghost" data-action="open-protocol-editor" data-id="'+p.id+'">Редактировать</button>' +
         (isProtocolAdmin ? '<button class="btn btn-sm btn-ghost" data-action="delete-protocol" data-id="'+p.id+'" data-title="'+escapeHtml(p.title)+'" title="Удалить">'+icon("trash","ic-sm")+'</button>' : '') +
@@ -4475,7 +4478,7 @@ function renderProtocolGuideFiles(g){
   var html = '<div style="margin-top:10px;">';
   (g.files||[]).forEach(function(f){
     html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line-2);">' +
-      '<a href="'+f.url+'" target="_blank" rel="noopener" style="flex:1;font-size:12.5px;display:flex;align-items:center;gap:6px;min-width:0;color:var(--primary);text-decoration:underline;">'+icon("folder","ic-sm")+'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escapeHtml(f.originalName)+'</span></a>' +
+      '<a href="'+f.url+'" target="_blank" rel="noopener" style="flex:1;font-size:13px;display:flex;align-items:center;gap:6px;min-width:0;color:var(--primary);text-decoration:underline;">'+icon("folder","ic-sm")+'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escapeHtml(f.originalName)+'</span></a>' +
       '<button type="button" class="btn btn-sm btn-ghost" data-action="delete-protocol-guide-file" data-spec="'+g.specializationId+'" data-file-id="'+f.id+'" data-name="'+escapeHtml(f.originalName)+'" title="Удалить файл">'+icon("trash","ic-sm")+'</button>' +
     '</div>';
   });
@@ -4500,18 +4503,18 @@ function renderProtocolEditorModal(){
       '<button class="btn btn-primary" type="submit">'+(isNew?"Создать и продолжить":"Сохранить")+'</button>' +
     '</form>';
   } else {
-    body += '<b style="font-size:14.5px;display:block;">'+escapeHtml(protocolEditor.title)+'</b>' +
-      (protocolEditor.summary ? '<p style="font-size:12.5px;color:var(--muted);margin:6px 0 0;">'+escapeHtml(protocolEditor.summary)+'</p>' : '');
+    body += '<b style="font-size:15px;display:block;">'+escapeHtml(protocolEditor.title)+'</b>' +
+      (protocolEditor.summary ? '<p style="font-size:13px;color:var(--muted);margin:6px 0 0;">'+escapeHtml(protocolEditor.summary)+'</p>' : '');
   }
 
   if(!isNew){
     body += '<div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line-2);">' +
-      '<b style="font-size:13.5px;display:block;margin-bottom:10px;">Гайды по специализациям</b>';
+      '<b style="font-size:14px;display:block;margin-bottom:10px;">Гайды по специализациям</b>';
     protocolEditor.guides.forEach(function(g){
       body += '<div class="card" style="padding:12px 14px;margin-bottom:8px;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><b style="font-size:13px;">'+escapeHtml(g.specializationName)+'</b>' +
           '<button class="btn btn-sm btn-ghost" data-action="delete-protocol-guide" data-spec="'+g.specializationId+'" title="Удалить гайд">'+icon("trash","ic-sm")+'</button></div>' +
-        (g.guideHtml ? '<div class="prose" style="font-size:12.5px;">'+renderPlainToProse(g.guideHtml)+'</div>' : '<p class="hint" style="margin:0;">Текста пока нет — только файлы.</p>') +
+        (g.guideHtml ? '<div class="prose" style="font-size:13px;">'+renderPlainToProse(g.guideHtml)+'</div>' : '<p class="hint" style="margin:0;">Текста пока нет — только файлы.</p>') +
         renderProtocolGuideFiles(g) +
       '</div>';
     });
@@ -4532,7 +4535,7 @@ function renderProtocolEditorModal(){
 
     if(isProtocolAdmin){
       body += '<div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line-2);">' +
-        '<b style="font-size:13.5px;display:block;margin-bottom:10px;">Какие уроки открывают этот протокол</b>';
+        '<b style="font-size:14px;display:block;margin-bottom:10px;">Какие уроки открывают этот протокол</b>';
       (staffState.materials||[]).forEach(function(l){
         var checked = protocolEditor.lessonIds.indexOf(l.id)!==-1;
         body += '<label style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line-2);cursor:pointer;">' +
@@ -4816,20 +4819,20 @@ function renderStudentDrawer(){
     if(s.completed){
       if(staffState.certificatesEnabled){
         body += '<div class="card" style="padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;">' +
-          '<b style="font-size:13.5px;">Сертификат: '+(s.certificate_status==="issued"?"выдан":"ожидает выдачи")+'</b>' +
+          '<b style="font-size:14px;">Сертификат: '+(s.certificate_status==="issued"?"выдан":"ожидает выдачи")+'</b>' +
           (s.certificate_status==="issued"
             ? '<a class="btn btn-sm btn-ghost" href="api/staff/students/'+s.id+'/certificate/download?courseId='+encodeURIComponent(staffState.activeCourseId||"")+'" target="_blank" rel="noopener">'+icon("download","ic-sm")+' Скачать PDF</a>'
             : '<button class="btn btn-sm btn-primary" data-action="issue-certificate" data-id="'+s.id+'">Выдать сертификат</button>') +
         '</div>';
       } else {
         body += '<div class="card" style="padding:14px 16px;">' +
-          '<b style="font-size:13.5px;">Демо-курс пройден · тест '+s.quiz_score+'%</b>' +
-          '<p style="font-size:12.5px;color:var(--muted);margin:4px 0 0;">Сертификаты на демо-курсе не выдаются.</p>' +
+          '<b style="font-size:14px;">Демо-курс пройден · тест '+s.quiz_score+'%</b>' +
+          '<p style="font-size:13px;color:var(--muted);margin:4px 0 0;">Сертификаты на демо-курсе не выдаются.</p>' +
         '</div>';
       }
     }
     if(s.requested_full_access){
-      body += '<div class="card" style="padding:14px 16px;margin-top:12px;background:var(--accent-tint);border-color:transparent;"><b style="font-size:13.5px;">Оставил(а) заявку на полную программу</b></div>';
+      body += '<div class="card" style="padding:14px 16px;margin-top:12px;background:var(--accent-tint);border-color:transparent;"><b style="font-size:14px;">Оставил(а) заявку на полную программу</b></div>';
     }
   } else if(staffState.drawerTab === "access"){
     var expiresAtRaw = s.access_expires_at ? String(s.access_expires_at).slice(0,10) : "";
@@ -4838,7 +4841,7 @@ function renderStudentDrawer(){
     var isExpired = expiresAtRaw && expiresAtRaw < todayIso;
     var statusText = isBlocked ? "Доступ заблокирован" : (isExpired ? "Доступ истёк "+fmtDate(expiresAtRaw) : (expiresAtRaw ? "Доступ активен до "+fmtDate(expiresAtRaw) : "Доступ бессрочный"));
 
-    body += '<div class="card" style="padding:14px 16px;margin-bottom:16px;'+((isBlocked||isExpired)?'background:var(--danger-tint);':'background:var(--primary-tint);')+'border-color:transparent;"><b style="font-size:13.5px;">'+statusText+'</b></div>' +
+    body += '<div class="card" style="padding:14px 16px;margin-bottom:16px;'+((isBlocked||isExpired)?'background:var(--danger-tint);':'background:var(--primary-tint);')+'border-color:transparent;"><b style="font-size:14px;">'+statusText+'</b></div>' +
       '<div class="field"><label>Срок доступа к демо-курсу</label><div style="display:flex;gap:8px;">' +
         '<input class="input" type="date" id="accessExpiryInput" value="'+escapeHtml(expiresAtRaw)+'">' +
         '<button class="btn btn-sm btn-ghost" data-action="save-access-expiry" data-id="'+s.id+'">Сохранить</button></div></div>' +
@@ -4864,8 +4867,8 @@ function renderStudentDrawer(){
       body += '<p class="hint">Заметок пока нет.</p>';
     } else {
       staffState.notes.forEach(function(n){
-        body += '<div style="padding:10px 0;border-bottom:1px solid var(--line-2);"><p style="font-size:13.5px;margin:0 0 4px;">'+escapeHtml(n.body)+'</p>' +
-          '<span style="font-size:11.5px;color:var(--muted-2);">'+escapeHtml(n.author_name||"")+' · '+fmtDate(n.created_at)+' '+fmtTime(n.created_at)+'</span></div>';
+        body += '<div style="padding:10px 0;border-bottom:1px solid var(--line-2);"><p style="font-size:14px;margin:0 0 4px;">'+escapeHtml(n.body)+'</p>' +
+          '<span style="font-size:12px;color:var(--muted-2);">'+escapeHtml(n.author_name||"")+' · '+fmtDate(n.created_at)+' '+fmtTime(n.created_at)+'</span></div>';
       });
     }
     body += '</div>';
