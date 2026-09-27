@@ -2785,16 +2785,11 @@ function renderLessonVideoStage(lesson, stages, isDoneAlready){
   var html = '<div class="lesson-video-wrap"><video id="lessonVideoPlayer" controls preload="metadata" src="'+escapeHtml(lesson.videoUrl)+'"></video></div>';
 
   if(tcs.length){
-    html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">';
-    tcs.forEach(function(tc,i){
-      html += '<button type="button" class="chapter-item btn btn-sm btn-ghost" data-action="seek-lesson-video" data-time="'+tc.time+'" data-chapter-id="'+tc.id+'" style="'+(i===0?'':'')+'">'+fmtTimecode(tc.time)+' · '+escapeHtml(tc.title)+'</button>';
-    });
-    html += '</div>';
+    // Раньше здесь были ещё и главы-«пилюли» в ряд над этим блоком — тот же список,
+    // только без диапазонов. Дублировали один и тот же список глав дважды подряд,
+    // убрал: список диапазонов ниже кликабелен точно так же (тот же chapter-item
+    // и data-action) и вдобавок показывает конец каждой главы.
     html += '<div id="lessonChapterSummary" class="prose" style="min-height:24px;">'+renderPlainToProse(tcs[0].summary||'')+'</div>';
-    // Тот же список, но диапазонами (0:56–3:44 · Заголовок) под видео — конец
-    // главы это начало следующей, у последней открытый конец. Кликабельно так же,
-    // как пилюли выше (тот же data-action и chapter-item — подсветка активной
-    // главы через общий updateChapter в wireLessonVideo).
     html += '<div class="video-timecodes">';
     tcs.forEach(function(tc,i){
       var next = tcs[i+1];
