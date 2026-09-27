@@ -167,6 +167,10 @@ if (BASE_PATH) {
 
 const PORT = process.env.PORT || 8790;
 if (require.main === module) {
+  // Колонка для фото профиля — создаём сами при старте (идемпотентно), чтобы
+  // забытый `npm run migrate` не ломал вход: /auth/me уже читает avatar_file.
+  require("./db").query("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_file TEXT")
+    .catch((e) => console.error("Не удалось добавить users.avatar_file:", e.message));
   const server = app.listen(PORT, () => {
     console.log("LMS backend запущен на порту " + PORT);
     console.log("Документация API: http://localhost:" + PORT + "/api-docs");

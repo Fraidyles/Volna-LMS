@@ -46,6 +46,7 @@ function canAssignRole(actingRole, targetRole) {
 const STUDENT_FIELDS = `
   u.id, u.name, u.email, u.phone, u.workplace, u.created_at, u.stream_id,
   u.product, u.payment_status, u.assigned_curator_id, u.referral_code,
+  CASE WHEN u.avatar_file IS NULL THEN NULL ELSE 'api/auth/avatar/' || u.avatar_file END AS avatar_url,
   COALESCE((SELECT array_agg(s.name ORDER BY s.name) FROM user_specializations us JOIN specializations s ON s.id = us.specialization_id WHERE us.user_id = u.id), '{}') AS specializations,
   COALESCE((SELECT array_agg(us.specialization_id) FROM user_specializations us WHERE us.user_id = u.id), '{}') AS specialization_ids,
   p.course_id, p.completed_lessons, p.quiz_score, p.completed, p.certificate_status,
@@ -67,7 +68,7 @@ function withOnlineStatus(row) {
 
 router.get("/team", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
   const result = await pool.query(
-    `SELECT id, name, email, role, created_at FROM users WHERE role IN ('admin','curator') ORDER BY created_at`
+    `SELECT id, name, email, role, created_at, CASE WHEN avatar_file IS NULL THEN NULL ELSE 'api/auth/avatar/' || avatar_file END AS avatar_url FROM users WHERE role IN ('admin','curator') ORDER BY created_at`
   );
   res.json({ staff: result.rows });
 });

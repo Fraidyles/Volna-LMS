@@ -8,6 +8,15 @@ const { authRequired } = require("../middleware/auth");
 const { logAction } = require("../audit");
 const { generateReferralCode, describeUserAgent } = require("../util");
 const { verifyStaffInviteCode } = require("../staffInviteCode");
+const fs = require("fs");
+const path = require("path");
+
+// Фото профиля: браузер сам ужимает снимок до 256×256 и присылает data URL
+// (≈20–40 КБ), сервер лишь проверяет тип/размер и кладёт файл на диск.
+const AVATAR_DIR = path.join(__dirname, "..", "..", "uploads", "avatars");
+const AVATAR_MAX_BYTES = 300 * 1024;
+const AVATAR_TYPES = { "image/webp": "webp", "image/jpeg": "jpg", "image/png": "png" };
+function avatarUrl(file){ return file ? "api/auth/avatar/" + file : null; }
 
 const router = express.Router();
 
@@ -216,7 +225,7 @@ router.post("/logout-everywhere", authRequired, async (req, res) => {
 
 router.get("/me", authRequired, async (req, res) => {
   const result = await pool.query(
-    "SELECT id, email, name, role, workplace, phone, stream_id, referral_code, created_at, product, payment_status FROM users WHERE id=$1",
+    "SELECT id, email, name, role, workplace, phone, stream_id, referral_code, created_at, product, payment_status, avatar_file FROM users WHERE id=$1",
     [req.user.id]
   );
   if (!result.rowCount) return res.status(404).json({ error: "not_found" });
@@ -226,10 +235,47 @@ router.get("/me", authRequired, async (req, res) => {
   const currentSpecs = await pool.query(
     "SELECT specialization_id FROM user_specializations WHERE user_id=$1", [req.user.id]
   );
-  res.json({ user: Object.assign({}, result.rows[0], {
+  const u = Object.assign({}, result.rows[0]);
+  u.avatar_url = avatarUrl(u.avatar_file); delete u.avatar_file;
+  res.json({ user: Object.assign(u, {
     specializationIds: currentSpecs.rows.map((r) => r.specialization_id),
     interestIds: interests.rows.map((r) => r.specialization_id)
   }) });
+});
+
+router.put("/me/avatar", authRequired, express.json({ limit: "600kb" }), async (req, res) => {
+  const m = /^data:(image\/(?:webp|jpeg|png));base64,([A-Za-z0-9+/=]+)$/.exec((req.body && req.body.image) || "");
+  if (!m) return res.status(400).json({ error: "invalid_input", message: "Нужна картинка JPG, PNG или WebP" });
+  const buf = Buffer.from(m[2], "base64");
+  if (!buf.length || buf.length > AVATAR_MAX_BYTES) {
+    return res.status(400).json({ error: "too_large", message: "Фото слишком большое" });
+  }
+  fs.mkdirSync(AVATAR_DIR, { recursive: true });
+  const file = req.user.id.replace(/[^A-Za-z0-9-]/g, "") + "-" + crypto.randomBytes(6).toString("hex") + "." + AVATAR_TYPES[m[1]];
+  fs.writeFileSync(path.join(AVATAR_DIR, file), buf);
+  const prev = await pool.query("SELECT avatar_file FROM users WHERE id=$1", [req.user.id]);
+  await pool.query("UPDATE users SET avatar_file=$1 WHERE id=$2", [file, req.user.id]);
+  const old = prev.rowCount && prev.rows[0].avatar_file;
+  if (old && old !== file) fs.unlink(path.join(AVATAR_DIR, path.basename(old)), () => {});
+  res.json({ ok: true, avatar_url: avatarUrl(file) });
+});
+
+router.delete("/me/avatar", authRequired, async (req, res) => {
+  const prev = await pool.query("SELECT avatar_file FROM users WHERE id=$1", [req.user.id]);
+  await pool.query("UPDATE users SET avatar_file=NULL WHERE id=$1", [req.user.id]);
+  const old = prev.rowCount && prev.rows[0].avatar_file;
+  if (old) fs.unlink(path.join(AVATAR_DIR, path.basename(old)), () => {});
+  res.json({ ok: true });
+});
+
+// Фото отдаются только авторизованным (как и остальные данные платформы).
+router.get("/avatar/:file", authRequired, (req, res) => {
+  const file = path.basename(req.params.file);
+  if (!/^[A-Za-z0-9-]+\.(webp|jpg|png)$/.test(file)) return res.status(404).end();
+  const full = path.join(AVATAR_DIR, file);
+  if (!fs.existsSync(full)) return res.status(404).end();
+  res.set("Cache-Control", "private, max-age=86400");
+  res.sendFile(full);
 });
 
 // «Мой профиль» → «Текущие сеансы»: с какого устройства, откуда (IP) и когда входили.

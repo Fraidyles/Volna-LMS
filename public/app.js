@@ -176,6 +176,18 @@ function renderPlainToProse(s){
   if(!lines.length) return "";
   return lines.map(function(l){ return "<p>"+escapeHtml(l)+"</p>"; }).join("");
 }
+// Аватар пользователя: фото, если загружено (avatar_url), иначе инициалы на
+// мягком тоне. cls/style — доп. класс и стиль кружка.
+function userAvatar(u, cls, style){
+  u = u || {};
+  // Строки инбокса/дайджеста приходят без avatar_url — берём из списка врачей.
+  if(!u.avatar_url && u.id && typeof staffState!=="undefined"){
+    var full = (staffState.students||[]).find(function(x){ return x.id===u.id; }) || (staffState.staff||[]).find(function(x){ return x.id===u.id; });
+    if(full && full.avatar_url) u = Object.assign({}, u, { avatar_url: full.avatar_url });
+  }
+  var inner = u.avatar_url ? '<img src="'+escapeHtml(u.avatar_url)+'" alt="" loading="lazy">' : initials(u.name);
+  return '<div class="avatar'+(cls?' '+cls:'')+(u.avatar_url?' has-photo':'')+'" style="'+(u.avatar_url?'':avatarTone(u.name))+(style||'')+'">'+inner+'</div>';
+}
 function initials(name){ var p=(name||"?").trim().split(/\s+/); return ((p[0]||"?")[0]+(p[1]?p[1][0]:"")).toUpperCase(); }
 
 /* ============================= ИКОНКИ (авторский SVG-набор) ============================= */
@@ -193,6 +205,7 @@ var ICONS = {
   badge: '<circle cx="12" cy="9.5" r="5.5"/><path d="M9 14l-2 7 5-2.5L17 21l-2-7"/>',
   doctor: '<path d="M7 3.5v5a5 5 0 0 0 10 0v-5"/><path d="M17 8v2a5 5 0 0 1-10 0"/><circle cx="19" cy="5" r="2"/><path d="M12 15.5v3.5"/><circle cx="12" cy="20.5" r="1.3"/>',
   chevron: '<path d="M6 9.5l6 6 6-6"/>',
+  camera: '<path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.4-2h5.8l1.4 2h2.2A1.5 1.5 0 0 1 20 8.5v9A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5v-9Z"/><circle cx="12" cy="12.8" r="3.4"/>',
   trash: '<path d="M5 7h14"/><path d="M9 7V5.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5.5V7"/><path d="M7 7l1 12.5A1.5 1.5 0 0 0 9.5 21h5a1.5 1.5 0 0 0 1.5-1.5L17 7"/>',
   bell: '<path d="M6 10.5a6 6 0 0 1 12 0v4l1.8 3H4.2L6 14.5v-4Z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
   flame: '<path d="M12 2.5s-5.5 5-5.5 10a5.5 5.5 0 0 0 11 0c0-1.6-.7-2.7-1.4-3.7.1 1.6-.6 2.6-1.4 2.6-1.1 0-1.2-1-1-2 .3-1.7-.2-3.6-1.7-4.9-.1 1.4-.6 2.5-1.5 3.4-1.1 1.1-1.5 2.4-1.5 3.6a3 3 0 0 0 3 3"/>',
@@ -1368,7 +1381,7 @@ function upcomingEventReminders(){
 
 function sidebarItem(key, iconName, label, active, badge){
   return '<button type="button" class="sidebar-item'+(active?' active':'')+'" data-action="sidebar-nav" data-key="'+key+'" title="'+escapeHtml(label)+'">' +
-    icon(iconName) +
+    (key==="profile" && me && me.avatar_url ? '<img class="sidebar-av" src="'+escapeHtml(me.avatar_url)+'" alt="">' : icon(iconName)) +
     '<span class="sidebar-item-label">'+escapeHtml(label)+'</span>' +
     (badge>0 ? '<span class="sidebar-item-badge">'+(badge>9?"9+":badge)+'</span><span class="sidebar-item-dot"></span>' : '') +
   '</button>';
@@ -2548,75 +2561,84 @@ function roleCapabilities(role){
 }
 
 function renderMyProfilePage(){
+  // Шапка-обложка с фото (можно загрузить/убрать), именем, ролью и ключевыми
+  // цифрами; ниже — редактирование данных и «что доступно роли». Пароль и
+  // сеансы — в «Настройках».
   var isStudent = me.role==="student";
   var caps = roleCapabilities(me.role);
-  var html = '<div style="margin-top:6px;" class="grid-2">';
+  var stats = [];
+  if(isStudent && course){
+    var pr = course.progress || {}, gam = course.gamification || {};
+    stats.push([(pr.completed_lessons||[]).length+' / '+course.lessons.length, "уроков пройдено"]);
+    stats.push([gam.currentStreak||0, "дней подряд"]);
+    stats.push([gam.points||0, "очков"]);
+  } else if(!isStudent){
+    var mine = (staffState.students||[]).filter(function(st){ return me.role!=="curator" || st.assigned_curator_id===me.id; });
+    stats.push([mine.length, me.role==="curator" ? "моих врачей" : "врачей на курсе"]);
+    stats.push([mine.filter(function(st){ return st.completed; }).length, "завершили демо"]);
+    stats.push([(staffState.staff||[]).length, "в команде"]);
+  }
+  var specNamesList = isStudent ? (me.specializationIds||[]).map(function(id){ var sp=(specializationsList||[]).find(function(x){ return x.id===id; }); return sp?sp.name:null; }).filter(Boolean) : [];
+  var myStream = isStudent && me.stream_id ? (calendarState.streams||[]).find(function(x){ return x.id===me.stream_id; }) : null;
 
-  // Левая колонка (шире) — форма профиля и то, что доступно роли.
-  html += '<div>';
-  html += '<div class="card" style="padding:18px 20px;margin-bottom:14px;">' +
-    '<b style="font-size:14.5px;display:block;margin-bottom:14px;">Основная информация</b>' +
+  var html = '<div class="page-wide"><div class="card profile-hero">' +
+    '<div class="profile-cover aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
+    '<div class="profile-main">' +
+      '<div class="profile-photo">'+userAvatar(me, "profile-av")+
+        '<button type="button" class="profile-photo-btn" data-action="pick-avatar" title="Загрузить фото">'+icon("camera","ic-sm")+'</button>' +
+        '<input type="file" id="avatarFileInput" accept="image/png,image/jpeg,image/webp" hidden></div>' +
+      '<div class="profile-id"><span class="profile-kicker">Мой профиль</span><h1>'+escapeHtml(me.name||"")+'</h1>' +
+        '<div class="profile-tags"><span class="team-role">'+escapeHtml(roleLabel(me.role))+'</span>' +
+          specNamesList.map(function(n){ return '<span class="profile-chip">'+escapeHtml(n)+'</span>'; }).join("") +
+          (myStream?'<span class="profile-chip">'+escapeHtml(myStream.name)+'</span>':'') + '</div>' +
+        '<div class="profile-contacts"><span>'+escapeHtml(me.email||"")+'</span>'+(me.phone?'<span>'+escapeHtml(me.phone)+'</span>':'')+(me.created_at?'<span>на платформе с '+fmtDateShort(me.created_at)+'</span>':'')+'</div>' +
+        '<div class="profile-photo-actions"><button class="btn btn-sm btn-ghost" data-action="pick-avatar">'+(me.avatar_url?'Сменить фото':'Загрузить фото')+'</button>' +
+          (me.avatar_url?'<button class="btn btn-sm btn-ghost" data-action="remove-avatar">Убрать</button>':'') + '</div>' +
+      '</div>' +
+      (stats.length ? '<div class="profile-stats">'+stats.map(function(x){ return '<div><b>'+x[0]+'</b><span>'+x[1]+'</span></div>'; }).join("")+'</div>' : '') +
+    '</div></div>';
+
+  html += '<div class="team-row" style="margin-top:18px;">';
+  html += '<div class="team-cell"><div class="card co-card"><b class="co-card-title">Личные данные</b>' +
     '<form id="profileEditorForm">' +
       '<div class="field"><label>Имя и фамилия</label><input class="input" id="profileEditorName" required value="'+escapeHtml(profileEditor.name)+'"></div>' +
       (isStudent ? renderProfileSpecializationFields() : '') +
-      '<div class="field"><label>Телефон</label><input class="input" type="tel" id="profileEditorPhone" value="'+escapeHtml(profileEditor.phone)+'"></div>' +
-      (isStudent ? '<div class="field"><label>Место работы</label><input class="input" id="profileEditorWorkplace" value="'+escapeHtml(profileEditor.workplace)+'"></div>' : '') +
-      '<div class="field"><label>Email</label><div class="input" style="background:var(--line-2);color:var(--muted);">'+escapeHtml(me.email||"")+'</div><p class="hint">Email нельзя изменить самостоятельно — обратитесь к куратору.</p></div>' +
+      '<div class="profile-2f"><div class="field"><label>Телефон</label><input class="input" type="tel" id="profileEditorPhone" value="'+escapeHtml(profileEditor.phone)+'"></div>' +
+      (isStudent ? '<div class="field"><label>Место работы</label><input class="input" id="profileEditorWorkplace" value="'+escapeHtml(profileEditor.workplace)+'"></div>' : '<div class="field"><label>Email</label><div class="input input-ro">'+escapeHtml(me.email||"")+'</div></div>') + '</div>' +
+      (isStudent ? '<div class="field"><label>Email</label><div class="input input-ro">'+escapeHtml(me.email||"")+'</div></div>' : '') +
+      '<p class="hint" style="margin-top:-4px;">Email нельзя изменить самостоятельно — обратитесь к куратору.</p>' +
       '<div class="err-text" id="profileEditorError" style="display:none;"></div>' +
-      '<button class="btn btn-primary" type="submit">Сохранить</button>' +
+      '<button class="btn btn-primary" type="submit">Сохранить изменения</button>' +
     '</form>' +
     (isStudent ? renderMyProductBlock() : '') +
-  '</div>';
-
-  html += '<div class="card" style="padding:18px 20px;">' +
-    '<b style="font-size:14.5px;display:block;margin-bottom:4px;">Доступы</b>' +
-    '<p class="hint" style="margin:0 0 12px;">Что вам доступно на платформе при роли «'+escapeHtml(roleLabel(me.role))+'», а что нет.</p>';
+  '</div></div>';
+  html += '<div class="team-cell"><div class="card co-card"><b class="co-card-title" style="margin-bottom:4px;">Ваши доступы</b>' +
+    '<p class="hint" style="margin:0 0 10px;">Что доступно при роли «'+escapeHtml(roleLabel(me.role))+'».</p>';
   caps.forEach(function(c){
-    html += '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line-2);">' +
-      '<span style="width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;background:'+(c.allowed?'var(--status-active)':'var(--line-2)')+';">'+(c.allowed?icon("check","ic-sm"):'')+'</span>' +
-      '<span style="font-size:13px;'+(c.allowed?'':'color:var(--muted);')+'">'+escapeHtml(c.label)+'</span>' +
-    '</div>';
+    html += '<div class="cap-row'+(c.allowed?'':' off')+'"><span class="cap-dot">'+(c.allowed?icon("check","ic-sm"):'')+'</span><span>'+escapeHtml(c.label)+'</span></div>';
   });
-  html += '</div>';
-  html += '</div>';
-
-  // Правая колонка (уже) — безопасность и сеансы, не привязаны к ширине формы.
-  html += '<div>';
-  html += '<div class="card" style="padding:18px 20px;margin-bottom:14px;">' +
-    '<b style="font-size:14.5px;display:block;margin-bottom:14px;">Безопасность</b>' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line-2);">' +
-      '<span style="font-size:13.5px;">Тема оформления</span>' +
-      '<button class="btn btn-sm btn-ghost" data-action="toggle-theme">'+icon(getTheme()==="dark"?"sun":"moon")+(getTheme()==="dark"?"Светлая":"Тёмная")+'</button>' +
-    '</div>' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;">' +
-      '<span style="font-size:13.5px;">Пароль</span>' +
-      '<button class="btn btn-sm btn-ghost" data-action="open-change-password">Сменить пароль</button>' +
-    '</div>' +
-  '</div>';
-
-  html += '<div class="card" style="padding:18px 20px;">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:8px;">' +
-      '<b style="font-size:14.5px;">Текущие сеансы</b>' +
-      '<button class="btn btn-sm btn-ghost" data-action="logout-everywhere">Выйти со всех устройств</button>' +
-    '</div>' +
-    '<p class="hint" style="margin:0 0 12px;">С каких устройств и когда входили в аккаунт.</p>';
-  if(!mySessionsLoaded){
-    html += '<p style="font-size:12.5px;color:var(--muted);">Загрузка…</p>';
-  } else if(!mySessionsList.length){
-    html += '<p style="font-size:12.5px;color:var(--muted);">Сеансов пока нет.</p>';
-  } else {
-    mySessionsList.forEach(function(s){
-      html += '<div style="padding:8px 0;border-bottom:1px solid var(--line-2);">' +
-        '<div style="font-size:13px;">'+escapeHtml(s.device)+'</div>' +
-        '<div style="font-size:12px;color:var(--muted);margin-top:2px;">'+escapeHtml(s.ip||"—")+' · '+fmtDate(s.createdAt)+' '+fmtTime(s.createdAt)+'</div>' +
-      '</div>';
-    });
-  }
-  html += '</div>';
-  html += '</div>';
-
-  html += '</div>';
+  html += '<button class="btn btn-sm btn-ghost btn-block" style="margin-top:14px;" data-action="sidebar-nav" data-key="settings">Пароль, сеансы и тема — в «Настройках» →</button>';
+  html += '</div></div></div></div>';
   return el(html);
+}
+
+// Фото профиля: центрируем и ужимаем до 256×256 в браузере, шлём data URL.
+async function uploadAvatarFile(file){
+  if(!file) return;
+  if(!/^image\//.test(file.type)){ showToast("Выберите картинку"); return; }
+  try{
+    var bmp = await createImageBitmap(file);
+    var side = Math.min(bmp.width, bmp.height), size = 256;
+    var cv = document.createElement("canvas"); cv.width = cv.height = size;
+    cv.getContext("2d").drawImage(bmp, (bmp.width-side)/2, (bmp.height-side)/2, side, side, 0, 0, size, size);
+    var url = cv.toDataURL("image/webp", 0.85);
+    if(url.indexOf("data:image/webp")!==0) url = cv.toDataURL("image/jpeg", 0.85);   // Safari без WebP-кодера
+    if(url.length > 95000) url = cv.toDataURL("image/jpeg", 0.7);
+    var r = await api("/auth/me/avatar", { method:"PUT", body: JSON.stringify({ image: url }) });
+    me.avatar_url = r.avatar_url;
+    showToast("Фото обновлено");
+  }catch(err){ showToast(err.message || "Не удалось загрузить фото"); }
+  render();
 }
 
 function renderSettingsPage(){
@@ -2644,7 +2666,7 @@ function renderSettingsPage(){
   });
   left += '</div></div></div>';
   var right = '<div class="pp-col"><div class="card co-card set-account">' +
-    '<div class="avatar set-av" style="'+avatarTone(me.name)+'">'+initials(me.name)+'</div>' +
+    userAvatar(me,'set-av') +
     '<b class="set-name">'+escapeHtml(me.name||"")+'</b><span class="set-mail">'+escapeHtml(me.email||"")+'</span>' +
     '<span class="team-role" style="margin-top:6px;">'+escapeHtml(roleLabel(me.role))+'</span>' +
     '<div class="set-facts">' +
@@ -3208,7 +3230,7 @@ function renderMaterialsPickerModal(){
       var checked = materialsPicker.selectedIds.indexOf(s.id)!==-1;
       body += '<label style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--line-2);cursor:pointer;">' +
         '<input type="checkbox" data-action="toggle-picker-student" data-id="'+s.id+'"'+(checked?' checked':'')+'>' +
-        '<div class="avatar" style="width:26px;height:26px;font-size:11px;">'+initials(s.name)+'</div>' +
+        userAvatar(s,null,'width:26px;height:26px;font-size:11px;') +
         '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:11.5px;color:var(--muted);">'+escapeHtml(s.email||s.phone||"—")+'</span></div></label>';
     });
   }
@@ -3245,7 +3267,7 @@ function renderScheduleModal(){
           var current = scheduleByStudent[s.id];
           return '<label style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--line-2);cursor:pointer;">' +
             '<input type="checkbox" data-action="toggle-schedule-student" data-id="'+s.id+'"'+(checked?' checked':'')+'>' +
-            '<div class="avatar" style="width:26px;height:26px;font-size:11px;">'+initials(s.name)+'</div>' +
+            userAvatar(s,null,'width:26px;height:26px;font-size:11px;') +
             '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:11.5px;color:var(--muted);">'+(current?'открыт с '+fmtDate(current):'по дрипу')+'</span></div></label>';
         }).join('') : '<div class="empty-state" style="padding:24px 10px;">Никого не нашлось.</div>') +
         '</div>'
@@ -3492,7 +3514,7 @@ function renderRegBarDetail(reg){
     var stream = st.stream_id ? calendarState.streams.find(function(x){ return x.id===st.stream_id; }) : null;
     var sub = [specNames(st), stream ? stream.name : "без потока"].filter(Boolean).join(" · ");
     h += '<div class="reg-detail-row" data-action="open-student" data-id="'+st.id+'">' +
-      '<div class="avatar" style="'+avatarTone(st.name)+'">'+initials(st.name)+'</div>' +
+      userAvatar(st) +
       '<div class="reg-detail-who"><b>'+escapeHtml(st.name)+'</b><small>'+escapeHtml(sub)+'</small></div>' +
       '<span class="reg-detail-meta">'+escapeHtml(STAGE_LABELS[studentStage(st)]||"")+' · '+(st.completed_lessons||[]).length+' ур.</span>' +
       '<span class="reg-detail-open">Открыть →</span></div>';
@@ -3596,7 +3618,7 @@ function renderDashboardTab(){
       var stage = studentStage(s);
       var stageMagnet = magnet(stage==="certified"?"done":(stage==="demo_done"?"attention":(stage==="in_progress"?"active":"neutral")), STAGE_LABELS[stage]);
       html += '<tr class="row-link" data-action="open-student" data-id="'+s.id+'">' +
-        '<td><div class="who-cell"><div class="avatar">'+initials(s.name)+'</div><div><b>'+escapeHtml(s.name)+'</b><span>'+escapeHtml(specNames(s)||"—")+'</span></div></div></td>' +
+        '<td><div class="who-cell">'+userAvatar(s)+'<div><b>'+escapeHtml(s.name)+'</b><span>'+escapeHtml(specNames(s)||"—")+'</span></div></div></td>' +
         '<td class="cell-2l"><span class="ell" title="'+escapeHtml(streamName)+'">'+escapeHtml(streamName)+'</span><small>'+escapeHtml(PRODUCTS[s.product||"longevity"])+'</small></td>' +
         '<td class="nowrap">'+stageMagnet+'</td>' +
         '<td class="nowrap">'+(typeof s.quiz_score==="number"?s.quiz_score+'%':'—')+(s.certificate_status==="issued"?'<small class="sub">серт. выдан</small>':'')+'</td>' +
@@ -3641,7 +3663,7 @@ function renderInboxCard(){
       var st = (staffState.students||[]).find(function(x){ return x.id===r.id; });
       var stream = st && st.stream_id ? calendarState.streams.find(function(x){ return x.id===st.stream_id; }) : null;
       html += '<div class="inbox-row inbox-row-link" data-action="open-student" data-id="'+r.id+'">' +
-        '<div class="avatar" style="'+avatarTone(r.name)+'">'+initials(r.name)+'</div>' +
+        userAvatar(r) +
         '<div class="inbox-who"><b>'+escapeHtml(r.name)+'</b><small>'+escapeHtml(stream ? stream.name : "Без потока")+'</small></div>' +
         '<span class="days-pill"><b>'+daysSince(r.last_seen)+'</b> дн. без входа</span>' +
         '<button class="btn btn-sm btn-ghost" data-action="open-student" data-id="'+r.id+'">Открыть</button>' +
@@ -3653,7 +3675,7 @@ function renderInboxCard(){
     html += '<div class="inbox-group">'+magnet("done","Ждут сертификат");
     inbox.pendingCertificates.forEach(function(r){
       html += '<div class="inbox-row">' +
-        '<div class="avatar">'+initials(r.name)+'</div>' +
+        userAvatar(r) +
         '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(r.name)+'</b><span style="font-size:12px;color:var(--muted);">тест: '+r.quiz_score+'%</span></div>' +
         '<button class="btn btn-sm btn-primary" data-action="issue-certificate" data-id="'+r.id+'">Выдать</button>' +
       '</div>';
@@ -3706,7 +3728,7 @@ function renderCertificateQueue(){
     var checked = selected.indexOf(s.id)!==-1;
     html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line-2);">' +
       '<input type="checkbox" data-action="toggle-cert-select" data-id="'+s.id+'"'+(checked?' checked':'')+' style="accent-color:var(--primary);">' +
-      '<div class="avatar">'+initials(s.name)+'</div>' +
+      userAvatar(s) +
       '<div style="flex:1;"><b style="font-size:13.5px;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:12px;color:var(--muted);">тест: '+s.quiz_score+'%</span></div>' +
       '<button class="btn btn-sm btn-ghost" data-action="open-student" data-id="'+s.id+'">Открыть</button>' +
       '<button class="btn btn-sm btn-primary" data-action="issue-certificate" data-id="'+s.id+'">Выдать</button>' +
@@ -3804,7 +3826,7 @@ function renderRoster(){
       var status = s.completed ? magnet("done","Завершил") : (done>0 ? magnet("active","В процессе") : magnet("neutral","Новый"));
       html += '<tr>' +
         '<td><input type="checkbox" data-action="select-student" data-id="'+s.id+'"'+(isChecked?' checked':'')+'></td>' +
-        '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;"><div class="who-cell"><div class="avatar-wrap"><div class="avatar">'+initials(s.name)+'</div>'+(s.online?'<span class="presence-dot" title="Онлайн"></span>':'')+'</div><div><b>'+escapeHtml(s.name)+'</b><span>'+escapeHtml(specNames(s)||"—")+'</span></div></div></td>' +
+        '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;"><div class="who-cell"><div class="avatar-wrap">'+userAvatar(s)+''+(s.online?'<span class="presence-dot" title="Онлайн"></span>':'')+'</div><div><b>'+escapeHtml(s.name)+'</b><span>'+escapeHtml(specNames(s)||"—")+'</span></div></div></td>' +
         '<td class="nowrap" data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+done+'/'+((staffState.materials||[]).length||5)+'</td>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+(typeof s.quiz_score==="number"?s.quiz_score+'%':'—')+'</td>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+status+'</td>' +
@@ -4166,7 +4188,7 @@ function renderTeamTab(){
       var canManage = !isMe && canAssignRole(me.role, c.role);
       var canChangeRole = canManage && myOptions.length>1;
       tiles += '<div class="card team-tile">' +
-        '<div class="team-top"><div class="avatar team-av" style="'+avatarTone(c.name)+'">'+initials(c.name)+'</div>' +
+        '<div class="team-top">'+userAvatar(c,'team-av')+'' +
           '<div class="team-who"><b>'+escapeHtml(c.name)+(isMe?' <span class="team-me">вы</span>':'')+'</b><small>'+escapeHtml(c.email||"")+'</small></div></div>' +
         '<div class="team-meta"><span class="team-role">'+roleLabel(c.role)+'</span><span>в команде с '+fmtDateShort(c.created_at)+'</span></div>';
       if(c.role==="curator"){
@@ -4216,8 +4238,8 @@ function renderTeamTab(){
       var opts = '<option value="" selected>Назначить…</option>' + curators.map(function(c){ return '<option value="'+c.id+'">'+escapeHtml(c.name)+'</option>'; }).join("");
       load += '<div class="assign-h">Без куратора — назначьте прямо здесь</div>';
       unassignedList.slice(0,5).forEach(function(st){
-        load += '<div class="assign-row"><div class="avatar" style="'+avatarTone(st.name)+'">'+initials(st.name)+'</div>' +
-          '<div class="assign-who" data-action="open-student" data-id="'+st.id+'"><b>'+escapeHtml(st.name)+'</b><small>'+escapeHtml(specNames(st)||"—")+' · с '+fmtDateShort(st.created_at)+'</small></div>' +
+        load += '<div class="assign-row">'+userAvatar(st)+'' +
+          '<div class="assign-who" data-action="open-student" data-id="'+st.id+'"><b>'+escapeHtml(st.name)+'</b><small>'+(specNames(st)?escapeHtml(specNames(st))+' · ':'')+'с '+fmtDateShort(st.created_at)+'</small></div>' +
           '<select class="input" data-field-select="curator" data-id="'+st.id+'">'+opts+'</select></div>';
       });
       if(unassignedList.length>5) load += '<p class="team-hint" style="margin:10px 0 0;">И ещё '+(unassignedList.length-5)+' — во вкладке «Ученики».</p>';
@@ -4261,7 +4283,7 @@ function renderStudentDrawer(){
   var done = (s.completed_lessons||[]).length;
 
   var head = '<div class="drawer-head">' +
-    '<div style="display:flex;gap:12px;align-items:center;"><div class="avatar-wrap"><div class="avatar" style="width:42px;height:42px;font-size:15px;">'+initials(s.name)+'</div>'+(s.online?'<span class="presence-dot" title="Онлайн"></span>':'')+'</div>' +
+    '<div style="display:flex;gap:12px;align-items:center;"><div class="avatar-wrap">'+userAvatar(s,null,'width:42px;height:42px;font-size:15px;')+''+(s.online?'<span class="presence-dot" title="Онлайн"></span>':'')+'</div>' +
     '<div><b style="font-size:16px;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:13px;color:var(--muted);">'+escapeHtml(specNames(s)||"—")+'</span>' +
     '<span style="font-size:12px;color:var(--muted-2);display:block;margin-top:2px;">'+(s.online?'<span style="color:var(--status-active);font-weight:600;">● В сети сейчас</span>':'Была в сети: '+escapeHtml(timeSince(s.last_seen_at)))+'</span></div></div>' +
     '<button class="btn btn-ghost btn-sm" data-action="close-drawer">Закрыть ✕</button></div>';
@@ -4411,6 +4433,12 @@ function wireEvents(root){
     if(action==="go-register"){ view="register"; registerDraft={name:"",email:"",phone:"",password:"",staffInviteCode:"",specializationIds:[],interestIds:[]}; specPickerOpen=null; render(); return; }
     if(action==="go-login"){ view="login"; render(); return; }
     if(action==="logout"){ stopNotificationPolling(); stopHeartbeat(); sendOfflineBeacon(); await api("/auth/logout", { method:"POST" }); me=null; course=null; view="login"; mySessionsList=[]; mySessionsLoaded=false; studentProtocols={forYou:[],additional:[]}; protocolExpanded={}; protocolGuideTab={}; render(); return; }
+    if(action==="pick-avatar"){ var fi=document.getElementById("avatarFileInput"); if(fi) fi.click(); return; }
+    if(action==="remove-avatar"){
+      askConfirm({ title:"Убрать фото?", body:"Вы уверены, что хотите убрать фото профиля? Вместо него будут показаны инициалы.", confirmLabel:"Убрать фото",
+        onConfirm: async function(){ try{ await api("/auth/me/avatar", { method:"DELETE" }); me.avatar_url=null; showToast("Фото убрано"); }catch(err){ showToast(err.message); } render(); } });
+      return;
+    }
     if(action==="set-theme"){ var nt=t.getAttribute("data-theme"); if(nt!==getTheme()){ localStorage.setItem("lms-theme", nt); applyTheme(); } render(); return; }
     if(action==="toggle-theme"){ toggleTheme(); render(); return; }
     if(action==="mark-notif-read"){
@@ -5908,6 +5936,7 @@ function wireEvents(root){
   });
 
   root.addEventListener("change", async function(e){
+    if(e.target.id==="avatarFileInput"){ uploadAvatarFile(e.target.files && e.target.files[0]); return; }
     if(e.target.hasAttribute("data-stream-select")){
       try{ await api("/staff/students/"+e.target.getAttribute("data-id")+"/stream", { method:"PATCH", body: JSON.stringify({ streamId: e.target.value }) }); var s=staffState.students.find(function(x){return x.id===e.target.getAttribute("data-id");}); if(s) s.stream_id=e.target.value; showToast("Поток обновлён"); }
       catch(err){ showToast(err.message); }

@@ -519,3 +519,7 @@ ALTER TABLE progress ADD COLUMN IF NOT EXISTS requested_full_access_at TIMESTAMP
 ALTER TABLE progress DROP CONSTRAINT IF EXISTS progress_course_id_fkey;
 ALTER TABLE progress ADD CONSTRAINT progress_course_id_fkey FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE;
 
+-- ---------- Фото профиля ----------
+-- Имя файла в uploads/avatars (сам файл отдаёт GET /api/auth/avatar/:file только
+-- авторизованным). NULL — фото нет, показываются инициалы.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_file TEXT;
