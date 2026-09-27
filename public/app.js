@@ -1003,6 +1003,22 @@ async function openStudentPage(id){
   }catch(err){ showToast(err.message); }
 }
 
+// Снимает .sb-hold при первом движении мыши: к этому моменту браузер уже
+// выставил :hover новому сайдбару, и дальше он раскрывается/сворачивается сам.
+var sbReleaseArmed = false, stillTimer = null;
+function armSidebarRelease(){
+  if(sbReleaseArmed) return;
+  sbReleaseArmed = true;
+  var release = function(){
+    sbReleaseArmed = false;
+    document.removeEventListener("pointermove", release, true);
+    document.documentElement.removeEventListener("pointerleave", release);
+    var sb = document.querySelector(".sidebar.sb-hold"); if(sb) sb.classList.remove("sb-hold");
+  };
+  document.addEventListener("pointermove", release, true);
+  document.documentElement.addEventListener("pointerleave", release);
+}
+
 function render(){
   var app = document.getElementById("app");
   if(!app) return;
@@ -1033,6 +1049,9 @@ function render(){
     prevOverlays[o.getAttribute("data-action")||""] = { top: sc ? sc.scrollTop : 0 };
   });
   var hadBackdrop = !!app.querySelector(".sidebar-backdrop");
+  // Меню было раскрыто (курсор или фокус на нём) — новое тоже раскрываем сразу.
+  var oldSb = app.querySelector(".sidebar");
+  var sbWasOpen = !!oldSb && (oldSb.classList.contains("sb-hold") || oldSb.matches(":hover") || oldSb.matches(":focus-within"));
   var screenKey = view+"|"+(view==="student" ? studentState.tab : (view==="staff" ? staffState.mainTab : ""));
   var sameScreen = screenKey === lastRenderScreen;
   lastRenderScreen = screenKey;
@@ -1101,6 +1120,15 @@ function render(){
     app.appendChild(renderConfirmModal());
   }
   app.classList.toggle("rerender", sameScreen);
+  // Та же страница пересобрана заново (фоновое обновление, действие на месте):
+  // браузер выставляет :hover новым элементам не сразу, и подсветка карточки или
+  // кнопки под курсором гасла и заново проявлялась. Пока hover не восстановился —
+  // без переходов, чтобы состояние под курсором вернулось мгновенно.
+  if(sameScreen){
+    app.classList.add("still");
+    clearTimeout(stillTimer);
+    stillTimer = setTimeout(function(){ app.classList.remove("still"); }, 200);
+  }
   app.querySelectorAll(".overlay").forEach(function(o){
     var prev = prevOverlays[o.getAttribute("data-action")||""];
     if(!prev) return;
@@ -1109,6 +1137,7 @@ function render(){
     if(sc && prev.top) sc.scrollTop = prev.top;
   });
   if(hadBackdrop){ var bd = app.querySelector(".sidebar-backdrop"); if(bd) bd.classList.add("no-anim"); }
+  if(sbWasOpen){ var nsb = app.querySelector(".sidebar"); if(nsb){ nsb.classList.add("sb-hold"); armSidebarRelease(); } }
   wireEvents(app);
   runEntranceAnimations();
   if(view==="login" || view==="register") initAuroraFx();
@@ -6256,13 +6285,16 @@ function wireEvents(root){
         specPickerOpen=null;
         if(view==="staff"){ staffState.selectedStudentId=null; staffState.selectedStudent=null; }
         render();
-        loadMySessions().then(render);
-        if(view==="student") loadMyOrders().then(render);
+        // Сеансы и заказы — одним обновлением экрана, а не двумя подряд.
+        window.scrollTo(0,0);
+        Promise.all([loadMySessions(), view==="student" ? loadMyOrders() : null]).then(render);
         return;
       }
       if(view==="student"){
-        if(navKey==="materials"){ studentState.materialsAutoFocus=false; await applyStudentTab("materials","materials"); return; }
+        // Новый раздел всегда открывается с начала, а не на прокрутке прошлого.
+        if(navKey==="materials"){ studentState.materialsAutoFocus=false; await applyStudentTab("materials","materials"); window.scrollTo(0,0); return; }
         await applyStudentTab(navKey, navKey);
+        window.scrollTo(0,0);
         return;
       }
       staffState.navKey = navKey;
