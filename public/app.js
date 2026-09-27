@@ -1424,6 +1424,15 @@ function renderVideoEditorModal(){
   var uploading = videoEditor.uploadProgress!==null;
   var body = '<div class="drawer-head"><b style="font-size:16px;">Видео урока «'+escapeHtml(videoEditor.lessonTitle)+'»</b><button class="btn btn-ghost btn-sm" data-action="close-video-editor">Закрыть ✕</button></div>' +
     '<div class="drawer-body">' +
+      // Без этого блока непонятно, что видео уже загружено: файловый инпут ниже браузер
+      // всегда показывает пустым (не даёт подставить имя файла из соображений безопасности),
+      // а поле-ссылка — просто текст среди других полей формы, легко пропустить.
+      (videoEditor.videoUrl
+        ? '<div class="card" style="padding:10px 12px;margin-bottom:14px;display:flex;align-items:center;gap:10px;">' +
+            icon("badge","ic-sm") +
+            '<span style="font-size:13px;">Видео уже загружено — новая загрузка или ссылка его заменят.</span>' +
+          '</div>'
+        : '') +
       '<div class="field"><label>Загрузить видео файлом <span style="font-weight:400;color:var(--muted-2);">(.mp4, .webm, .mov, .m4v — до 500 МБ)</span></label>' +
         '<div style="display:flex;gap:8px;align-items:center;">' +
           '<input type="file" id="videoFileInput" accept=".mp4,.webm,.mov,.m4v" style="font-size:12px;flex:1;min-width:0;"'+(uploading?' disabled':'')+'>' +
