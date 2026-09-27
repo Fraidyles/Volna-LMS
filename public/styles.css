@@ -316,7 +316,7 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
 :root[data-theme="light"] .aurora .band{opacity:.55;}
 @keyframes auroraDrift{from{translate:-10px 4px;}to{translate:12px -6px;}}
 
-.onb-aurora{position:relative;width:100%;max-width:540px;aspect-ratio:3/2;animation:fadeUp .8s cubic-bezier(.16,1,.3,1) both;
+.onb-aurora{position:relative;width:100%;max-width:540px;aspect-ratio:3/2;overflow:hidden;animation:fadeUp .8s cubic-bezier(.16,1,.3,1) both;
   -webkit-mask-image:radial-gradient(ellipse 50% 46% at 50% 50%,#000 40%,transparent 100%);mask-image:radial-gradient(ellipse 50% 46% at 50% 50%,#000 40%,transparent 100%);}
 .onb-left h1{font-size:38px;line-height:1.2;max-width:440px;color:var(--ink);font-weight:600;}
 .onb-left p{font-size:16px;color:var(--muted);max-width:400px;line-height:1.6;}
