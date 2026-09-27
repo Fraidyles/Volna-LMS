@@ -13,6 +13,8 @@ const { buildDailyDigest } = require("../dailyDigest");
 const { getStaffInviteCode, TTL_MS } = require("../staffInviteCode");
 const { generateCertificatePdf } = require("../certificate");
 const { toCsv, parseCsvToObjects } = require("../csv");
+const jwt = require("jsonwebtoken");
+const { COOKIE_OPTS } = require("./auth");
 
 const router = express.Router();
 
@@ -300,6 +302,29 @@ router.get("/students/:id", authRequired, requireRole("curator", "admin", "super
     courseId,
     enrollments: enrollments.rows.map((r) => ({ courseId: r.course_id, title: r.title }))
   });
+});
+
+// «Войти как врач»: сотрудник открывает кабинет врача и видит ровно то же, что он, —
+// чтобы разобрать жалобу «у меня не открывается» без скриншотов. Только просмотр:
+// любые изменения от имени врача блокирует authRequired (см. payload.imp), врач не
+// становится «в сети». Своя сессия сотрудника откладывается в cookie staff_token и
+// возвращается через POST /auth/impersonate/stop. Каждый вход — в журнал действий.
+router.post("/students/:id/impersonate", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
+  const r = await pool.query("SELECT id, name, email, role, token_version FROM users WHERE id=$1 AND role='student'", [req.params.id]);
+  if (!r.rowCount) return res.status(404).json({ error: "not_found" });
+  const st = r.rows[0];
+  const staff = await pool.query("SELECT token_version FROM users WHERE id=$1", [req.user.id]);
+  const token = jwt.sign(
+    { id: st.id, role: st.role, name: st.name, email: st.email, tv: st.token_version || 0,
+      imp: { id: req.user.id, name: req.user.name, tv: staff.rows[0].token_version } },
+    process.env.JWT_SECRET,
+    { expiresIn: "2h" }
+  );
+  const opts = Object.assign({}, COOKIE_OPTS, { maxAge: 2 * 60 * 60 * 1000 });
+  res.cookie("staff_token", req.cookies.token, COOKIE_OPTS);
+  res.cookie("token", token, opts);
+  await logAction(req.user, "student.impersonate", "user", st.id, st.name, {});
+  res.json({ ok: true });
 });
 
 // Блокировка/срок доступа — это про аккаунт врача целиком, а не про отдельный курс

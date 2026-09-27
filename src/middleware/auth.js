@@ -30,6 +30,27 @@ async function authRequired(req, res, next) {
   }
 
   req.user = Object.assign({}, payload, { role: liveRole });
+
+  // Вход «глазами врача» из карточки врача (POST /staff/students/:id/impersonate):
+  // сотрудник видит кабинет ровно как врач, но только смотрит. Токен действует,
+  // пока действует сессия самого сотрудника и он всё ещё сотрудник, — разжалование
+  // или «выйти со всех устройств» у сотрудника гасит и этот просмотр.
+  if (payload.imp) {
+    try {
+      const staff = await pool.query("SELECT token_version, role FROM users WHERE id=$1", [payload.imp.id]);
+      if (!staff.rowCount || staff.rows[0].token_version !== payload.imp.tv ||
+          !["curator", "admin", "super_admin"].includes(staff.rows[0].role)) {
+        return res.status(401).json({ error: "session_revoked", message: "Сессия больше не действительна, войдите заново" });
+      }
+    } catch (e) {
+      return res.status(500).json({ error: "internal_error" });
+    }
+    const path = (req.originalUrl || "").split("?")[0];
+    const readOnly = !["GET", "HEAD", "OPTIONS"].includes(req.method);
+    if (readOnly && !/\/auth\/(impersonate\/stop|logout)$/.test(path)) {
+      return res.status(403).json({ error: "read_only", message: "Вы смотрите кабинет глазами врача — изменения от его имени недоступны" });
+    }
+  }
   next();
 }
 

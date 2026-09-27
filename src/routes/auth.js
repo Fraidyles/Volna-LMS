@@ -26,6 +26,8 @@ const COOKIE_OPTS = {
   secure: process.env.NODE_ENV === "production",
   maxAge: 30 * 24 * 60 * 60 * 1000
 };
+// Для clearCookie — те же флаги без maxAge (иначе Express предупреждает об устаревании).
+const CLEAR_OPTS = { httpOnly: true, sameSite: "lax", secure: COOKIE_OPTS.secure };
 
 // Не больше 8 попыток входа/регистрации за 5 минут с одного IP — защита от подбора пароля.
 // Считаем только неудачные попытки, чтобы обычный человек, вошедший с первого раза, лимит не тратил.
@@ -220,6 +222,7 @@ router.post("/login", authLimiter, async (req, res) => {
 
 router.post("/logout", (req, res) => {
   res.clearCookie("token", COOKIE_OPTS);
+  res.clearCookie("staff_token", CLEAR_OPTS);
   res.json({ ok: true });
 });
 
@@ -229,6 +232,24 @@ router.post("/logout-everywhere", authRequired, async (req, res) => {
   res.clearCookie("token", COOKIE_OPTS);
   await logAction(req.user, "auth.logout_everywhere", "user", req.user.id, req.user.name, {});
   res.json({ ok: true });
+});
+
+// Выход из просмотра «глазами врача»: возвращаем сотруднику его собственную сессию,
+// сохранённую при входе в отдельной cookie. Если она уже недействительна — просто выходим.
+router.post("/impersonate/stop", async (req, res) => {
+  const staffToken = req.cookies && req.cookies.staff_token;
+  res.clearCookie("staff_token", CLEAR_OPTS);
+  let ok = false;
+  if (staffToken) {
+    try {
+      const p = jwt.verify(staffToken, process.env.JWT_SECRET);
+      const r = await pool.query("SELECT token_version FROM users WHERE id=$1", [p.id]);
+      ok = !!r.rowCount && r.rows[0].token_version === p.tv && !p.imp;
+    } catch (e) { ok = false; }
+  }
+  if (ok) res.cookie("token", staffToken, COOKIE_OPTS);
+  else res.clearCookie("token", CLEAR_OPTS);
+  res.json({ ok: true, restored: ok });
 });
 
 router.get("/me", authRequired, async (req, res) => {
@@ -247,7 +268,8 @@ router.get("/me", authRequired, async (req, res) => {
   u.avatar_url = avatarUrl(u.avatar_file); delete u.avatar_file;
   res.json({ user: Object.assign(u, {
     specializationIds: currentSpecs.rows.map((r) => r.specialization_id),
-    interestIds: interests.rows.map((r) => r.specialization_id)
+    interestIds: interests.rows.map((r) => r.specialization_id),
+    impersonator: req.user.imp ? { id: req.user.imp.id, name: req.user.imp.name } : null
   }) });
 });
 
@@ -408,3 +430,4 @@ router.post("/change-password", authRequired, authLimiter, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.COOKIE_OPTS = COOKIE_OPTS;

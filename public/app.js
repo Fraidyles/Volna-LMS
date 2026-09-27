@@ -278,6 +278,13 @@ function showToast(text){
 
 async function api(path, opts){
   opts = opts || {};
+  // Сотрудник смотрит кабинет глазами врача — только просмотр. Сервер тоже это
+  // запрещает, а здесь просто не шлём запрос и сразу объясняем, почему.
+  var m = (opts.method||"GET").toUpperCase();
+  if(me && me.impersonator && m!=="GET" && !/^\/auth\/(impersonate\/stop|logout)$/.test(path)){
+    var ro = new Error("Это кабинет врача в режиме просмотра — изменения от его имени недоступны");
+    ro.code = "read_only"; throw ro;
+  }
   var res = await fetch(API + path, Object.assign({
     credentials: "include",
     headers: opts.body ? { "Content-Type":"application/json" } : {}
@@ -348,7 +355,7 @@ async function init(){
 // браузер может оборвать, не отправив — sendBeacon как раз для этого случая:
 // гарантированно уходит даже когда страница уже закрывается.
 function sendOfflineBeacon(){
-  if(!me || me.role!=="student") return;
+  if(!me || me.role!=="student" || me.impersonator) return;
   try{ navigator.sendBeacon(API+"/course/offline"); }catch(e){}
 }
 window.addEventListener("pagehide", sendOfflineBeacon);
@@ -361,13 +368,16 @@ async function routeAfterLogin(){
     await loadStudentTools();
     await loadNotifications();
     startNotificationPolling();
-    startHeartbeat();
+    if(!me.impersonator) startHeartbeat();
   } else {
     view = "staff";
     await loadStaffData();
     await loadCalendarData();
     await loadNotifications();
     startNotificationPolling();
+    // Вернулись из кабинета врача — сразу открываем его карточку, откуда пришли.
+    var impBack = null; try{ impBack = sessionStorage.getItem("lms-imp-return"); sessionStorage.removeItem("lms-imp-return"); }catch(e){}
+    if(impBack){ staffState.mainTab = "students"; staffState.navKey = "students"; render(); openStudentPage(impBack); return; }
   }
   render();
 }
@@ -977,6 +987,20 @@ document.addEventListener("mousedown", function(e){
 document.addEventListener("keydown", function(e){ if(selPop && (e.key==="Escape" || e.key==="Tab")) closeSelectPop(); }, true);
 window.addEventListener("resize", function(){ if(selPop) placeSelectPop(); });
 window.addEventListener("scroll", function(e){ if(selPop && !(e.target.closest && e.target.closest(".sel-pop"))) placeSelectPop(); }, true);
+
+// Страница врача: из списка, из ленты и после возврата из его кабинета.
+async function openStudentPage(id){
+  staffState.selectedStudentId=id; staffState.drawerTab="progress"; staffState.selectedStudent=null; staffState.notes=[]; toolsState.studentAssign=[]; render(); window.scrollTo(0,0);
+  try{
+    var cqOpen=staffState.activeCourseId?"?courseId="+encodeURIComponent(staffState.activeCourseId):"";
+    var d=await api("/staff/students/"+staffState.selectedStudentId+cqOpen);
+    staffState.selectedStudent=d.student;
+    staffState.selectedStudentEnrollments=d.enrollments||[];
+    staffState.editSpecializationIds=(d.student.specialization_ids||[]).slice();
+    staffState.editName=d.student.name||""; staffState.editPhone=d.student.phone||""; staffState.editWorkplace=d.student.workplace||"";
+    render();
+  }catch(err){ showToast(err.message); }
+}
 
 function render(){
   var app = document.getElementById("app");
@@ -1910,6 +1934,10 @@ function renderStudentShell(){
   wrap.appendChild(renderSidebar());
   var main = el('<div class="app-main"></div>');
   wrap.appendChild(main);
+  if(me && me.impersonator){
+    main.appendChild(el('<div class="imp-bar">'+icon("eye")+'<span>Вы смотрите кабинет глазами врача <b>'+escapeHtml(me.name)+'</b> — только просмотр, врач этого не видит</span>' +
+      '<button class="btn btn-sm" data-action="impersonate-stop">Вернуться в панель</button></div>'));
+  }
   if(previewMode){
     main.appendChild(el('<div style="background:var(--accent);color:#1B1A14;text-align:center;padding:10px 16px;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;">'+icon("eye")+' Режим просмотра «глазами врача» — изменения не сохраняются</div>'));
   }
@@ -3594,6 +3622,7 @@ var AUDIT_ACTION_LABELS = {
   "auth.register": "Регистрация",
   "auth.change_password": "Смена пароля",
   "auth.logout_everywhere": "Выход со всех устройств",
+  "student.impersonate": "Вход в кабинет врача (просмотр)",
   "invite.create": "Приглашение по email",
   "invite.bulk_create": "Массовое приглашение",
   "invite.cancel": "Отмена приглашения",
@@ -4980,7 +5009,8 @@ function renderStudentDrawer(){
         '<div><b>'+(typeof s.quiz_score==="number"?s.quiz_score+'%':'—')+'</b><span>итоговый тест</span></div>' +
         '<div><b>'+fmtDateShort(s.created_at)+'</b><span>регистрация</span></div></div>' +
     '</div></div>';
-  return el('<div class="page-wide student-page"><button class="back-link" data-action="close-drawer">← Назад</button>'+hero+
+  return el('<div class="page-wide student-page"><div class="student-page-top"><button class="back-link" data-action="close-drawer">← Назад</button>' +
+    '<button class="btn btn-ghost btn-sm" data-action="impersonate-student" data-id="'+s.id+'" title="Открыть кабинет врача в режиме просмотра">'+icon("eye","ic-sm")+' Войти как врач</button></div>'+hero+
     '<div class="card student-page-body">'+body+'</div></div>');
 }
 
@@ -5989,6 +6019,19 @@ function wireEvents(root){
 
     if(action==="go-register"){ view="register"; registerDraft={name:"",email:"",phone:"",password:"",staffInviteCode:"",specializationIds:[],interestIds:[]}; specPickerOpen=null; render(); return; }
     if(action==="go-login"){ view="login"; render(); return; }
+    if(action==="impersonate-student"){
+      try{
+        await api("/staff/students/"+t.getAttribute("data-id")+"/impersonate", { method:"POST" });
+        try{ sessionStorage.setItem("lms-imp-return", t.getAttribute("data-id")); }catch(e){}
+        window.location.reload();
+      }catch(err){ showToast(err.message); }
+      return;
+    }
+    if(action==="impersonate-stop"){
+      try{ await api("/auth/impersonate/stop", { method:"POST" }); }catch(err){}
+      window.location.reload();
+      return;
+    }
     if(action==="logout"){ stopNotificationPolling(); stopHeartbeat(); sendOfflineBeacon(); await api("/auth/logout", { method:"POST" }); me=null; course=null; view="login"; mySessionsList=[]; mySessionsLoaded=false; studentProtocols={forYou:[],additional:[]}; protocolExpanded={}; protocolGuideTab={}; render(); return; }
     if(action==="open-protocol"){ protocolReader = { id:t.getAttribute("data-id"), mine:t.getAttribute("data-mine")==="1" }; render(); return; }
     if(action==="close-protocol-reader" || (action==="overlay-close-protocol-reader" && !e.target.closest("[data-stop]"))){ protocolReader.id=null; render(); return; }
@@ -6299,19 +6342,7 @@ function wireEvents(root){
       staffState.navKey = staffState.mainTab;
       render(); return;
     }
-    if(action==="open-student"){
-      staffState.selectedStudentId=t.getAttribute("data-id"); staffState.drawerTab="progress"; staffState.selectedStudent=null; staffState.notes=[]; toolsState.studentAssign=[]; render(); window.scrollTo(0,0);
-      try{
-        var cqOpen=staffState.activeCourseId?"?courseId="+encodeURIComponent(staffState.activeCourseId):"";
-        var d=await api("/staff/students/"+staffState.selectedStudentId+cqOpen);
-        staffState.selectedStudent=d.student;
-        staffState.selectedStudentEnrollments=d.enrollments||[];
-        staffState.editSpecializationIds=(d.student.specialization_ids||[]).slice();
-        staffState.editName=d.student.name||""; staffState.editPhone=d.student.phone||""; staffState.editWorkplace=d.student.workplace||"";
-        render();
-      }catch(err){ showToast(err.message); }
-      return;
-    }
+    if(action==="open-student"){ await openStudentPage(t.getAttribute("data-id")); return; }
     if(action==="close-drawer" || (action==="overlay-close" && !e.target.closest("[data-stop]"))){ staffState.selectedStudentId=null; render(); return; }
     if(action==="drawer-tab"){
       staffState.drawerTab=t.getAttribute("data-tab"); render();

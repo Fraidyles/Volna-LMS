@@ -1739,3 +1739,14 @@ tr.ord-off td{opacity:.55;}
 .proto-tile.locked .proto-sum{color:var(--muted-2);}
 .proto-tile.locked .proto-foot > span:first-child{color:var(--muted-2);}
 .proto-tile.locked:hover{transform:none;border-color:color-mix(in srgb,var(--primary) 35%,transparent) !important;}
+
+/* Вход «глазами врача» из карточки врача: полоса поверх кабинета */
+.student-page-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;}
+.student-page-top .back-link{margin-bottom:0;}
+.imp-bar{position:sticky;top:0;z-index:40;display:flex;align-items:center;gap:10px;padding:10px 16px;
+  background:var(--accent);color:#1B1A14;font-size:14px;line-height:1.35;}
+.imp-bar .ic{flex:0 0 auto;}
+.imp-bar span{flex:1;min-width:0;}
+.imp-bar .btn{flex:0 0 auto;background:#1B1A14;color:#fff;border-color:#1B1A14;}
+.imp-bar .btn:hover{background:#000;}
+@media (max-width:640px){ .imp-bar{flex-wrap:wrap;} .imp-bar .btn{width:100%;justify-content:center;} }

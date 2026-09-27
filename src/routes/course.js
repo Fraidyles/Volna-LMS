@@ -176,7 +176,8 @@ router.get("/content/:courseId", authRequired, requireRole("student"), async (re
   // Открыл курс — значит точно "в сети"; дальше это поддерживает периодический
   // heartbeat с фронтенда, пока вкладка открыта (см. PUT /heartbeat и POST /offline
   // ниже). Статус "в сети" общий для врача, а не по курсу — обновляем все его строки.
-  pool.query("UPDATE progress SET last_seen_at=now(), is_online=true WHERE user_id=$1", [req.user.id]).catch(() => {});
+  // Сотрудник, смотрящий кабинет глазами врача, не делает врача «в сети».
+  if (!req.user.imp) pool.query("UPDATE progress SET last_seen_at=now(), is_online=true WHERE user_id=$1", [req.user.id]).catch(() => {});
 
   const course = await pool.query("SELECT id, title, certificates_enabled FROM courses WHERE id=$1", [pr.course_id]);
   if (!course.rowCount) return res.status(404).json({ error: "no_course" });
