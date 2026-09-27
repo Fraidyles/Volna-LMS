@@ -2709,9 +2709,9 @@ function renderCoursePlayer(){
 
   var body = '<div class="lesson-body">' +
     '<button class="back-link" data-action="close-course">← К курсу</button>' +
-    '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">' +
-      '<h3 style="margin:0;">'+escapeHtml(lesson.title)+'</h3>' +
-      '<button class="btn btn-sm btn-ghost" style="flex-shrink:0;" data-action="toggle-bookmark" data-id="'+lesson.id+'" data-bookmarked="'+(isBookmarked?"1":"0")+'" title="'+(isBookmarked?"Убрать из моих материалов":"Сохранить в мои материалы")+'">'+(isBookmarked?"★ В моих материалах":"☆ Сохранить")+'</button>' +
+    '<div class="lesson-head">' +
+      '<h3>'+escapeHtml(lesson.title)+'</h3>' +
+      '<button class="btn btn-sm btn-ghost lesson-save" data-action="toggle-bookmark" data-id="'+lesson.id+'" data-bookmarked="'+(isBookmarked?"1":"0")+'" title="'+(isBookmarked?"Убрать из конспекта":"Сохранить урок в конспект")+'" aria-label="'+(isBookmarked?"Убрать из конспекта":"Сохранить урок в конспект")+'">'+(isBookmarked?"★":"☆")+'<span>'+(isBookmarked?" В конспекте":" Сохранить")+'</span></button>' +
     '</div>' +
     '<div class="meta">Урок '+(idx+1)+' из '+course.lessons.length+' · '+escapeHtml(lesson.duration||"")+'</div>';
 
@@ -2921,7 +2921,7 @@ function renderModuleGate(){
   var body = '<div class="lesson-body">' +
     (studentState.moduleGateStage==="quiz" ? renderModuleQuizStage(mod) : renderModuleFeedbackStage(mod)) +
   '</div>';
-  return el('<div class="player" style="margin-top:6px;grid-template-columns:1fr;">'+body+'</div>');
+  return el('<div class="player" style="margin-top:6px;grid-template-columns:minmax(0,1fr);">'+body+'</div>');
 }
 
 function renderModuleQuizStage(mod){
@@ -2971,7 +2971,7 @@ function renderQuizOrCert(){
   var pr = course.progress || {};
   if(pr.completed && !studentState.quizSubmitted) return renderCertificate();
   if(course.quizHiddenForMe){
-    return el('<div class="player" style="margin-top:6px;grid-template-columns:1fr;"><div class="lesson-body">' +
+    return el('<div class="player" style="margin-top:6px;grid-template-columns:minmax(0,1fr);"><div class="lesson-body">' +
       '<button class="back-link" data-action="close-course">← К курсу</button>' +
       '<div class="empty-state" style="padding:60px 10px;"><div class="big">'+icon("lock","ic-lg")+'</div>Итоговый тест временно недоступен.<br>Куратор откроет его позже.</div></div></div>');
   }
@@ -2983,7 +2983,7 @@ function renderQuizOrCert(){
     return a && a.required && !x.l.hiddenForMe && !(sub && sub.status==="accepted");
   });
   if(stopPending.length){
-    var sh = '<div class="player" style="margin-top:6px;grid-template-columns:1fr;"><div class="lesson-body">' +
+    var sh = '<div class="player" style="margin-top:6px;grid-template-columns:minmax(0,1fr);"><div class="lesson-body">' +
       '<button class="back-link" data-action="close-course">← К курсу</button>' +
       '<h3>Итоговый тест</h3><div class="task-state pending" style="margin-top:14px;"><b>'+icon("lock","ic-sm")+' Откроется, когда куратор примет обязательные задания</b></div>';
     stopPending.forEach(function(x){
@@ -2994,7 +2994,7 @@ function renderQuizOrCert(){
     return el(sh + '</div></div>');
   }
 
-  var html = '<div class="player" style="margin-top:6px;grid-template-columns:1fr;"><div class="lesson-body">' +
+  var html = '<div class="player" style="margin-top:6px;grid-template-columns:minmax(0,1fr);"><div class="lesson-body">' +
     '<button class="back-link" data-action="close-course">← К курсу</button>' +
     '<h3>Итоговый тест</h3><div class="meta">'+course.quiz.length+' вопросов · нужно набрать от 60%</div><form id="quizForm">';
   course.quiz.forEach(function(q,qi){
@@ -3011,7 +3011,7 @@ function renderQuizOrCert(){
 function renderCertificate(){
   var pr = course.progress || {};
   var certsOn = course && course.course && course.course.certificatesEnabled;
-  var html = '<div class="player" style="margin-top:6px;grid-template-columns:1fr;"><div class="cert">';
+  var html = '<div class="player" style="margin-top:6px;grid-template-columns:minmax(0,1fr);"><div class="cert">';
 
   if(!certsOn){
     // Текущий курс — демо: сертификат за него не выдаётся, вместо этого предлагаем

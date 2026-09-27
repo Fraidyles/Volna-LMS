@@ -460,8 +460,12 @@ input[type="checkbox"]:indeterminate::after{content:"";position:absolute;left:3p
 .star-btn.active{color:var(--status-attention);}
 
 /* ---------------- Плеер урока ---------------- */
-.player{display:grid;grid-template-columns:270px 1fr;border-radius:var(--radius-m);overflow:hidden;background:var(--surface);box-shadow:var(--shadow);border:var(--border-hairline);}
-@media (max-width:800px){.player{grid-template-columns:1fr;}.lesson-nav{display:flex;overflow-x:auto;border-bottom:var(--border-hairline);border-right:none;}}
+.player{display:grid;grid-template-columns:270px minmax(0,1fr);border-radius:var(--radius-m);overflow:hidden;background:var(--surface);box-shadow:var(--shadow);border:var(--border-hairline);}
+/* minmax(0,1fr), а не 1fr: иначе колонка растягивается по самому широкому
+   содержимому (горизонтальный список уроков, длинные слова) и плеер на
+   телефоне обрезается справа. */
+@media (max-width:800px){.player{grid-template-columns:minmax(0,1fr);}.lesson-nav{display:flex;overflow-x:auto;border-bottom:var(--border-hairline);border-right:none;}
+  .lesson-nav .lesson-item{flex:0 0 200px;}}
 .lesson-nav{border-right:var(--border-hairline);padding:18px 0;}
 .lesson-item{display:flex;align-items:flex-start;gap:12px;padding:12px 18px;cursor:pointer;border-radius:var(--radius-s);margin:0 8px;width:calc(100% - 16px);}
 .lesson-item:hover{background:var(--surface-2);}
@@ -2003,3 +2007,13 @@ mark.hl.hl-flash{animation:hlFlash 1.6s ease;}
 .opt:has(input:checked){border-color:var(--primary);background:color-mix(in srgb,var(--primary) 16%,transparent);box-shadow:0 0 0 1px var(--primary) inset;}
 .opt:has(input:checked)::before{background:var(--primary);border-color:var(--primary);color:#fff;}
 .opt:has(input:focus-visible){outline:2px solid var(--primary);outline-offset:2px;}
+
+/* Шапка урока: длинное название не выталкивает кнопку «Сохранить» за край */
+.lesson-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;}
+.lesson-head h3{margin:0;min-width:0;overflow-wrap:anywhere;}
+.lesson-save{flex:0 0 auto;white-space:nowrap;}
+.qz-nav .btn{white-space:nowrap;}
+@media (max-width:640px){
+  .lesson-save span{display:none;}
+  .lesson-save{min-width:36px;justify-content:center;}
+}

@@ -686,6 +686,11 @@ describe("Курс врача", () => {
       expect(submitRes.status).toBe(200);
       expect(submitRes.body.score).toBe(50);
       expect(submitRes.body.completedLessons).toContain(lessonId);
+      // Разбор после отправки: сколько верно и какой ответ был правильным.
+      expect(submitRes.body.correctCount).toBe(1);
+      expect(submitRes.body.total).toBe(2);
+      const rv2 = submitRes.body.review.find((r) => r.id === q2.body.id);
+      expect(rv2).toEqual({ id: q2.body.id, correct: 1, chosen: 0 });
 
       const courseRes = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
       expect(courseRes.body.progress.lesson_quiz_scores[lessonId]).toBe(50);
