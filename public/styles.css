@@ -1190,3 +1190,10 @@ a.btn{text-decoration:none;}
 .cap-row.off{color:var(--muted);}
 .cap-row.off .cap-dot{background:var(--line-2);}
 @media (max-width:700px){.profile-main{padding:0 18px 20px;}.profile-av{width:96px;height:96px;font-size:30px;}.profile-2f{grid-template-columns:1fr;}.profile-stats{flex-wrap:wrap;}}
+
+/* Страница врача (вместо боковой панели). */
+.student-page .back-link{margin-bottom:12px;}
+.student-page-body{margin-top:18px;}
+.student-page-body .drawer-body{padding:22px 26px;}
+.presence-dot.big{width:18px;height:18px;right:10px;bottom:10px;border:3px solid var(--surface);}
+.student-hero .profile-stats b{font-size:20px;}

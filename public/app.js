@@ -2728,7 +2728,9 @@ function renderStaffShell(){
   }
 
   if(staffState.selectedStudentId){
-    wrap.appendChild(renderStudentDrawer());
+    content.innerHTML = "";
+    if(!staffState.selectedStudent) content.appendChild(el('<div class="page-wide"><div class="card empty-state" style="padding:40px;">Загрузка профиля…</div></div>'));
+    else content.appendChild(renderStudentDrawer());
   }
   if(calendarState.eventModalMode){
     wrap.appendChild(renderEventModal());
@@ -4310,7 +4312,7 @@ function renderStudentDrawer(){
           '</div>'
         : '') +
     '</div>';
-    body += '<div class="progress-label">'+done+' из 5 уроков'+(typeof s.quiz_score==="number"?' · тест: '+s.quiz_score+'%':'')+'</div>';
+    body += '<div class="progress-label">'+done+' из '+((staffState.materials||[]).length||done)+' уроков'+(typeof s.quiz_score==="number"?' · тест: '+s.quiz_score+'%':'')+'</div>';
     if(s.completed){
       if(staffState.certificatesEnabled){
         body += '<div class="card" style="padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;">' +
@@ -4381,7 +4383,29 @@ function renderStudentDrawer(){
       '<button class="btn btn-ghost" style="margin-top:6px;" data-action="reset-student-password" data-id="'+s.id+'" data-name="'+escapeHtml(s.name)+'">Сбросить пароль</button>';
   }
   body += '</div>';
-  return el('<div class="overlay" data-action="overlay-close"><div class="drawer" data-stop="1">'+head+body+'</div></div>');
+  // Полноценная страница врача (раньше — боковая панель): шапка с фото, данными
+  // и ключевыми цифрами, ниже — те же вкладки «Прогресс/Доступ/Профиль/Заметки».
+  var total = (staffState.materials||[]).length || done;
+  var stream = s.stream_id ? (calendarState.streams||[]).find(function(x){ return x.id===s.stream_id; }) : null;
+  var curator = s.assigned_curator_id ? (directory||[]).find(function(x){ return x.id===s.assigned_curator_id; }) : null;
+  var stage = studentStage(s);
+  var hero = '<div class="card profile-hero student-hero">' +
+    '<div class="profile-cover aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
+    '<div class="profile-main"><div class="profile-photo avatar-wrap">'+userAvatar(s,"profile-av")+(s.online?'<span class="presence-dot big" title="Онлайн"></span>':'')+'</div>' +
+      '<div class="profile-id"><span class="profile-kicker">Профиль врача</span><h1>'+escapeHtml(s.name)+'</h1>' +
+        '<div class="profile-tags">'+magnet(stage==="certified"?"done":(stage==="demo_done"?"attention":(stage==="in_progress"?"active":"neutral")), STAGE_LABELS[stage]) +
+          (s.specializations||[]).map(function(n){ return '<span class="profile-chip">'+escapeHtml(n)+'</span>'; }).join("") +
+          '<span class="profile-chip">'+escapeHtml(stream?stream.name:"без потока")+'</span>' +
+          (curator?'<span class="profile-chip">куратор: '+escapeHtml(curator.name)+'</span>':'') + '</div>' +
+        '<div class="profile-contacts"><span>'+escapeHtml(s.email||"")+'</span>'+(s.phone?'<span>'+escapeHtml(s.phone)+'</span>':'')+(s.workplace?'<span>'+escapeHtml(s.workplace)+'</span>':'')+
+          '<span>'+(s.online?'<b style="color:var(--status-active);">● в сети сейчас</b>':'был(а) в сети: '+escapeHtml(timeSince(s.last_seen_at)))+'</span></div>' +
+      '</div>' +
+      '<div class="profile-stats"><div><b>'+done+' / '+total+'</b><span>уроков</span></div>' +
+        '<div><b>'+(typeof s.quiz_score==="number"?s.quiz_score+'%':'—')+'</b><span>итоговый тест</span></div>' +
+        '<div><b>'+fmtDateShort(s.created_at)+'</b><span>регистрация</span></div></div>' +
+    '</div></div>';
+  return el('<div class="page-wide student-page"><button class="back-link" data-action="close-drawer">← Назад</button>'+hero+
+    '<div class="card student-page-body">'+body+'</div></div>');
 }
 
 // Общая точка входа для переключения раздела врача — используется и прямыми
@@ -4703,7 +4727,7 @@ function wireEvents(root){
       render(); return;
     }
     if(action==="open-student"){
-      staffState.selectedStudentId=t.getAttribute("data-id"); staffState.drawerTab="progress"; staffState.selectedStudent=null; staffState.notes=[]; render();
+      staffState.selectedStudentId=t.getAttribute("data-id"); staffState.drawerTab="progress"; staffState.selectedStudent=null; staffState.notes=[]; render(); window.scrollTo(0,0);
       try{
         var cqOpen=staffState.activeCourseId?"?courseId="+encodeURIComponent(staffState.activeCourseId):"";
         var d=await api("/staff/students/"+staffState.selectedStudentId+cqOpen);
