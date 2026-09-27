@@ -186,3 +186,22 @@ describe("Отмена заказа закрывает доступ к курс�
     expect((await pool.query("SELECT access_blocked FROM progress WHERE user_id=$1 AND course_id=$2", [u.id, course.courseId])).rows[0].access_blocked).toBe(false);
   });
 });
+
+describe("Выделения маркером в уроке", () => {
+  test("добавить, без дублей, видно в прогрессе, удалить; чужой урок — 404", async () => {
+    const u = await createUser({ courseId: course.courseId });
+    const c = await loginAs(u);
+    const L = course.lessonIds[0];
+    const a = await api("post", `/api/course/lessons/${L}/highlights`, c, { text: "  Программированные   теории старения " });
+    expect(a.status).toBe(200);
+    expect(a.body.highlights[0].text).toBe("Программированные теории старения");
+    const dup = await api("post", `/api/course/lessons/${L}/highlights`, c, { text: "Программированные теории старения" });
+    expect(dup.body.highlights.length).toBe(1);
+    expect((await api("post", `/api/course/lessons/${L}/highlights`, c, { text: "x" })).status).toBe(400);
+    const content = await api("get", `/api/course/content/${course.courseId}`, c);
+    expect(content.body.progress.lesson_highlights[L].length).toBe(1);
+    const del = await api("delete", `/api/course/lessons/${L}/highlights/${a.body.highlights[0].id}`, c);
+    expect(del.body.highlights).toEqual([]);
+    expect((await api("post", "/api/course/lessons/no-such/highlights", c, { text: "текст" })).status).toBe(404);
+  });
+});

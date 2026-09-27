@@ -641,6 +641,200 @@ function runEntranceAnimations(){
   runStep(0);
 }
 
+/* ============================= ВЫДЕЛЕНИЕ ТЕКСТА В УРОКЕ ============================= */
+// Врач выделяет фрагмент урока — над ним появляется панель: маркер (сохраняется
+// и подсвечивается при следующих открытиях), в заметку, спросить куратора,
+// найти в курсе, копировать. Панель живёт в body (вне #app), render() её закрывает.
+var selTools = null; // { el, text, hid }
+
+function hlNormalize(s){ return String(s||"").replace(/\s+/g, " ").trim(); }
+function hlBlockOf(n){
+  var e = n.parentElement;
+  while(e && !/^(P|LI|H[1-6]|DIV|BLOCKQUOTE|TD|TH|PRE|UL|OL|SECTION|ARTICLE)$/.test(e.tagName)) e = e.parentElement;
+  return e;
+}
+// Текст урока одной строкой (пробелы схлопнуты, между блоками — пробел) и карта
+// «символ строки → (текстовый узел, смещение)», чтобы найти фрагмент, даже если
+// он пересекает <b>, <i> или границу абзаца.
+function hlIndex(root){
+  var w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null), full = "", map = [], n, prevSpace = true, prevBlock = null;
+  while((n = w.nextNode())){
+    if(n.parentElement && n.parentElement.closest("mark.hl-skip, script, style")) continue;
+    var blk = hlBlockOf(n);
+    if(prevBlock && blk !== prevBlock && !prevSpace){ full += " "; map.push(null); prevSpace = true; }
+    prevBlock = blk;
+    var t = n.nodeValue;
+    for(var i=0;i<t.length;i++){
+      if(/\s/.test(t[i])){ if(prevSpace) continue; full += " "; map.push([n,i]); prevSpace = true; }
+      else { full += t[i]; map.push([n,i]); prevSpace = false; }
+    }
+  }
+  return { full:full, map:map };
+}
+function hlWrap(root, h){
+  var ix = hlIndex(root), at = ix.full.indexOf(h.text);
+  if(at === -1) return false; // текст урока изменили — фрагмента больше нет
+  var spans = [], cur = null;
+  for(var k=at; k<at+h.text.length; k++){
+    var m = ix.map[k]; if(!m) continue;
+    if(cur && cur.node === m[0]) cur.end = m[1]+1;
+    else { cur = { node:m[0], start:m[1], end:m[1]+1 }; spans.push(cur); }
+  }
+  // с конца, чтобы разрезание узлов не сдвигало ещё не обработанные смещения
+  spans.reverse().forEach(function(sp){
+    var node = sp.node;
+    if(sp.end < node.nodeValue.length) node.splitText(sp.end);
+    var mid = sp.start > 0 ? node.splitText(sp.start) : node;
+    var mk = document.createElement("mark"); mk.className = "hl"; mk.setAttribute("data-hid", h.id);
+    mid.parentNode.insertBefore(mk, mid); mk.appendChild(mid);
+  });
+  return true;
+}
+function applyLessonHighlights(){
+  var prose = document.getElementById("lessonProse");
+  if(!prose || !course || !course.progress) return;
+  prose.querySelectorAll("mark.hl").forEach(function(m){ var p = m.parentNode; while(m.firstChild) p.insertBefore(m.firstChild, m); p.removeChild(m); p.normalize(); });
+  var list = ((course.progress.lesson_highlights||{})[prose.getAttribute("data-lesson-id")]) || [];
+  list.forEach(function(h){ hlWrap(prose, h); });
+}
+
+function closeSelTools(){ if(selTools){ selTools.el.remove(); selTools = null; } }
+function selLessonCtx(){
+  var l = course && course.lessons[studentState.lessonIndex];
+  return l ? { id:l.id, n:studentState.lessonIndex+1, title:l.title } : null;
+}
+function openSelTools(rect, text, hid){
+  closeSelTools();
+  var btn = function(act, ic, label){ return '<button type="button" data-sel-action="'+act+'">'+icon(ic,"ic-sm")+'<span>'+label+'</span></button>'; };
+  var html = '<div class="sel-tools" role="toolbar" aria-label="Действия с выделенным">' +
+    (hid ? btn("unmark","close","Убрать маркер") : (previewMode ? '' : btn("mark","star","Маркер"))) +
+    (previewMode ? '' : btn("note","list","В заметку")) +
+    btn("ask","message","Спросить куратора") +
+    btn("search","search","Найти в курсе") +
+    btn("copy","clipboard","Копировать") + '</div>';
+  var el2 = el(html); document.body.appendChild(el2);
+  selTools = { el:el2, text:text, hid:hid||null };
+  // над выделением; если не помещается — под ним. На сенсорных экранах сверху
+  // висит системное меню выделения — ставим панель снизу.
+  var w = el2.offsetWidth, h = el2.offsetHeight, coarse = window.matchMedia && window.matchMedia("(pointer:coarse)").matches;
+  var top = coarse ? rect.bottom + 10 : rect.top - h - 10;
+  if(top < 8) top = rect.bottom + 10;
+  if(top + h > window.innerHeight - 8) top = Math.max(8, rect.top - h - 10);
+  // выделение частично за краем экрана — панель всё равно остаётся видимой
+  top = Math.min(Math.max(8, top), window.innerHeight - h - 8);
+  var left = Math.min(Math.max(8, rect.left + rect.width/2 - w/2), window.innerWidth - w - 8);
+  el2.style.top = top + "px"; el2.style.left = left + "px";
+  el2.addEventListener("mousedown", function(e){ e.preventDefault(); }); // не снимать выделение кликом по панели
+  el2.addEventListener("click", function(e){
+    var b = e.target.closest("[data-sel-action]"); if(b) runSelAction(b.getAttribute("data-sel-action"));
+  });
+}
+function selCheck(){
+  var prose = document.getElementById("lessonProse");
+  var sel = window.getSelection && window.getSelection();
+  if(!prose || !sel || sel.isCollapsed || !sel.rangeCount){ if(selTools && !selTools.hid) closeSelTools(); return; }
+  var r = sel.getRangeAt(0);
+  if(!prose.contains(r.commonAncestorContainer)){ if(selTools && !selTools.hid) closeSelTools(); return; }
+  var text = hlNormalize(sel.toString());
+  if(text.length < 2){ closeSelTools(); return; }
+  openSelTools(r.getBoundingClientRect(), text, null);
+}
+async function copyText(t){
+  try{ await navigator.clipboard.writeText(t); return true; }
+  catch(e){
+    var ta = document.createElement("textarea"); ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select();
+    var ok = false; try{ ok = document.execCommand("copy"); }catch(e2){} ta.remove(); return ok;
+  }
+}
+async function runSelAction(act){
+  if(!selTools) return;
+  var text = selTools.text, hid = selTools.hid, ctx = selLessonCtx();
+  var clearSel = function(){ var s = window.getSelection && window.getSelection(); if(s) s.removeAllRanges(); closeSelTools(); };
+  if(!ctx){ clearSel(); return; }
+  var src = "урок "+ctx.n+" «"+ctx.title+"»";
+  if(act==="mark"){
+    clearSel();
+    try{
+      var r = await api("/course/lessons/"+ctx.id+"/highlights", { method:"POST", body: JSON.stringify({ text:text }) });
+      if(!course.progress.lesson_highlights) course.progress.lesson_highlights = {};
+      course.progress.lesson_highlights[ctx.id] = r.highlights;
+      applyLessonHighlights();
+      showToast("Выделено — останется при следующем открытии урока");
+    }catch(err){ showToast(err.message); }
+    return;
+  }
+  if(act==="unmark"){
+    closeSelTools();
+    try{
+      var r2 = await api("/course/lessons/"+ctx.id+"/highlights/"+encodeURIComponent(hid), { method:"DELETE" });
+      course.progress.lesson_highlights[ctx.id] = r2.highlights;
+      applyLessonHighlights();
+    }catch(err){ showToast(err.message); }
+    return;
+  }
+  if(act==="note"){
+    clearSel();
+    var ta = document.getElementById("lessonNoteInput");
+    var prev = ta ? ta.value : ((course.progress.lesson_notes||{})[ctx.id] || "");
+    var next = (prev.trim() ? prev.replace(/\s+$/,"") + "\n\n" : "") + "«" + text + "»\n";
+    try{
+      await api("/course/lessons/"+ctx.id+"/note", { method:"PUT", body: JSON.stringify({ note: next }) });
+      if(!course.progress.lesson_notes) course.progress.lesson_notes = {};
+      course.progress.lesson_notes[ctx.id] = next.trim();
+      if(ta){ ta.value = next; ta.defaultValue = next; ta.scrollIntoView({ behavior:"smooth", block:"center" }); ta.classList.add("flash"); setTimeout(function(){ ta.classList.remove("flash"); }, 1200); }
+      showToast("Добавлено в заметку к уроку");
+    }catch(err){ showToast(err.message); }
+    return;
+  }
+  if(act==="ask"){
+    clearSel();
+    var msg = "Вопрос по уроку " + ctx.n + " «" + ctx.title + "»:\n«" + text + "»\n\n";
+    var copied = await copyText(msg);
+    var stream = me && me.stream_id ? (calendarState.streams||[]).find(function(s){ return s.id===me.stream_id; }) : null;
+    if(stream && stream.telegram_url){
+      window.open(stream.telegram_url, "_blank", "noopener");
+      showToast(copied ? "Цитата скопирована — вставьте её в чат потока и допишите вопрос" : "Откройте чат потока и задайте вопрос");
+    } else {
+      showToast(copied ? "Цитата с вопросом скопирована — отправьте её куратору" : "Не удалось скопировать");
+    }
+    return;
+  }
+  if(act==="search"){
+    clearSel();
+    studentState.materialsSearch = text.length > 80 ? text.slice(0, 80) : text;
+    studentState.materialsAutoFocus = false;
+    await applyStudentTab("materials", "search");
+    return;
+  }
+  if(act==="copy"){
+    clearSel();
+    var ok = await copyText("«" + text + "»\n— " + src + (course.course ? ", курс «" + course.course.title + "»" : ""));
+    showToast(ok ? "Скопировано вместе с источником" : "Не удалось скопировать");
+  }
+}
+// Выделение мышью — по отпусканию кнопки; с клавиатуры и на сенсорных экранах —
+// по selectionchange (с задержкой, пока пользователь тянет границы).
+var selCheckTimer = null;
+document.addEventListener("mouseup", function(e){
+  if(e.target.closest && e.target.closest(".sel-tools")) return;
+  var mk = e.target.closest && e.target.closest("#lessonProse mark.hl");
+  var sel = window.getSelection && window.getSelection();
+  if(mk && sel && sel.isCollapsed){
+    var ctx = selLessonCtx(), hid = mk.getAttribute("data-hid");
+    var h = ctx && ((course.progress.lesson_highlights||{})[ctx.id]||[]).find(function(x){ return x.id===hid; });
+    if(h) openSelTools(mk.getBoundingClientRect(), h.text, hid);
+    return;
+  }
+  if(selTools && selTools.hid) closeSelTools();
+  setTimeout(selCheck, 0);
+});
+document.addEventListener("selectionchange", function(){
+  clearTimeout(selCheckTimer);
+  selCheckTimer = setTimeout(function(){ if(!(selTools && selTools.hid)) selCheck(); }, 350);
+});
+document.addEventListener("keydown", function(e){ if(e.key==="Escape") closeSelTools(); });
+window.addEventListener("scroll", function(){ closeSelTools(); }, { passive:true, capture:true });
+
 // Отклик карточек на курсор: координаты для подсветки рамки (.board-strip > .card).
 document.addEventListener("pointermove", function(e){
   var c = e.target && e.target.closest && e.target.closest(".card");
@@ -782,6 +976,7 @@ function render(){
   if(!app) return;
   closeDatePicker();
   closeSelectPop();
+  closeSelTools();
   // render() полностью пересобирает DOM (app.innerHTML="") и вызывается очень часто
   // по совершенно не связанным с уроком причинам — например, поллинг уведомлений
   // каждые 30с (см. startNotificationPolling). Без этого видео на шаге "Видео"
@@ -888,6 +1083,7 @@ function render(){
   wireEvents(app);
   runEntranceAnimations();
   if(view==="login" || view==="register") initAuroraFx();
+  if(view==="student") applyLessonHighlights();
   if(view==="student" && studentState.tab==="lesson" && !studentState.quizMode && studentState.lessonStage==="video"){
     setTimeout(function(){ wireLessonVideo(savedVideoState); }, 0);
   } else if(lessonPlyrInstance){
@@ -2224,7 +2420,8 @@ function renderCoursePlayer(){
 
   if(stage==="intro"){
     var noteVal = (course.progress && course.progress.lesson_notes && course.progress.lesson_notes[lesson.id]) || "";
-    body += '<div class="prose">'+lesson.html+'</div>' +
+    body += '<div class="prose" id="lessonProse" data-lesson-id="'+lesson.id+'">'+lesson.html+'</div>' +
+      (previewMode ? '' : '<p class="sel-hint">'+icon("star","ic-sm")+' Выделите фрагмент текста — его можно отметить маркером, добавить в заметку или задать по нему вопрос куратору.</p>') +
       '<div class="lesson-note">' +
         '<label>Ваша заметка к уроку <span style="font-weight:400;color:var(--muted-2);">(видна только вам)</span></label>' +
         '<textarea class="input" id="lessonNoteInput" style="height:64px;font-size:13.5px;" placeholder="Например: спросить куратора про дозировки">'+escapeHtml(noteVal)+'</textarea>' +

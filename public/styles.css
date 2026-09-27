@@ -1673,3 +1673,17 @@ tr.ord-off td{opacity:.55;}
 .sh-hint{font-size:12.5px;color:var(--muted);}
 .sched-hero .sh-foot .sched-actions{margin-top:0;padding-top:0;}
 @media (max-width:700px){.sh-facts{grid-template-columns:1fr 1fr;}.sh-fact:nth-child(3){border-left:none;}.sh-fact:nth-child(n+3){border-top:var(--border-hairline);}}
+
+/* Выделение в тексте урока: маркер и панель действий */
+.prose mark.hl{background:color-mix(in srgb,var(--status-attention) 38%,transparent);color:inherit;border-radius:3px;padding:0 1px;cursor:pointer;box-decoration-break:clone;-webkit-box-decoration-break:clone;}
+:root[data-theme="light"] .prose mark.hl{background:color-mix(in srgb,var(--status-attention) 30%,transparent);}
+.prose mark.hl:hover{background:color-mix(in srgb,var(--status-attention) 55%,transparent);}
+.sel-tools{position:fixed;z-index:70;display:flex;gap:2px;padding:4px;border-radius:12px;background:var(--surface);border:var(--border-hairline);box-shadow:var(--shadow-lift);animation:modalIn .14s ease both;max-width:calc(100vw - 16px);overflow-x:auto;}
+.sel-tools button{display:flex;align-items:center;gap:6px;border:none;background:transparent;color:var(--ink);font:500 12.5px var(--sans);padding:7px 10px;border-radius:8px;cursor:pointer;white-space:nowrap;}
+.sel-tools button:hover{background:var(--surface-2);}
+.sel-tools button .ic{color:var(--primary);}
+.sel-tools button[data-sel-action="mark"] .ic{color:var(--status-attention);}
+@media (max-width:600px){.sel-tools button span{display:none;}.sel-tools button{padding:9px 11px;}}
+.sel-hint{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted-2);margin:14px 0 0;}
+.sel-hint .ic{color:var(--status-attention);}
+#lessonNoteInput.flash{box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 45%,transparent);transition:box-shadow .3s;}

@@ -540,6 +540,38 @@ router.put("/lessons/:id/note", authRequired, requireRole("student"), async (req
   res.json({ ok: true });
 });
 
+// Выделения маркером в тексте урока (см. schema.sql, этап 30).
+const MAX_HIGHLIGHT_LEN = 2000;
+const MAX_HIGHLIGHTS_PER_LESSON = 200;
+async function loadHighlights(userId, lessonId) {
+  const lesson = await pool.query("SELECT course_id FROM lessons WHERE id=$1", [lessonId]);
+  if (!lesson.rowCount) return null;
+  const pr = await pool.query("SELECT lesson_highlights FROM progress WHERE user_id=$1 AND course_id=$2", [userId, lesson.rows[0].course_id]);
+  if (!pr.rowCount) return null;
+  return { courseId: lesson.rows[0].course_id, all: pr.rows[0].lesson_highlights || {} };
+}
+router.post("/lessons/:id/highlights", authRequired, requireRole("student"), async (req, res) => {
+  const text = String((req.body && req.body.text) || "").replace(/\s+/g, " ").trim();
+  if (text.length < 2 || text.length > MAX_HIGHLIGHT_LEN) return res.status(400).json({ error: "invalid_input", message: "Выделите фрагмент от 2 до 2000 символов" });
+  const h = await loadHighlights(req.user.id, req.params.id);
+  if (!h) return res.status(404).json({ error: "not_found" });
+  const list = h.all[req.params.id] || [];
+  if (list.some((x) => x.text === text)) return res.json({ ok: true, highlights: list });
+  if (list.length >= MAX_HIGHLIGHTS_PER_LESSON) return res.status(400).json({ error: "too_many", message: "В уроке уже слишком много выделений" });
+  list.push({ id: crypto.randomUUID().slice(0, 12), text, at: new Date().toISOString() });
+  h.all[req.params.id] = list;
+  await pool.query("UPDATE progress SET lesson_highlights=$1 WHERE user_id=$2 AND course_id=$3", [JSON.stringify(h.all), req.user.id, h.courseId]);
+  res.json({ ok: true, highlights: list });
+});
+router.delete("/lessons/:id/highlights/:hid", authRequired, requireRole("student"), async (req, res) => {
+  const h = await loadHighlights(req.user.id, req.params.id);
+  if (!h) return res.status(404).json({ error: "not_found" });
+  const list = (h.all[req.params.id] || []).filter((x) => x.id !== req.params.hid);
+  if (list.length) h.all[req.params.id] = list; else delete h.all[req.params.id];
+  await pool.query("UPDATE progress SET lesson_highlights=$1 WHERE user_id=$2 AND course_id=$3", [JSON.stringify(h.all), req.user.id, h.courseId]);
+  res.json({ ok: true, highlights: list });
+});
+
 router.post("/request-full-access", authRequired, requireRole("student"), async (req, res) => {
   const courseId = req.body && req.body.courseId;
   if (!courseId) return res.status(400).json({ error: "invalid_input" });

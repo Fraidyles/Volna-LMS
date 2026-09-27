@@ -627,3 +627,9 @@ UPDATE lessons SET video_url = substr(video_url, 2) WHERE video_url LIKE '/api/c
 -- несуществующую страницу платформы. Нормализуем то, что уже сохранено.
 UPDATE streams SET telegram_url = 'https://t.me/' || regexp_replace(telegram_url, '^(https?://)?(www\.)?(t\.me|telegram\.me|telegram\.dog)/', '', 'i')
   WHERE telegram_url ~* '^(https?://)?(www\.)?(t\.me|telegram\.me|telegram\.dog)/' AND telegram_url !~ '^https://t\.me/';
+
+-- ---------- Этап 30: выделения маркером в тексте урока ----------
+-- {lessonId: [{id, text, at}]} — врач выделяет фрагмент урока, он подсвечивается
+-- при каждом следующем открытии. Хранится по тексту фрагмента (не по позиции),
+-- чтобы правка соседних абзацев урока не сдвигала выделение.
+ALTER TABLE progress ADD COLUMN IF NOT EXISTS lesson_highlights JSONB NOT NULL DEFAULT '{}';
