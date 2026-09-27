@@ -1254,3 +1254,19 @@ a.btn{text-decoration:none;}
 .seg-btn{flex:1;border:none;background:transparent;color:var(--muted);font:600 13px var(--sans);padding:9px 10px;border-radius:9px;cursor:pointer;transition:background .15s,color .15s;}
 .seg-btn:hover{color:var(--ink);}
 .seg-btn.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow);}
+
+/* Группы в боковом меню (как в GetCourse): заголовок раскрывает вложенные пункты. */
+.nav-group{display:flex;flex-direction:column;gap:2px;flex-shrink:0;}
+.nav-chev{margin-left:auto;display:flex;opacity:0;transition:opacity .12s ease,transform .2s ease;color:var(--muted-2);}
+.nav-group.open .nav-chev{transform:rotate(180deg);}
+.sidebar:hover .nav-chev,.sidebar:focus-within .nav-chev,.sidebar.mobile-open .nav-chev{opacity:1;}
+.nav-sub{display:flex;flex-direction:column;gap:2px;overflow:hidden;max-height:0;transition:max-height .25s cubic-bezier(.16,1,.3,1);}
+.nav-group.open .nav-sub{max-height:260px;}
+/* В свёрнутой полосе вложенные пункты скрыты — видна иконка группы; группа с
+   открытым разделом подсвечена. */
+.sidebar:not(:hover):not(:focus-within):not(.mobile-open) .nav-sub{max-height:0;}
+.sidebar:not(:hover):not(:focus-within):not(.mobile-open) .nav-group.has-active .nav-group-head{background:var(--primary-tint);color:var(--ink);}
+.sidebar:not(:hover):not(:focus-within):not(.mobile-open) .nav-group.has-active .nav-group-head .ic{color:var(--primary);}
+.nav-sub .sidebar-item{padding-left:26px;font-size:13px;}
+.nav-sub .sidebar-item .ic{width:16px;height:16px;}
+.nav-group-head{color:var(--muted);}

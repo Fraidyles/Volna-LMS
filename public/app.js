@@ -205,6 +205,8 @@ var ICONS = {
   clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
   badge: '<circle cx="12" cy="9.5" r="5.5"/><path d="M9 14l-2 7 5-2.5L17 21l-2-7"/>',
   doctor: '<path d="M7 3.5v5a5 5 0 0 0 10 0v-5"/><path d="M17 8v2a5 5 0 0 1-10 0"/><circle cx="19" cy="5" r="2"/><path d="M12 15.5v3.5"/><circle cx="12" cy="20.5" r="1.3"/>',
+  book: '<path d="M5 5.5A1.5 1.5 0 0 1 6.5 4H18v14H6.5A1.5 1.5 0 0 0 5 19.5v-14Z"/><path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H18v-3"/><path d="M9 8h5"/>',
+  shield: '<path d="M12 3.5l7 2.8v5.4c0 4.2-3 7.4-7 8.8-4-1.4-7-4.6-7-8.8V6.3l7-2.8Z"/><path d="M9 12l2 2 4-4"/>',
   chevron: '<path d="M6 9.5l6 6 6-6"/>',
   camera: '<path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.4-2h5.8l1.4 2h2.2A1.5 1.5 0 0 1 20 8.5v9A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5v-9Z"/><circle cx="12" cy="12.8" r="3.4"/>',
   trash: '<path d="M5 7h14"/><path d="M9 7V5.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5.5V7"/><path d="M7 7l1 12.5A1.5 1.5 0 0 0 9.5 21h5a1.5 1.5 0 0 0 1.5-1.5L17 7"/>',
@@ -1431,6 +1433,17 @@ function upcomingEventReminders(){
   return reminders;
 }
 
+var sidebarGroupsOpen = (function(){ try{ return JSON.parse(localStorage.getItem("lms-nav-groups")||"{}"); }catch(e){ return {}; } })();
+function sidebarGroup(id, iconName, label, activeKey, children){
+  var hasActive = children.some(function(c){ return c[0]===activeKey; });
+  var open = hasActive || !!sidebarGroupsOpen[id];
+  var h = '<div class="nav-group'+(open?' open':'')+(hasActive?' has-active':'')+'">' +
+    '<button type="button" class="sidebar-item nav-group-head" data-action="sidebar-group" data-group="'+id+'" title="'+escapeHtml(label)+'" aria-expanded="'+open+'">' +
+      icon(iconName)+'<span class="sidebar-item-label">'+escapeHtml(label)+'</span><span class="nav-chev">'+icon("chevron","ic-sm")+'</span></button>' +
+    '<div class="nav-sub">';
+  children.forEach(function(c){ h += sidebarItem(c[0], c[1], c[2], c[0]===activeKey); });
+  return h + '</div></div>';
+}
 function sidebarItem(key, iconName, label, active, badge){
   return '<button type="button" class="sidebar-item'+(active?' active':'')+'" data-action="sidebar-nav" data-key="'+key+'" title="'+escapeHtml(label)+'">' +
     (key==="profile" && me && me.avatar_url ? '<img class="sidebar-av" src="'+escapeHtml(me.avatar_url)+'" alt="">' : icon(iconName)) +
@@ -1468,16 +1481,19 @@ function renderSidebar(){
     var staffNotifBadge = upcomingEventReminders().length;
     items += sidebarItem("profile","user","Мой профиль", snavKey==="profile");
     items += sidebarItem("home","home","Главная", snavKey==="home");
-    items += sidebarItem("students","users","Ученики", snavKey==="students");
+    // Разделы сгруппированы, как в GetCourse: заголовок группы раскрывает
+    // вложенные пункты (состояние запоминается), группа с открытым разделом
+    // раскрыта всегда. В свёрнутой полосе видна только иконка группы.
+    items += sidebarGroup("people","users","Врачи", snavKey, [
+      ["students","users","Ученики"], ["dashboard","chartbar","Аналитика"]
+    ]);
     items += sidebarItem("calendar","calendar","Расписание", snavKey==="calendar");
-    items += sidebarItem("materials","folder","Учебные материалы", snavKey==="materials");
-    items += sidebarItem("dashboard","chartbar","Аналитика", snavKey==="dashboard");
-    items += sidebarItem("protocols","doctor","Протоколы", snavKey==="protocols");
+    items += sidebarGroup("learning","book","Обучение", snavKey, (isAdmin?[["courses","folder","Курсы"]]:[]).concat([
+      ["materials","folder","Учебные материалы"]], isAdmin?[["modules","clipboard","Модули"]]:[], [["protocols","doctor","Протоколы"]]));
     if(isAdmin){
-      items += sidebarItem("courses","folder","Курсы", snavKey==="courses");
-      items += sidebarItem("team","users","Команда", snavKey==="team");
-      items += sidebarItem("modules","clipboard","Модули", snavKey==="modules");
-      items += sidebarItem("audit","list","Журнал", snavKey==="audit");
+      items += sidebarGroup("admin","shield","Управление", snavKey, [
+        ["team","users","Команда"], ["audit","list","Журнал действий"]
+      ]);
     }
     items += sidebarItem("chats","message","Telegram", false);
     items += sidebarItem("notifications","bell","Уведомления", snavKey==="notifications", staffNotifBadge);
@@ -4537,6 +4553,14 @@ function wireEvents(root){
     if(action==="open-protocol"){ protocolReader = { id:t.getAttribute("data-id"), mine:t.getAttribute("data-mine")==="1" }; render(); return; }
     if(action==="close-protocol-reader" || (action==="overlay-close-protocol-reader" && !e.target.closest("[data-stop]"))){ protocolReader.id=null; render(); return; }
     if(action==="register-as"){ registerDraft.asStaff = t.getAttribute("data-staff")==="1"; if(registerDraft.asStaff){ registerDraft.specializationIds=[]; registerDraft.interestIds=[]; } render(); return; }
+    if(action==="sidebar-group"){
+      var gid=t.getAttribute("data-group"), grp=t.closest(".nav-group");
+      if(grp && grp.classList.contains("has-active")) return;
+      sidebarGroupsOpen[gid]=!sidebarGroupsOpen[gid];
+      try{ localStorage.setItem("lms-nav-groups", JSON.stringify(sidebarGroupsOpen)); }catch(e){}
+      if(grp){ grp.classList.toggle("open", !!sidebarGroupsOpen[gid]); t.setAttribute("aria-expanded", !!sidebarGroupsOpen[gid]); }
+      return;
+    }
     if(action==="pick-avatar"){ var fi=document.getElementById("avatarFileInput"); if(fi) fi.click(); return; }
     if(action==="remove-avatar"){
       askConfirm({ title:"Убрать фото?", body:"Вы уверены, что хотите убрать фото профиля? Вместо него будут показаны инициалы.", confirmLabel:"Убрать фото",
