@@ -1078,20 +1078,36 @@ async function openStudentPage(id){
   }catch(err){ showToast(err.message); }
 }
 
-// Снимает .sb-hold при первом движении мыши: к этому моменту браузер уже
-// выставил :hover новому сайдбару, и дальше он раскрывается/сворачивается сам.
-var sbReleaseArmed = false, stillTimer = null;
-function armSidebarRelease(){
-  if(sbReleaseArmed) return;
-  sbReleaseArmed = true;
-  var release = function(){
-    sbReleaseArmed = false;
-    document.removeEventListener("pointermove", release, true);
-    document.documentElement.removeEventListener("pointerleave", release);
-    var sb = document.querySelector(".sidebar.sb-hold"); if(sb) sb.classList.remove("sb-hold");
-  };
-  document.addEventListener("pointermove", release, true);
-  document.documentElement.addEventListener("pointerleave", release);
+var stillTimer = null;
+
+// Сайдбар не пересоздаётся при перерисовке: тот же элемент остаётся в документе,
+// меняются только изменившиеся части. Иначе новый сайдбар на мгновение терял
+// :hover — меню схлопывалось, и вся страница уезжала влево и обратно.
+function syncNode(oldEl, newEl, depth){
+  if(oldEl.outerHTML === newEl.outerHTML) return;
+  if(oldEl.tagName !== newEl.tagName || depth > 2 || oldEl.children.length !== newEl.children.length || !oldEl.children.length){
+    oldEl.replaceWith(newEl); return;
+  }
+  [].slice.call(oldEl.attributes).forEach(function(a){ if(!newEl.hasAttribute(a.name)) oldEl.removeAttribute(a.name); });
+  [].slice.call(newEl.attributes).forEach(function(a){ if(oldEl.getAttribute(a.name) !== a.value) oldEl.setAttribute(a.name, a.value); });
+  var oc = [].slice.call(oldEl.children), nc = [].slice.call(newEl.children);
+  oc.forEach(function(o, i){ syncNode(o, nc[i], depth+1); });
+}
+function mountKeepingSidebar(app, node){
+  var oldWrap = app.firstElementChild;
+  var oldSb = oldWrap && oldWrap.querySelector(":scope > .sidebar");
+  var newSb = node.querySelector && node.querySelector(":scope > .sidebar");
+  if(!oldSb || !newSb){ app.innerHTML = ""; app.appendChild(node); return; }
+  [].slice.call(app.childNodes).forEach(function(c){ if(c !== oldWrap) c.remove(); });
+  [].slice.call(oldWrap.childNodes).forEach(function(c){ if(c !== oldSb) c.remove(); });
+  var before = true;
+  [].slice.call(node.childNodes).forEach(function(k){
+    if(k === newSb){ before = false; return; }
+    if(before) oldWrap.insertBefore(k, oldSb); else oldWrap.appendChild(k);
+  });
+  // Сначала сам контейнер (классы, например mobile-open), затем содержимое.
+  if(oldSb.className !== newSb.className) oldSb.className = newSb.className;
+  syncNode(oldSb, newSb, 0);
 }
 
 function render(){
@@ -1124,9 +1140,6 @@ function render(){
     prevOverlays[o.getAttribute("data-action")||""] = { top: sc ? sc.scrollTop : 0 };
   });
   var hadBackdrop = !!app.querySelector(".sidebar-backdrop");
-  // Меню было раскрыто (курсор или фокус на нём) — новое тоже раскрываем сразу.
-  var oldSb = app.querySelector(".sidebar");
-  var sbWasOpen = !!oldSb && (oldSb.classList.contains("sb-hold") || oldSb.matches(":hover") || oldSb.matches(":focus-within"));
   var screenKey = view+"|"+(view==="student" ? studentState.tab : (view==="staff" ? staffState.mainTab : ""));
   var sameScreen = screenKey === lastRenderScreen;
   lastRenderScreen = screenKey;
@@ -1137,8 +1150,7 @@ function render(){
   else if(view === "register") node = renderAuthScreen("register");
   else if(view === "student") node = renderStudentShell();
   else if(view === "staff") node = renderStaffShell();
-  app.innerHTML = "";
-  app.appendChild(node);
+  mountKeepingSidebar(app, node);
   if(changePasswordOpen && (view==="student"||view==="staff")){
     app.appendChild(renderChangePasswordModal());
   }
@@ -1212,7 +1224,6 @@ function render(){
     if(sc && prev.top) sc.scrollTop = prev.top;
   });
   if(hadBackdrop){ var bd = app.querySelector(".sidebar-backdrop"); if(bd) bd.classList.add("no-anim"); }
-  if(sbWasOpen){ var nsb = app.querySelector(".sidebar"); if(nsb){ nsb.classList.add("sb-hold"); armSidebarRelease(); } }
   wireEvents(app);
   runEntranceAnimations();
   if(view==="login" || view==="register") initAuroraFx();
@@ -6202,6 +6213,10 @@ function wireEvents(root){
   // execCommand уже нечего форматировать — поэтому mousedown гасим отдельно от click.
   root.addEventListener("mousedown", function(e){
     if(e.target.closest('[data-action="wysiwyg-cmd"]')) e.preventDefault();
+    // Клик мышью по меню не оставляет в нём фокус: сайдбар не пересоздаётся при
+    // перерисовке, и :focus-within держал бы его раскрытым после ухода курсора.
+    // С клавиатуры (Tab) фокус и раскрытие работают как раньше.
+    if(e.target.closest(".sidebar button")) e.preventDefault();
   });
   root.addEventListener("click", async function(e){
     // Клик вне открытого поповера дашборд-фильтра закрывает его — не return,
