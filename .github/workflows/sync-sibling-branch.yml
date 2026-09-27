@@ -1,0 +1,86 @@
+name: Sync sibling branch into main dev branch
+
+# Соседняя Claude Code сессия работает в своей ветке (claude/busy-allen-qsefoc).
+# Раньше слияние в claude/add-marketing-skills-wyxcp5 делалось вручную по
+# просьбе пользователя — теперь при каждом push в соседнюю ветку GitHub сам
+# подтягивает её сюда, прогоняет тесты и пушит, если всё зелено. Дальше в
+# игру вступает scripts/auto-deploy.sh на самом сервере (cron раз в 3 минуты)
+# и обновление долетает до продакшена без участия человека.
+#
+# Если ветки разошлись так, что merge конфликтует, или тесты падают — шаг
+# просто не выполняется и push не происходит: ничего не ломается, конфликт
+# останется для ручного разбора в чате, как и раньше.
+
+on:
+  push:
+    branches:
+      - claude/busy-allen-qsefoc
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+env:
+  TARGET_BRANCH: claude/add-marketing-skills-wyxcp5
+  SOURCE_BRANCH: claude/busy-allen-qsefoc
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: lms_jest_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_BRANCH }}
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge sibling branch
+        run: |
+          git fetch origin "$SOURCE_BRANCH"
+          if git merge-base --is-ancestor "origin/$SOURCE_BRANCH" HEAD; then
+            echo "Нового в $SOURCE_BRANCH нет — нечего сливать."
+            echo "HAS_CHANGES=false" >> "$GITHUB_ENV"
+          else
+            git merge --no-edit "origin/$SOURCE_BRANCH"
+            echo "HAS_CHANGES=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Setup Node.js
+        if: env.HAS_CHANGES == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        if: env.HAS_CHANGES == 'true'
+        run: npm ci
+
+      - name: Run tests
+        if: env.HAS_CHANGES == 'true'
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/lms_jest_test
+        run: npm test
+
+      - name: Push merged branch
+        if: env.HAS_CHANGES == 'true'
+        run: git push origin "HEAD:$TARGET_BRANCH"
