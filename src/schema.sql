@@ -653,3 +653,22 @@ DELETE FROM login_sessions WHERE id IN (
 -- уникального индекса ON CONFLICT работать не может.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_login_sessions_device
   ON login_sessions(user_id, COALESCE(user_agent,''), COALESCE(ip,''));
+
+-- ---------- Этап 32: «Активные сеансы» — одна запись на браузер/ОС, IP не считается частью устройства ----------
+-- Этапа 31 было недостаточно: ключ включал IP, а он у одного и того же
+-- ноутбука меняется (домашняя сеть / мобильный интернет / VPN) — тот же
+-- браузер плодил новую строку при каждой смене сети. Схлопываем по
+-- (user_id, user_agent) — это и есть «уникальное устройство»; IP в строке
+-- просто обновляется на последний увиденный.
+DELETE FROM login_sessions WHERE id IN (
+  SELECT id FROM (
+    SELECT id, ROW_NUMBER() OVER (
+      PARTITION BY user_id, COALESCE(user_agent,'')
+      ORDER BY created_at DESC, id DESC
+    ) AS rn
+    FROM login_sessions
+  ) dupes WHERE rn > 1
+);
+DROP INDEX IF EXISTS idx_login_sessions_device;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_login_sessions_device
+  ON login_sessions(user_id, COALESCE(user_agent,''));
