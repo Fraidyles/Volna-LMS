@@ -612,3 +612,8 @@ CREATE TABLE IF NOT EXISTS survey_responses (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (survey_id, user_id)
 );
+
+-- ---------- Этап 27: заказ помнит, что именно он открыл курс ----------
+-- Отмена такого заказа закрывает доступ к курсу (прогресс не удаляется). Курс,
+-- на который врач был записан до покупки, отмена не трогает.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS opened_course BOOLEAN NOT NULL DEFAULT false;

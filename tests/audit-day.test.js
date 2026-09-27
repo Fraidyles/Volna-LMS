@@ -155,3 +155,34 @@ describe("Статус оплаты: один источник правды", ()
     expect((await pool.query("SELECT payment_status FROM users WHERE id=$1", [withOrder.id])).rows[0].payment_status).toBe("unpaid");
   });
 });
+
+describe("Отмена заказа закрывает доступ к курсу, который он открыл", () => {
+  test("закрывает, прогресс сохраняется; новая оплата открывает снова; прежняя запись не трогается", async () => {
+    const ac = await loginAs(await createUser({ role: "admin" }));
+    const paidCourse = "full-" + crypto.randomUUID().slice(0, 8);
+    await pool.query("INSERT INTO courses (id, title) VALUES ($1,$2)", [paidCourse, "Полный курс"]);
+    const prod = await api("post", "/api/orders/products", ac, { title: "Полный курс", price: 1000, courseId: paidCourse });
+    const u = await createUser({ courseId: course.courseId });
+
+    const o1 = await api("post", "/api/orders", ac, { userId: u.id, productId: prod.body.id, paidNow: true });
+    expect(o1.body.order.opened_course).toBe(true);
+    await pool.query("UPDATE progress SET completed_lessons='[\"x\"]' WHERE user_id=$1 AND course_id=$2", [u.id, paidCourse]);
+
+    const c1 = await api("post", `/api/orders/${o1.body.order.id}/cancel`, ac);
+    expect(c1.body.closedCourse).toBe("Полный курс");
+    const pr = (await pool.query("SELECT access_blocked, completed_lessons FROM progress WHERE user_id=$1 AND course_id=$2", [u.id, paidCourse])).rows[0];
+    expect(pr.access_blocked).toBe(true);
+    expect(pr.completed_lessons).toEqual(["x"]);
+
+    await api("post", "/api/orders", ac, { userId: u.id, productId: prod.body.id, paidNow: true });
+    expect((await pool.query("SELECT access_blocked FROM progress WHERE user_id=$1 AND course_id=$2", [u.id, paidCourse])).rows[0].access_blocked).toBe(false);
+
+    // курс, на который врач записан до покупки, отмена не закрывает
+    const prodDemo = await api("post", "/api/orders/products", ac, { title: "Демо", price: 10, courseId: course.courseId });
+    const o3 = await api("post", "/api/orders", ac, { userId: u.id, productId: prodDemo.body.id, paidNow: true });
+    expect(o3.body.order.opened_course).toBe(false);
+    const c3 = await api("post", `/api/orders/${o3.body.order.id}/cancel`, ac);
+    expect(c3.body.closedCourse).toBeNull();
+    expect((await pool.query("SELECT access_blocked FROM progress WHERE user_id=$1 AND course_id=$2", [u.id, course.courseId])).rows[0].access_blocked).toBe(false);
+  });
+});

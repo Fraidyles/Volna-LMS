@@ -90,7 +90,7 @@ router.delete("/products/:id", authRequired, requireRole(...ADMIN), async (req, 
 
 const ORDER_SELECT = `
   SELECT o.id, o.number, o.user_id, o.product_id, o.title, o.amount, o.status, o.comment, o.created_at,
-    u.name AS student_name, u.email AS student_email,
+    u.name AS student_name, u.email AS student_email, o.opened_course,
     CASE WHEN u.avatar_file IS NULL THEN NULL ELSE 'api/auth/avatar/' || u.avatar_file END AS avatar_url,
     cb.name AS created_by_name, p.course_id, c.title AS course_title,
     COALESCE((SELECT SUM(amount) FROM order_payments op WHERE op.order_id=o.id AND op.paid_at IS NOT NULL), 0)::int AS paid_amount,
@@ -147,13 +147,26 @@ async function recomputeOrder(orderId, actor) {
   await pool.query("UPDATE orders SET status=$1 WHERE id=$2", [status, orderId]);
   await syncUserPaymentStatus(ord.user_id);
 
-  // Полная оплата открывает курс продукта (если врач ещё не записан на него).
+  // Полная оплата открывает курс продукта: записывает врача, а если доступ был
+  // закрыт отменой прежнего заказа — открывает его снова (прогресс на месте).
   if (status === "paid" && ord.status !== "paid" && ord.course_id) {
     const ins = await pool.query(
       "INSERT INTO progress (user_id, course_id) VALUES ($1,$2) ON CONFLICT (user_id, course_id) DO NOTHING RETURNING user_id",
       [ord.user_id, ord.course_id]
     );
-    if (ins.rowCount) {
+    let opened = ins.rowCount > 0;
+    if (!opened) {
+      const reopened = await pool.query(
+        `UPDATE progress SET access_blocked=false WHERE user_id=$1 AND course_id=$2 AND access_blocked
+           AND EXISTS (SELECT 1 FROM orders o JOIN products p ON p.id=o.product_id
+                       WHERE o.user_id=$1 AND p.course_id=$2 AND o.status='cancelled' AND o.opened_course)
+         RETURNING user_id`,
+        [ord.user_id, ord.course_id]
+      );
+      opened = reopened.rowCount > 0;
+    }
+    if (opened) await pool.query("UPDATE orders SET opened_course=true WHERE id=$1", [orderId]);
+    if (opened) {
       const c = await pool.query("SELECT title FROM courses WHERE id=$1", [ord.course_id]);
       await notify(ord.user_id, "course_opened", "Курс открыт", `Оплата получена — вам открыт курс «${c.rows[0].title}».`);
       await logAction(actor, "course.enroll", "student", ord.user_id, null, { courseId: ord.course_id, byOrder: orderId }, false);
@@ -286,8 +299,36 @@ router.post("/:id/cancel", authRequired, requireRole(...STAFF), async (req, res)
   if (!(await canManageStudent(req.user, o.rows[0].user_id))) return res.status(403).json({ error: "forbidden", message: "Этот врач закреплён за другим куратором" });
   await pool.query("UPDATE orders SET status='cancelled' WHERE id=$1", [req.params.id]);
   await syncUserPaymentStatus(o.rows[0].user_id);
-  await logAction(req.user, "order.cancel", "student", o.rows[0].user_id, o.rows[0].name, { orderId: req.params.id, title: o.rows[0].title }, false);
-  res.json({ ok: true });
+
+  // Курс, который открыл именно этот заказ, закрываем — если его не держит другой
+  // действующий оплаченный заказ. Блокировка, а не удаление: прогресс сохраняется,
+  // доступ можно вернуть во вкладке «Доступ» или новой оплатой.
+  let closedCourse = null;
+  const oc = await pool.query(
+    `SELECT o.opened_course, p.course_id, c.title FROM orders o LEFT JOIN products p ON p.id=o.product_id
+     LEFT JOIN courses c ON c.id=p.course_id WHERE o.id=$1`, [req.params.id]
+  );
+  const info = oc.rows[0];
+  if (info && info.opened_course && info.course_id) {
+    const other = await pool.query(
+      `SELECT 1 FROM orders o JOIN products p ON p.id=o.product_id
+       WHERE o.user_id=$1 AND p.course_id=$2 AND o.status='paid' AND o.id<>$3 LIMIT 1`,
+      [o.rows[0].user_id, info.course_id, req.params.id]
+    );
+    if (!other.rowCount) {
+      const blk = await pool.query(
+        "UPDATE progress SET access_blocked=true WHERE user_id=$1 AND course_id=$2 AND NOT access_blocked RETURNING user_id",
+        [o.rows[0].user_id, info.course_id]
+      );
+      if (blk.rowCount) {
+        closedCourse = info.title;
+        await notify(o.rows[0].user_id, "course_closed", "Доступ к курсу закрыт", `Заказ отменён — доступ к курсу «${info.title}» закрыт. Вопросы — к куратору.`);
+        await logAction(req.user, "access.block", "student", o.rows[0].user_id, o.rows[0].name, { courseId: info.course_id, byOrderCancel: req.params.id }, false);
+      }
+    }
+  }
+  await logAction(req.user, "order.cancel", "student", o.rows[0].user_id, o.rows[0].name, { orderId: req.params.id, title: o.rows[0].title, closedCourse }, false);
+  res.json({ ok: true, closedCourse });
 });
 
 module.exports = router;

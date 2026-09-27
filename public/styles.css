@@ -1626,3 +1626,6 @@ tr.ord-off td{opacity:.55;}
 .link-btn{background:none;border:none;padding:0;color:var(--primary);font:500 13px var(--sans);cursor:pointer;}
 /* На средних экранах колонка «Открыть →» не помещается — строка и так кликабельна. */
 @media (max-width:1180px){table.roster:has(.row-open) tr > :last-child{display:none;}}
+/* Кнопка «Закрыть ✕» в шапке окна не сжимается и не ломается на две строки при длинном заголовке. */
+.drawer-head{gap:14px;}
+.drawer-head > .btn{flex-shrink:0;white-space:nowrap;}

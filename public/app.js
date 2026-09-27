@@ -5459,8 +5459,19 @@ async function handleToolsClick(action, t, e){
   }
   if(action==="order-cancel"){
     var oc = O.open;
-    askConfirm({ title:"Вы уверены, что хотите отменить заказ №"+oc.number+"?", body:"Заказ останется в истории со статусом «Отменён», неоплаченные платежи больше не будут ждать оплаты.", confirmLabel:"Отменить заказ", danger:true, onConfirm: async function(){
-      try{ await api("/orders/"+oc.id+"/cancel", { method:"POST" }); O.open = null; showToast("Заказ отменён"); await loadOrders(); if(staffState.selectedStudentId===oc.user_id) await refreshSelectedStudent(); }catch(err){ showToast(err.message); }
+    // Если заказ сам открыл курс — отмена закроет доступ к нему (прогресс сохранится).
+    var closes = oc.opened_course && oc.course_title;
+    askConfirm({ title:"Вы уверены, что хотите отменить заказ №"+oc.number+"?"+(closes?" Доступы к урокам ученика также будут закрыты":""),
+      body: closes
+        ? "Закроется курс «"+oc.course_title+"». Прогресс врача сохранится — доступ можно вернуть во вкладке «Доступ» или новой оплатой."
+        : "Заказ останется в истории со статусом «Отменён», неоплаченные платежи больше не будут ждать оплаты.",
+      confirmLabel:"Отменить заказ", danger:true, onConfirm: async function(){
+      try{
+        var rc = await api("/orders/"+oc.id+"/cancel", { method:"POST" });
+        O.open = null;
+        showToast(rc.closedCourse ? "Заказ отменён, доступ к курсу «"+rc.closedCourse+"» закрыт" : "Заказ отменён");
+        await loadOrders(); if(staffState.selectedStudentId===oc.user_id) await refreshSelectedStudent();
+      }catch(err){ showToast(err.message); }
       render();
     } });
     return true;
