@@ -1750,3 +1750,9 @@ tr.ord-off td{opacity:.55;}
 .imp-bar .btn{flex:0 0 auto;background:#1B1A14;color:#fff;border-color:#1B1A14;}
 .imp-bar .btn:hover{background:#000;}
 @media (max-width:640px){ .imp-bar{flex-wrap:wrap;} .imp-bar .btn{width:100%;justify-content:center;} }
+
+/* Плитки под курсом на главной: содержимое сверху, кнопка всегда внизу слева —
+   у всех плиток ряда на одной линии, а не «где закончился текст». */
+.board-tile{padding:18px;display:flex;flex-direction:column;align-items:flex-start;}
+.board-tile .tile-foot{margin-top:auto;padding-top:14px;}
+.board-tile .tile-foot.wide{align-self:stretch;}

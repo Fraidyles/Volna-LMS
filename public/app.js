@@ -2201,13 +2201,13 @@ function renderStudentHome(){
 
   html += '<div class="board-strip">';
 
-  html += '<div class="card" style="padding:18px;">';
+  html += '<div class="card board-tile">';
   if(nextEvent){
     html += (liveNow ? magnet("live","Идёт сейчас") : magnet("attention","Ближайший эфир")) +
       '<b style="font-size:14px;display:block;margin:10px 0 2px;">'+escapeHtml(nextEvent.title)+'</b>' +
       '<span style="font-size:13px;color:var(--muted);">'+fmtDate(nextEvent.event_date)+' · '+escapeHtml(nextEvent.event_time||"")+'</span>' +
-      (liveNow && nextEvent.join_url ? '<a class="btn btn-sm btn-primary" style="margin-top:12px;" href="'+escapeHtml(nextEvent.join_url)+'" target="_blank" rel="noopener">Подключиться</a>' :
-        '<button class="btn btn-sm btn-ghost" style="margin-top:12px;" data-action="student-tab" data-tab="schedule">Все эфиры →</button>');
+      '<div class="tile-foot">' + (liveNow && nextEvent.join_url ? '<a class="btn btn-sm btn-primary" href="'+escapeHtml(nextEvent.join_url)+'" target="_blank" rel="noopener">Подключиться</a>' :
+        '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="schedule">Все эфиры →</button>') + '</div>';
   } else {
     html += magnet("neutral","Эфиры") + '<p style="font-size:13px;color:var(--muted);margin:10px 0 0;">Пока не запланированы.</p>';
   }
@@ -2215,38 +2215,38 @@ function renderStudentHome(){
 
   if(pr.completed){
     var certsOn = course && course.course && course.course.certificatesEnabled;
-    html += '<div class="card" style="padding:18px;">';
+    html += '<div class="card board-tile">';
     if(certsOn){
       var issued = pr.certificate_status==="issued";
       html += magnet(issued?"done":"attention", issued?"Сертификат выдан":"На проверке") +
         '<div style="font-family:var(--sans);font-weight:700;font-size:28px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
         '<span style="font-size:12px;color:var(--muted);">результат теста</span>';
       if(!issued && !pr.requested_full_access){
-        html += '<button class="btn btn-sm btn-primary btn-block" style="margin-top:12px;" data-action="request-full">Заявка на полную программу</button>';
+        html += '<div class="tile-foot wide"><button class="btn btn-sm btn-primary btn-block" data-action="request-full">Заявка на полную программу</button></div>';
       } else if(pr.requested_full_access){
-        html += '<div style="margin-top:12px;">'+magnet("done","Заявка отправлена")+'</div>';
+        html += '<div class="tile-foot">'+magnet("done","Заявка отправлена")+'</div>';
       }
     } else {
       html += magnet("done","Демо пройдено") +
         '<div style="font-family:var(--sans);font-weight:700;font-size:28px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
         '<span style="font-size:12px;color:var(--muted);">результат теста · скидка 10% на полный курс</span>';
       if(!pr.requested_full_access){
-        html += '<button class="btn btn-sm btn-primary btn-block" style="margin-top:12px;" data-action="request-full">Хочу полное обучение</button>';
+        html += '<div class="tile-foot wide"><button class="btn btn-sm btn-primary btn-block" data-action="request-full">Хочу полное обучение</button></div>';
       } else {
-        html += '<div style="margin-top:12px;">'+magnet("done","Заявка отправлена")+'</div>';
+        html += '<div class="tile-foot">'+magnet("done","Заявка отправлена")+'</div>';
       }
     }
     html += '</div>';
   }
 
-  html += '<div class="card" style="padding:18px;">' +
+  html += '<div class="card board-tile">' +
     magnet("neutral","Куратор") +
-    '<p style="font-size:13px;color:var(--muted);margin:10px 0 12px;line-height:1.4;">Вопрос по курсу или доступу — напишите в Telegram-группе потока.</p>' +
-    '<button class="btn btn-sm btn-ghost" data-action="open-telegram-modal">Открыть Telegram →</button>' +
+    '<p style="font-size:13px;color:var(--muted);margin:10px 0 0;line-height:1.4;">Вопрос по курсу или доступу — напишите в Telegram-группе потока.</p>' +
+    '<div class="tile-foot"><button class="btn btn-sm btn-ghost" data-action="open-telegram-modal">Открыть Telegram →</button></div>' +
   '</div>';
 
   var gam = course.gamification || { points:0, currentStreak:0, longestStreak:0 };
-  html += '<div class="card" style="padding:18px;">' +
+  html += '<div class="card board-tile">' +
     magnet("neutral","Прогресс") +
     '<div style="display:flex;align-items:baseline;gap:6px;margin-top:10px;">' +
       icon("flame","ic-sm streak-flame") +
@@ -2254,11 +2254,11 @@ function renderStudentHome(){
       '<span style="font-size:12px;color:var(--muted);">'+(gam.currentStreak===1?"день подряд":"дней подряд")+'</span>' +
     '</div>' +
     '<span style="font-size:12px;color:var(--muted);display:block;margin-top:2px;">рекорд: '+(gam.longestStreak||0)+'</span>' +
-    '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2);">' +
+    '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2);align-self:stretch;">' +
       '<span style="font-family:var(--sans);font-weight:700;font-size:18px;" data-count="'+(gam.points||0)+'">'+(gam.points||0)+'</span>' +
       '<span style="font-size:12px;color:var(--muted);"> / 1000 очков</span>' +
-      '<button class="btn btn-sm btn-ghost" style="margin-top:10px;display:flex;width:max-content;" data-action="student-tab" data-tab="progress">Как получить скидку →</button>' +
     '</div>' +
+    '<div class="tile-foot"><button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="progress">Как получить скидку →</button></div>' +
   '</div>';
 
   html += '</div>';
