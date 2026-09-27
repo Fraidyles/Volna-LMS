@@ -359,7 +359,7 @@ router.patch("/me", authRequired, async (req, res) => {
   }
 
   const result = await pool.query(
-    "SELECT id, email, name, role, workplace, phone, stream_id, referral_code, token_version, created_at, product, payment_status FROM users WHERE id=$1",
+    "SELECT id, email, name, role, workplace, phone, stream_id, referral_code, token_version, created_at, product, payment_status, avatar_file FROM users WHERE id=$1",
     [req.user.id]
   );
   const row = result.rows[0];
@@ -378,7 +378,8 @@ router.patch("/me", authRequired, async (req, res) => {
     specializationIds: currentSpecs.rows.map((r) => r.specialization_id),
     interestIds: interests.rows.map((r) => r.specialization_id),
     workplace: row.workplace, phone: row.phone, stream_id: row.stream_id, referral_code: row.referral_code,
-    created_at: row.created_at, product: row.product, payment_status: row.payment_status
+    created_at: row.created_at, product: row.product, payment_status: row.payment_status,
+    avatar_url: avatarUrl(row.avatar_file)
   } });
 });
 
