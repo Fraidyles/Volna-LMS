@@ -617,3 +617,13 @@ CREATE TABLE IF NOT EXISTS survey_responses (
 -- Отмена такого заказа закрывает доступ к курсу (прогресс не удаляется). Курс,
 -- на который врач был записан до покупки, отмена не трогает.
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS opened_course BOOLEAN NOT NULL DEFAULT false;
+
+-- ---------- Этап 28: адрес загруженного видео урока — относительный ----------
+-- Абсолютный «/api/...» ломал воспроизведение при монтировании в подпапку (BASE_PATH).
+UPDATE lessons SET video_url = substr(video_url, 2) WHERE video_url LIKE '/api/course/lessons/%/video-file';
+
+-- ---------- Этап 29: ссылки на Telegram-группы — всегда https://t.me/… ----------
+-- Раньше сохранялись как есть; без схемы («t.me/+abc») браузер уводил на
+-- несуществующую страницу платформы. Нормализуем то, что уже сохранено.
+UPDATE streams SET telegram_url = 'https://t.me/' || regexp_replace(telegram_url, '^(https?://)?(www\.)?(t\.me|telegram\.me|telegram\.dog)/', '', 'i')
+  WHERE telegram_url ~* '^(https?://)?(www\.)?(t\.me|telegram\.me|telegram\.dog)/' AND telegram_url !~ '^https://t\.me/';

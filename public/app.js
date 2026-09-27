@@ -3109,7 +3109,7 @@ function renderStreamsPanel(){
     html += '<form id="streamForm" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;">' +
       '<div class="field" style="margin-bottom:0;min-width:220px;flex:1;"><label>Название потока</label><input class="input" name="name" required placeholder="Например, Поток «Октябрь 2026»"></div>' +
       '<div class="field" style="margin-bottom:0;"><label>Дата старта</label><input class="input" type="date" name="startDate"></div>' +
-      '<div class="field" style="margin-bottom:0;min-width:220px;flex:1;"><label>Ссылка на Telegram-группу (можно позже)</label><input class="input" name="telegramUrl" type="url" placeholder="https://t.me/..."></div>' +
+      '<div class="field" style="margin-bottom:0;min-width:220px;flex:1;"><label>Ссылка на Telegram-группу (можно позже)</label><input class="input" name="telegramUrl" type="text" inputmode="url" placeholder="https://t.me/..."></div>' +
       '<button class="btn btn-primary" type="submit">Создать</button></form>';
   }
   if(!streams.length){
@@ -6318,6 +6318,10 @@ function wireEvents(root){
       var vfInput = document.getElementById("videoFileInput");
       if(!vfInput || !vfInput.files || !vfInput.files[0]){ showToast("Выберите файл"); return; }
       var vfFile = vfInput.files[0];
+      // Проверяем до отправки: сервер всё равно откажет, но только после того, как
+      // файл целиком уйдёт по сети, — на обычном канале это минуты ожидания впустую.
+      if(!/\.(mp4|webm|mov|m4v)$/i.test(vfFile.name)){ showToast("Поддерживаются только .mp4, .webm, .mov, .m4v"); return; }
+      if(vfFile.size > 500*1024*1024){ showToast("Файл "+Math.round(vfFile.size/1024/1024)+" МБ — больше 500 МБ. Сожмите видео или загрузите его по ссылке"); return; }
       var vfd = new FormData();
       vfd.append("file", vfFile);
       videoEditor.uploadProgress = 0;
@@ -6649,12 +6653,13 @@ function wireEvents(root){
       var stInp=root.querySelector('[data-stream-telegram-input][data-id="'+stId+'"]');
       var stUrl=stInp?stInp.value.trim():"";
       try{
-        await api("/streams/"+stId, { method:"PATCH", body: JSON.stringify({ telegramUrl: stUrl }) });
+        var rst = await api("/streams/"+stId, { method:"PATCH", body: JSON.stringify({ telegramUrl: stUrl }) });
+        // Сервер приводит ссылку к https://t.me/… — показываем то, что сохранено.
         var stObj=calendarState.streams.find(function(s){ return s.id===stId; });
-        if(stObj) stObj.telegram_url = stUrl || null;
+        if(stObj) stObj.telegram_url = rst.telegramUrl || null;
         calendarState.editingStreamId = null;
         showToast("Ссылка сохранена");
-      }catch(err){ showToast(err.message); }
+      }catch(err){ showToast(err.message); if(stInp) stInp.focus(); return; }
       render(); return;
     }
     if(action==="cal-prev"){ var d1=calendarState.monthDate; calendarState.monthDate=new Date(d1.getFullYear(),d1.getMonth()-1,1); render(); return; }
@@ -7165,7 +7170,7 @@ function wireEvents(root){
       e.preventDefault();
       var fd6=new FormData(e.target); var btn6=e.target.querySelector("button[type=submit]"); btn6.disabled=true; btn6.textContent="Создаём…";
       try{ await api("/streams", { method:"POST", body: JSON.stringify({ name:fd6.get("name"), startDate:fd6.get("startDate"), telegramUrl:fd6.get("telegramUrl") }) }); await loadCalendarData(); calendarState.showStreamForm=false; showToast("Поток создан"); }
-      catch(err){ showToast(err.message); }
+      catch(err){ showToast(err.message); return; }  // без render(): введённое в форме остаётся
       render(); return;
     }
     if(e.target.id==="eventForm"){

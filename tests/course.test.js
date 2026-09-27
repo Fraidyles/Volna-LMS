@@ -781,17 +781,24 @@ describe("Курс врача", () => {
         .set("Cookie", adminCookie)
         .attach("file", Buffer.from("поддельные байты видео"), { filename: "urok1.mp4", contentType: "video/mp4" });
       expect(uploadRes.status).toBe(200);
-      expect(uploadRes.body.videoUrl).toBe(`/api/course/lessons/${lessonId}/video-file`);
+      expect(uploadRes.body.videoUrl).toBe(`api/course/lessons/${lessonId}/video-file`);
 
       const student = await createUser({ role: "student", courseId: course.courseId });
       const cookie = await loginAs(student);
       const courseRes = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
       const lessonOut = courseRes.body.lessons.find((l) => l.id === lessonId);
-      expect(lessonOut.videoUrl).toBe(`/api/course/lessons/${lessonId}/video-file`);
+      expect(lessonOut.videoUrl).toBe(`api/course/lessons/${lessonId}/video-file`);
 
       const fileRes = await request(app).get(`/api/course/lessons/${lessonId}/video-file`).set("Cookie", cookie);
       expect(fileRes.status).toBe(200);
       expect(Buffer.from(fileRes.body).toString()).toBe("поддельные байты видео");
+
+      // Старая страница присылает прежний абсолютный адрес того же файла вместе с
+      // главами — это не «новая ссылка», файл не должен удалиться.
+      const saveRes = await request(app).put(`/api/course/lessons/${lessonId}/video`).set("Cookie", adminCookie)
+        .send({ videoUrl: `/api/course/lessons/${lessonId}/video-file`, timecodes: [] });
+      expect(saveRes.status).toBe(200);
+      expect((await request(app).get(`/api/course/lessons/${lessonId}/video-file`).set("Cookie", cookie)).status).toBe(200);
     });
 
     test("недопустимый формат видео отклоняется (400)", async () => {

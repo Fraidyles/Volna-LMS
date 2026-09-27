@@ -13,13 +13,28 @@ router.get("/streams", authRequired, async (req, res) => {
   res.json({ streams: result.rows });
 });
 
+// Ссылку на Telegram-группу приводим к виду https://t.me/… : её часто вставляют
+// без схемы («t.me/+abc») — тогда браузер счёл бы её путём внутри платформы и
+// врач попал бы на несуществующую страницу. Не-телеграмные адреса (в т.ч.
+// javascript:) не принимаем. undefined — пусто, null — не ссылка на Telegram.
+function normalizeTelegramUrl(raw) {
+  const v = String(raw || "").trim();
+  if (!v) return undefined;
+  if (/^@[A-Za-z0-9_]{4,64}$/.test(v)) return "https://t.me/" + v.slice(1);
+  const m = /^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me|telegram\.dog)\/([^\s"'<>]+)$/i.exec(v);
+  return m ? "https://t.me/" + m[1] : null;
+}
+const BAD_TG = { error: "invalid_telegram_url", message: "Нужна ссылка на Telegram-группу, например https://t.me/+AbCdEf или t.me/имя_группы" };
+
 router.post("/streams", authRequired, requireRole("curator", "admin", "super_admin"), async (req, res) => {
   const { name, startDate, telegramUrl } = req.body || {};
   if (!name || !name.trim()) return res.status(400).json({ error: "invalid_input", message: "Укажите название потока" });
+  const tg = normalizeTelegramUrl(telegramUrl);
+  if (tg === null) return res.status(400).json(BAD_TG);
   const id = crypto.randomUUID();
   await pool.query(
     "INSERT INTO streams (id, name, start_date, telegram_url, created_by) VALUES ($1,$2,$3,$4,$5)",
-    [id, name.trim(), startDate || null, (telegramUrl && telegramUrl.trim()) || null, req.user.name]
+    [id, name.trim(), startDate || null, tg || null, req.user.name]
   );
   await logAction(req.user, "stream.create", "stream", id, name.trim(), { startDate }, true);
   res.json({ ok: true, id });
@@ -31,7 +46,9 @@ router.patch("/streams/:id", authRequired, requireRole("curator", "admin", "supe
   const { telegramUrl } = req.body || {};
   const before = await pool.query("SELECT name, telegram_url FROM streams WHERE id=$1", [req.params.id]);
   if (!before.rowCount) return res.status(404).json({ error: "not_found" });
-  const clean = (telegramUrl && telegramUrl.trim()) || null;
+  const tg = normalizeTelegramUrl(telegramUrl);
+  if (tg === null) return res.status(400).json(BAD_TG);
+  const clean = tg || null;
   await pool.query("UPDATE streams SET telegram_url=$1 WHERE id=$2", [clean, req.params.id]);
   await logAction(req.user, "stream.update_telegram", "stream", req.params.id, before.rows[0].name, {
     before: { telegramUrl: before.rows[0].telegram_url }

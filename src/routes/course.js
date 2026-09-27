@@ -1122,7 +1122,10 @@ router.put("/lessons/:id/video", authRequired, requireRole("admin", "super_admin
     }))
     .sort((a, b) => a.time - b.time);
 
-  const cleanUrl = videoUrl && videoUrl.trim() ? videoUrl.trim() : null;
+  // Старая закэшированная страница может прислать прежний абсолютный адрес своего
+  // же файла — приводим к текущему виду, иначе он сошёл бы за «новую ссылку» и
+  // загруженный файл удалился бы ниже.
+  const cleanUrl = videoUrl && videoUrl.trim() ? videoUrl.trim().replace(/^\/(api\/course\/lessons\/[^/]+\/video-file)$/, "$1") : null;
   const before = await pool.query("SELECT video_url, video_filename FROM lessons WHERE id=$1", [req.params.id]);
   if (!before.rowCount) return res.status(404).json({ error: "not_found" });
   // Ссылка сменилась (или очищена) вручную — если раньше тут был загруженный файл,
@@ -1172,7 +1175,9 @@ router.post(
     if (before.rows[0].video_filename) {
       fs.unlink(path.join(VIDEO_UPLOAD_DIR, before.rows[0].video_filename), () => {});
     }
-    const videoUrl = `/api/course/lessons/${req.params.id}/video-file`;
+    // Относительный адрес (без ведущего «/») — как и все ссылки фронтенда: работает
+    // и в корне домена, и при монтировании платформы в подпапку (BASE_PATH).
+    const videoUrl = `api/course/lessons/${req.params.id}/video-file`;
     await pool.query("UPDATE lessons SET video_url=$1, video_filename=$2 WHERE id=$3", [videoUrl, req.file.filename, req.params.id]);
     await logAction(req.user, "content.lesson_video_updated", "lesson", req.params.id, null, { uploaded: true, originalName: req.file.originalname });
     res.json({ ok: true, videoUrl });
