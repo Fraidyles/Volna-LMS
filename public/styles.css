@@ -1609,3 +1609,20 @@ tr.ord-off td{opacity:.55;}
 /* Линия подвала на той же высоте, что линия над кнопками у карточек сотрудников:
    14px отступ + 30px строки кнопок. */
 .team-code-foot{height:44px;display:flex;align-items:center;margin:auto 0 0;white-space:nowrap;}
+.stop-row{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 14px;border:var(--border-hairline);border-radius:var(--radius-s);margin-top:8px;cursor:pointer;font-size:14px;transition:background .15s;}
+.stop-row:hover{background:var(--surface-2);}
+.stop-row em{font-style:normal;font-size:12.5px;color:var(--primary);white-space:nowrap;}
+
+/* Строки списков в админке (уроки, вопросы, протоколы, специализации): заголовок
+   сжимается, кнопки при нехватке места переносятся — на телефоне страница
+   больше не раздувается вширь. */
+.adm-row{flex-wrap:wrap;row-gap:8px !important;}
+.adm-row > div[style*="flex:1"]{flex:1 1 220px !important;min-width:0;overflow-wrap:anywhere;}
+/* Обзор курса: длинные названия уроков режутся многоточием, а не распирают колонку. */
+.co-grid > *{min-width:0;}
+@media (max-width:900px){.co-grid{grid-template-columns:minmax(0,1fr);}}
+.courses-grid{grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));}
+.pay-ro{display:flex;justify-content:space-between;align-items:center;gap:10px;}
+.link-btn{background:none;border:none;padding:0;color:var(--primary);font:500 13px var(--sans);cursor:pointer;}
+/* На средних экранах колонка «Открыть →» не помещается — строка и так кликабельна. */
+@media (max-width:1180px){table.roster:has(.row-open) tr > :last-child{display:none;}}

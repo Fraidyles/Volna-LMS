@@ -120,7 +120,13 @@ async function syncUserPaymentStatus(userId) {
   const r = await pool.query(
     `SELECT o.status FROM orders o WHERE o.user_id=$1 AND o.status!='cancelled'`, [userId]
   );
-  if (!r.rowCount) return;
+  if (!r.rowCount) {
+    // Все заказы отменены — оплаты нет (иначе врач остался бы «Оплачено»
+    // по отменённому заказу). Врача без заказов вообще не трогаем.
+    const any = await pool.query("SELECT 1 FROM orders WHERE user_id=$1 LIMIT 1", [userId]);
+    if (any.rowCount) await pool.query("UPDATE users SET payment_status='unpaid' WHERE id=$1 AND role='student'", [userId]);
+    return;
+  }
   const st = r.rows.map((x) => x.status);
   const value = st.every((s) => s === "paid") ? "paid" : (st.some((s) => s === "paid" || s === "partial") ? "partial" : "unpaid");
   await pool.query("UPDATE users SET payment_status=$1 WHERE id=$2 AND role='student'", [value, userId]);
@@ -221,6 +227,7 @@ router.post("/", authRequired, requireRole(...STAFF), async (req, res) => {
     const p = await pool.query("SELECT * FROM products WHERE id=$1", [b.productId]);
     if (!p.rowCount) return res.status(404).json({ error: "not_found", message: "Продукт не найден" });
     product = p.rows[0];
+    if (!product.active) return res.status(400).json({ error: "product_inactive", message: "Продукт снят с продажи — верните его в продажу или выберите другой" });
   }
   const title = String(b.title || (product && product.title) || "").trim();
   if (!title) return res.status(400).json({ error: "invalid_input", message: "Выберите продукт или укажите название" });

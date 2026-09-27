@@ -36,13 +36,10 @@ router.post("/lessons/:lessonId", authRequired, requireRole("student"), async (r
     return res.status(404).json({ error: "not_found", message: "У этого урока нет задания" });
   }
   const l = lesson.rows[0];
-  const pr = await pool.query(
-    "SELECT access_blocked, access_expires_at FROM progress WHERE user_id=$1 AND course_id=$2", [req.user.id, l.course_id]
-  );
-  if (!pr.rowCount) return res.status(404).json({ error: "not_found", message: "Урок не найден в вашем курсе" });
-  const p = pr.rows[0];
-  const expired = p.access_expires_at && new Date(p.access_expires_at).toISOString().slice(0, 10) < new Date().toISOString().slice(0, 10);
-  if (p.access_blocked || expired) return res.status(403).json({ error: "access_locked", message: "Доступ к курсу ограничен" });
+  // Те же правила доступа, что у прохождения урока: запись на курс, блокировка,
+  // скрытие от врача, дрип/индивидуальный график.
+  const denied = await require("./course").lessonAccessError(req.user.id, l.id);
+  if (denied) return res.status(denied.status).json({ error: denied.error, message: denied.message });
 
   const existing = await pool.query("SELECT id, status, history, attempts FROM assignment_submissions WHERE lesson_id=$1 AND user_id=$2", [l.id, req.user.id]);
   const entry = { at: new Date().toISOString(), kind: "submit", by: req.user.id, name: req.user.name, text: answer };

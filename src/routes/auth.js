@@ -258,6 +258,12 @@ router.put("/me/avatar", authRequired, express.json({ limit: "600kb" }), async (
   if (!buf.length || buf.length > AVATAR_MAX_BYTES) {
     return res.status(400).json({ error: "too_large", message: "Фото слишком большое" });
   }
+  // Заявленный тип должен совпадать с содержимым — иначе под видом картинки
+  // можно было бы положить на сервер произвольный файл.
+  const sig = { "image/png": buf.slice(0, 4).toString("hex") === "89504e47",
+    "image/jpeg": buf.slice(0, 3).toString("hex") === "ffd8ff",
+    "image/webp": buf.slice(0, 4).toString() === "RIFF" && buf.slice(8, 12).toString() === "WEBP" };
+  if (!sig[m[1]]) return res.status(400).json({ error: "invalid_input", message: "Файл не похож на картинку" });
   fs.mkdirSync(AVATAR_DIR, { recursive: true });
   const file = req.user.id.replace(/[^A-Za-z0-9-]/g, "") + "-" + crypto.randomBytes(6).toString("hex") + "." + AVATAR_TYPES[m[1]];
   fs.writeFileSync(path.join(AVATAR_DIR, file), buf);

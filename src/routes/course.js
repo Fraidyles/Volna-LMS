@@ -99,6 +99,37 @@ async function isStopLessonPending(lesson, userId, lessonId) {
   return !r.rowCount;
 }
 
+// Стоп-уроки курса, по которым у врача ещё нет принятого ответа (скрытые от
+// него уроки не считаются — их он пройти и не может).
+async function pendingStopLessons(userId, courseId) {
+  const hiddenFor = await getHiddenForMap(courseId);
+  const r = await pool.query(
+    `SELECT l.id, l.idx, l.title FROM lessons l
+     WHERE l.course_id=$1 AND l.assignment_required AND COALESCE(TRIM(l.assignment_prompt),'')<>''
+       AND NOT EXISTS (SELECT 1 FROM assignment_submissions a WHERE a.lesson_id=l.id AND a.user_id=$2 AND a.status='accepted')
+     ORDER BY l.idx`,
+    [courseId, userId]
+  );
+  return r.rows.filter((l) => (hiddenFor[l.id] || []).indexOf(userId) === -1);
+}
+
+// Может ли врач сейчас работать с уроком: доступ к курсу, скрытие, дрип/график.
+// null — можно, иначе { status, error, message } для ответа.
+async function lessonAccessError(userId, lessonId) {
+  const lessonRow = await pool.query("SELECT drip_days, course_id FROM lessons WHERE id=$1", [lessonId]);
+  if (!lessonRow.rowCount) return { status: 404, error: "not_found", message: "Урок не найден" };
+  const pr = await pool.query("SELECT * FROM progress WHERE user_id=$1 AND course_id=$2", [userId, lessonRow.rows[0].course_id]);
+  if (!pr.rowCount) return { status: 404, error: "not_found", message: "Урок не найден в вашем курсе" };
+  if (computeLocked(pr.rows[0]).locked) return { status: 403, error: "access_locked", message: "Доступ к курсу ограничен" };
+  const hiddenFor = await getHiddenForMap(lessonRow.rows[0].course_id);
+  if ((hiddenFor[lessonId] || []).indexOf(userId) !== -1) return { status: 403, error: "content_hidden", message: "Этот урок временно недоступен" };
+  const ov = await pool.query("SELECT unlock_at FROM lesson_schedule_overrides WHERE student_id=$1 AND lesson_id=$2", [userId, lessonId]);
+  if (computeLessonLock(lessonRow.rows[0], pr.rows[0], ov.rowCount ? ov.rows[0].unlock_at : null).locked) {
+    return { status: 403, error: "content_drip_locked", message: "Этот урок ещё не открылся" };
+  }
+  return null;
+}
+
 const MAX_POINTS = 1000;
 function computePoints(pr) {
   const lessonsPoints = (pr.completed_lessons || []).length * 20;
@@ -318,6 +349,13 @@ router.post("/quiz-submit", authRequired, requireRole("student"), async (req, re
   const hiddenFor = await getHiddenForMap(pr.course_id);
   if ((hiddenFor.quiz || []).indexOf(req.user.id) !== -1) {
     return res.status(403).json({ error: "content_hidden", message: "Тест временно недоступен" });
+  }
+
+  // Стоп-урок держит и итоговый тест: без принятых заданий курс не завершить
+  // (иначе сертификат можно было бы получить в обход задания).
+  const stops = await pendingStopLessons(req.user.id, pr.course_id);
+  if (stops.length) {
+    return res.status(409).json({ error: "assignments_pending", message: "Сначала куратор должен принять ответы на обязательные задания: " + stops.map((l) => "«" + l.title + "»").join(", "), lessons: stops });
   }
 
   const questions = await pool.query("SELECT id, correct FROM quiz_questions WHERE course_id=$1 AND lesson_id IS NULL AND module_id IS NULL", [pr.course_id]);
@@ -1423,3 +1461,5 @@ router.get("/modules/:id/feedback", authRequired, requireRole("admin", "super_ad
 });
 
 module.exports = router;
+module.exports.lessonAccessError = lessonAccessError;
+module.exports.pendingStopLessons = pendingStopLessons;

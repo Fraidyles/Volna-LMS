@@ -399,6 +399,10 @@ router.patch("/students/:id/product", authRequired, requireRole("curator", "admi
 router.patch("/students/:id/payment", authRequired, requireRole("curator", "admin", "super_admin"), requireStudentScope(), async (req, res) => {
   const paymentStatus = req.body && req.body.paymentStatus;
   if (PAYMENT_VALUES.indexOf(paymentStatus) === -1) return res.status(400).json({ error: "invalid_input" });
+  // У врача с заказами статус считается из заказов (routes/orders.js) — ручное
+  // значение перезаписалось бы при следующей отметке платежа.
+  const hasOrders = await pool.query("SELECT 1 FROM orders WHERE user_id=$1 LIMIT 1", [req.params.id]);
+  if (hasOrders.rowCount) return res.status(409).json({ error: "managed_by_orders", message: "Статус оплаты считается из заказов врача — отметьте платёж во вкладке «Оплаты»" });
   await pool.query("UPDATE users SET payment_status=$1 WHERE id=$2 AND role='student'", [paymentStatus, req.params.id]);
   res.json({ ok: true });
 });
@@ -502,7 +506,12 @@ router.post("/students/bulk-field", authRequired, requireRole("curator", "admin"
     await pool.query("UPDATE users SET product=$1 WHERE id = ANY($2::text[]) AND role='student'", [value, scopedIds]);
   } else if (field === "payment_status") {
     if (PAYMENT_VALUES.indexOf(value) === -1) return res.status(400).json({ error: "invalid_input" });
-    await pool.query("UPDATE users SET payment_status=$1 WHERE id = ANY($2::text[]) AND role='student'", [value, scopedIds]);
+    // Врачей с заказами пропускаем — у них статус считается из заказов.
+    const upd = await pool.query(
+      "UPDATE users SET payment_status=$1 WHERE id = ANY($2::text[]) AND role='student' AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.user_id=users.id) RETURNING id",
+      [value, scopedIds]
+    );
+    return res.json({ ok: true, updated: upd.rowCount, skippedWithOrders: scopedIds.length - upd.rowCount });
   } else {
     return res.status(400).json({ error: "invalid_field" });
   }

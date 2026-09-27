@@ -99,7 +99,9 @@ mounted.use((req, res, next) => {
   cspMiddleware(req, res, next);
 });
 
-mounted.use(express.json());
+// Фото профиля приходит data URL до ~400 КБ — у маршрута свой лимит (auth.js),
+// общий 100-килобайтный парсер его пропускает, иначе он обрезал бы запрос раньше.
+mounted.use((req, res, next) => (req.path === "/api/auth/me/avatar" ? next() : express.json()(req, res, next)));
 mounted.use(cookieParser());
 mounted.use(
   cors({
