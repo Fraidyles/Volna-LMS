@@ -1299,8 +1299,12 @@ router.post("/lessons/:id/quiz-submit", authRequired, requireRole("student"), as
     [JSON.stringify(scores), JSON.stringify(list), streak.currentStreak, streak.longestStreak, streak.lastStreakDate, req.user.id, pr.course_id]
   );
   const points = computePoints({ ...pr, completed_lessons: list, current_streak: streak.currentStreak });
+  // Поурочный тест — только для закрепления (на сертификат не влияет), поэтому
+  // после отправки показываем разбор: какой ответ был верным. Итоговый тест курса
+  // и тесты модулей правильные ответы не раскрывают.
+  const review = questions.rows.map((q) => ({ id: q.id, correct: q.correct, chosen: Number.isInteger(answers[q.id]) ? answers[q.id] : null }));
   res.json({
-    score, completedLessons: list,
+    score, correctCount, total: questions.rowCount, review, completedLessons: list,
     gamification: { currentStreak: streak.currentStreak, longestStreak: streak.longestStreak, points }
   });
 });

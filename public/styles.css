@@ -1913,3 +1913,83 @@ mark.hl.hl-flash{animation:hlFlash 1.6s ease;}
 .gd-list li{counter-increment:gd;display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;font-size:14px;line-height:1.55;}
 .gd-list li::before{content:counter(gd);width:22px;height:22px;border-radius:50%;display:grid;place-items:center;margin-top:1px;
   font-size:11px;font-weight:700;color:var(--primary);background:var(--surface-2);border:var(--border-hairline);}
+
+/* ===== Тест урока: по одному вопросу ===== */
+.qz{display:flex;flex-direction:column;gap:18px;margin-top:6px;}
+.qz-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;}
+.qz-count{font-size:14px;color:var(--muted);}
+.qz-count b{color:var(--ink);font-weight:700;}
+.qz-prev{font-size:12px;color:var(--muted);}
+.qz-bar{display:flex;gap:6px;margin-top:-6px;}
+.qz-seg{flex:1;height:6px;border-radius:99px;border:none;padding:0;background:var(--surface-2);cursor:pointer;transition:background .25s ease,transform .2s ease;}
+.qz-seg:disabled{cursor:default;}
+.qz-seg.done{background:color-mix(in srgb,var(--primary) 55%,transparent);}
+.qz-seg.cur{background:var(--primary);box-shadow:0 0 12px color-mix(in srgb,var(--primary) 55%,transparent);}
+.qz-seg:not(:disabled):hover{transform:scaleY(1.5);}
+.qz-card{position:relative;padding:26px 26px 22px;border-radius:var(--radius-m);border:var(--border-hairline);overflow:hidden;
+  background:radial-gradient(120% 140% at 0% 0%,color-mix(in srgb,var(--primary) 12%,transparent),transparent 55%),
+             radial-gradient(90% 120% at 100% 100%,color-mix(in srgb,var(--status-active) 9%,transparent),transparent 60%),var(--surface);
+  animation:qzIn .35s cubic-bezier(.16,1,.3,1) both;}
+#app.rerender .qz-card{animation:none;}
+@keyframes qzIn{from{opacity:0;transform:translateX(18px);}to{opacity:1;transform:none;}}
+.qz-q{margin:0 0 20px;font-size:20px;font-weight:700;line-height:1.4;letter-spacing:-.01em;}
+.qz-opts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+.qz-opt{display:flex;align-items:center;gap:14px;min-height:60px;padding:12px 16px;text-align:left;cursor:pointer;
+  border-radius:14px;border:1px solid var(--line-2);background:color-mix(in srgb,var(--surface-2) 80%,transparent);color:var(--ink);font:500 15px/1.4 var(--sans);
+  transition:border-color .15s,background .15s,transform .15s,box-shadow .15s;}
+.qz-opt:hover{border-color:color-mix(in srgb,var(--primary) 50%,transparent);transform:translateY(-2px);box-shadow:0 8px 22px -12px color-mix(in srgb,var(--primary) 60%,transparent);}
+.qz-opt:focus-visible{outline:2px solid var(--primary);outline-offset:2px;}
+.qz-key{flex:0 0 34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:13px;font-weight:700;color:var(--muted);
+  background:var(--surface);border:1px solid var(--line-2);transition:background .15s,color .15s,border-color .15s;}
+.qz-opt:hover .qz-key{color:var(--primary);border-color:color-mix(in srgb,var(--primary) 50%,transparent);}
+.qz-opt.on{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 16%,transparent);box-shadow:0 0 0 1px var(--primary) inset;}
+.qz-opt.on .qz-key{background:var(--primary);border-color:var(--primary);color:#fff;animation:qzPop .3s ease;}
+@keyframes qzPop{0%{transform:scale(.8);}60%{transform:scale(1.12);}100%{transform:scale(1);}}
+.qz-text{min-width:0;}
+.qz-nav{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.qz-hint{font-size:12px;color:var(--muted);}
+/* результат */
+.qz-res-head{display:flex;align-items:center;gap:22px;padding:22px 24px;border-radius:var(--radius-m);border:var(--border-hairline);
+  background:radial-gradient(120% 160% at 0% 50%,color-mix(in srgb,var(--primary) 14%,transparent),transparent 60%),var(--surface);}
+.qz-ring{width:92px;height:92px;flex:0 0 auto;}
+.qz-ring.low{background:conic-gradient(var(--status-attention) var(--ring-p,0%), var(--line-2) 0);box-shadow:0 0 0 1px var(--glass-border) inset,0 0 22px -4px color-mix(in srgb,var(--status-attention) 55%,transparent);}
+.qz-ring .progress-ring-inner{width:74px;height:74px;font-size:22px;font-weight:700;}
+.qz-res-title{display:block;font-size:20px;font-weight:700;}
+.qz-res-sub{margin:6px 0 0;font-size:14px;color:var(--muted);line-height:1.55;}
+.qz-review{display:flex;flex-direction:column;gap:10px;}
+.qz-rv{padding:14px 16px;border-radius:14px;border:1px solid var(--line-2);background:var(--surface);}
+.qz-rv.bad{border-color:color-mix(in srgb,var(--danger) 35%,var(--line-2));}
+.qz-rv-head{display:flex;align-items:flex-start;gap:10px;}
+.qz-rv-head b{font-size:14px;font-weight:600;line-height:1.45;}
+.qz-rv-mark{flex:0 0 22px;height:22px;border-radius:50%;display:grid;place-items:center;margin-top:-1px;}
+.qz-rv.ok .qz-rv-mark{background:color-mix(in srgb,var(--status-active) 22%,transparent);color:var(--status-active);}
+.qz-rv.bad .qz-rv-mark{background:color-mix(in srgb,var(--danger) 20%,transparent);color:var(--danger);}
+.qz-rv-ans{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0 0 32px;font-size:13px;color:var(--muted);}
+.qz-rv-right{display:inline-flex;align-items:center;gap:8px;}
+.qz-rv-pill{display:inline-flex;align-items:center;gap:8px;padding:5px 10px 5px 5px;border-radius:10px;font-size:13px;color:var(--ink);border:1px solid var(--line-2);background:var(--surface-2);}
+.qz-rv-pill i{font-style:normal;width:22px;height:22px;border-radius:7px;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff;}
+.qz-rv-pill.ok i{background:var(--status-active);}
+.qz-rv-pill.bad i{background:var(--danger);}
+.qz-rv-pill.bad{text-decoration:line-through;text-decoration-color:color-mix(in srgb,var(--danger) 60%,transparent);}
+@media (max-width:640px){
+  .qz-opts{grid-template-columns:minmax(0,1fr);}
+  .qz-card{padding:20px 18px 18px;}
+  .qz-q{font-size:18px;}
+  .qz-hint{display:none;}
+  .qz-res-head{flex-direction:column;align-items:flex-start;gap:14px;}
+  .qz-rv-ans{margin-left:0;}
+}
+@media (hover:none){.qz-hint{display:none;}}
+
+/* ===== Итоговый тест и тест модуля: варианты — те же карточки с буквами ===== */
+.quiz-q{counter-reset:opt;}
+.quiz-q p.qtext{font-size:17px;font-weight:700;line-height:1.4;margin:0 0 14px;}
+.opt{counter-increment:opt;position:relative;gap:14px;min-height:54px;padding:10px 16px;border-radius:14px;border:1px solid var(--line-2);
+  background:color-mix(in srgb,var(--surface-2) 80%,transparent);font-size:15px;transition:border-color .15s,background .15s,transform .15s;}
+.opt::before{content:counter(opt, upper-alpha);flex:0 0 32px;height:32px;border-radius:10px;display:grid;place-items:center;font-size:13px;font-weight:700;
+  color:var(--muted);background:var(--surface);border:1px solid var(--line-2);transition:background .15s,color .15s,border-color .15s;}
+.opt input{position:absolute;opacity:0;pointer-events:none;}
+.opt:hover{border-color:color-mix(in srgb,var(--primary) 50%,transparent);background:color-mix(in srgb,var(--surface-2) 80%,transparent);transform:translateY(-1px);}
+.opt:has(input:checked){border-color:var(--primary);background:color-mix(in srgb,var(--primary) 16%,transparent);box-shadow:0 0 0 1px var(--primary) inset;}
+.opt:has(input:checked)::before{background:var(--primary);border-color:var(--primary);color:#fff;}
+.opt:has(input:focus-visible){outline:2px solid var(--primary);outline-offset:2px;}

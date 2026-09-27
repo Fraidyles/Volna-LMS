@@ -2524,6 +2524,7 @@ function resetLessonStageState(){
   studentState.videoEnded = false;
   studentState.lessonQuizAnswers = {};
   studentState.lessonQuizResult = null;
+  studentState.lqStep = 0;
 }
 // Модуль, все уроки которого уже пройдены, но отзыв по нему ещё не оставлен —
 // именно отзыв (не тест) считается финальным шагом гейта, поэтому проверяем по
@@ -2696,35 +2697,123 @@ function renderLessonVideoStage(lesson, stages, isDoneAlready){
   return html;
 }
 
+// Тест урока — по одному вопросу: полоска прогресса, варианты-карточки с буквами
+// (выбор кликом или клавишами 1–4 / A–D), после выбора — переход к следующему.
+// В конце — балл кольцом и разбор: что выбрано и какой ответ верный (тест урока
+// только для закрепления, на сертификат не влияет — поэтому ответы раскрываем).
+var QZ_LETTERS = "ABCDEFGH";
 function renderLessonQuizStage(lesson){
   var result = studentState.lessonQuizResult;
+  var qs = lesson.quiz || [], ans = studentState.lessonQuizAnswers || {};
+  if(result) return renderLessonQuizResult(lesson, result);
+  var step = Math.min(studentState.lqStep||0, qs.length-1), q = qs[step];
+  var answered = qs.filter(function(x){ return typeof ans[x.id]==="number"; }).length;
   var prevScore = course.progress && course.progress.lesson_quiz_scores && course.progress.lesson_quiz_scores[lesson.id];
-  var html = '';
-  if(result){
-    html += '<div class="empty-state" style="padding:40px 10px;">' +
-      '<div class="big">'+icon(result.score>=60?"badge":"star","ic-lg")+'</div>' +
-      '<b style="font-size:20px;display:block;margin-bottom:6px;">'+result.score+'%</b>' +
-      '<p style="color:var(--muted);">правильных ответов — это просто для закрепления материала, на сертификат не влияет.</p>' +
-      (lesson.assignment
-        ? '<button class="btn btn-primary" style="margin-top:14px;" data-action="lesson-stage" data-stage="task">Далее → задание</button>'
-        : '<button class="btn btn-primary" style="margin-top:14px;" data-action="next-lesson">Далее →</button>') +
-    '</div>';
-    return html;
-  }
-  if(typeof prevScore==="number"){
-    html += '<p class="hint" style="margin-bottom:12px;">Прошлый результат: '+prevScore+'%. Можно пройти ещё раз.</p>';
-  }
-  html += '<form id="lessonQuizForm" data-lesson-id="'+lesson.id+'">';
-  lesson.quiz.forEach(function(q,qi){
-    html += '<div class="quiz-q"><p class="qtext">'+(qi+1)+'. '+escapeHtml(q.question)+'</p>';
-    q.options.forEach(function(opt,oi){
-      html += '<label class="opt"><input type="radio" name="'+q.id+'" value="'+oi+'" required> '+escapeHtml(opt)+'</label>';
-    });
-    html += '</div>';
-  });
-  html += '<button class="btn btn-primary btn-block" type="submit">Завершить тест</button></form>';
+  var html = '<div class="qz" data-lesson-id="'+lesson.id+'">' +
+    '<div class="qz-top"><span class="qz-count">Вопрос <b>'+(step+1)+'</b> из '+qs.length+'</span>' +
+      (typeof prevScore==="number" ? '<span class="qz-prev">прошлый результат — '+prevScore+'%</span>' : '<span class="qz-prev">для закрепления, на сертификат не влияет</span>') + '</div>' +
+    '<div class="qz-bar">' + qs.map(function(x, i){
+      var cls = i===step ? ' cur' : (typeof ans[x.id]==="number" ? ' done' : '');
+      var can = i===step || typeof ans[x.id]==="number" || i<=answered;
+      return '<button type="button" class="qz-seg'+cls+'"'+(can?' data-action="lq-goto" data-i="'+i+'"':' disabled')+' aria-label="Вопрос '+(i+1)+'"></button>';
+    }).join("") + '</div>' +
+    '<div class="qz-card" key="'+step+'">' +
+      '<p class="qz-q">'+escapeHtml(q.question)+'</p>' +
+      '<div class="qz-opts" role="radiogroup">' + q.options.map(function(opt, oi){
+        var on = ans[q.id]===oi;
+        return '<button type="button" role="radio" aria-checked="'+on+'" class="qz-opt'+(on?' on':'')+'" data-action="lq-pick" data-q="'+q.id+'" data-o="'+oi+'">' +
+          '<span class="qz-key">'+QZ_LETTERS[oi]+'</span><span class="qz-text">'+escapeHtml(opt)+'</span></button>';
+      }).join("") + '</div>' +
+    '</div>' +
+    '<div class="qz-nav">' +
+      '<button type="button" class="btn btn-ghost" data-action="lq-prev"'+(step===0?' disabled':'')+'>← Назад</button>' +
+      '<span class="qz-hint">Можно выбирать клавишами 1–'+q.options.length+'</span>' +
+      (step===qs.length-1
+        ? '<button type="button" class="btn btn-primary" data-action="lq-submit"'+(answered<qs.length?' disabled title="Ответьте на все вопросы"':'')+'>Завершить тест</button>'
+        : '<button type="button" class="btn btn-primary" data-action="lq-next"'+(typeof ans[q.id]==="number"?'':' disabled')+'>Далее →</button>') +
+    '</div></div>';
   return html;
 }
+function renderLessonQuizResult(lesson, result){
+  var qs = lesson.quiz || [];
+  var total = result.total || qs.length, right = typeof result.correctCount==="number" ? result.correctCount : Math.round(result.score*total/100);
+  var mood = result.score===100 ? ["Отлично — всё верно", "Материал урока усвоен полностью."]
+    : result.score>=60 ? ["Хороший результат", "Посмотрите разбор ниже — там видно, где была ошибка."]
+    : ["Стоит повторить материал", "Загляните в разбор и перечитайте урок — тест можно пройти ещё раз."];
+  var html = '<div class="qz qz-result">' +
+    '<div class="qz-res-head"><div class="progress-ring qz-ring'+(result.score>=60?'':' low')+'" data-anim="ring" style="--ring-p:'+result.score+'%;"><div class="progress-ring-inner"><span data-count="'+result.score+'" data-suffix="%">'+result.score+'%</span></div></div>' +
+      '<div><b class="qz-res-title">'+mood[0]+'</b><p class="qz-res-sub">'+right+' из '+total+' '+ruPluralClient(total,"ответа","ответов","ответов")+' верно. '+mood[1]+'</p></div></div>';
+  if(result.review && result.review.length){
+    html += '<div class="qz-review">' + result.review.map(function(r, i){
+      var q = qs.find(function(x){ return x.id===r.id; }); if(!q) return "";
+      var ok = r.chosen===r.correct;
+      return '<div class="qz-rv'+(ok?' ok':' bad')+'"><div class="qz-rv-head"><span class="qz-rv-mark">'+(ok?icon("check","ic-sm"):icon("close","ic-sm"))+'</span><b>'+(i+1)+'. '+escapeHtml(q.question)+'</b></div>' +
+        '<div class="qz-rv-ans">' +
+          (r.chosen!=null ? '<span class="qz-rv-pill '+(ok?'ok':'bad')+'"><i>'+QZ_LETTERS[r.chosen]+'</i>'+escapeHtml(q.options[r.chosen]||"")+'</span>' : '') +
+          (ok ? '' : '<span class="qz-rv-right">верно: <span class="qz-rv-pill ok"><i>'+QZ_LETTERS[r.correct]+'</i>'+escapeHtml(q.options[r.correct]||"")+'</span></span>') +
+        '</div></div>';
+    }).join("") + '</div>';
+  }
+  html += '<div class="qz-nav"><button type="button" class="btn btn-ghost" data-action="lq-retry">Пройти ещё раз</button><span></span>' +
+    (lesson.assignment
+      ? '<button class="btn btn-primary" data-action="lesson-stage" data-stage="task">Далее → задание</button>'
+      : '<button class="btn btn-primary" data-action="next-lesson">Далее →</button>') + '</div></div>';
+  return html;
+}
+async function submitLessonQuiz(lessonId){
+  var lqLesson = course.lessons.find(function(l){ return l.id===lessonId; });
+  var lqAnswers = {};
+  (lqLesson.quiz||[]).forEach(function(q){ lqAnswers[q.id] = studentState.lessonQuizAnswers[q.id]; });
+  var wasProtoAvailLQ = protocolsSectionAvailable();
+  if(previewMode){
+    studentState.lessonQuizResult = { score:100 };
+    if(course.progress.completed_lessons.indexOf(lessonId)===-1) course.progress.completed_lessons.push(lessonId);
+    maybeCelebrateProtocolsUnlock(wasProtoAvailLQ);
+    render(); return;
+  }
+  var btn = document.querySelector('[data-action="lq-submit"]'); if(btn){ btn.disabled = true; btn.textContent = "Считаем результат…"; }
+  try{
+    var rlq = await api("/course/lessons/"+lessonId+"/quiz-submit", { method:"POST", body: JSON.stringify({ answers: lqAnswers }) });
+    course.progress.completed_lessons = rlq.completedLessons;
+    if(rlq.gamification) course.gamification = Object.assign({}, course.gamification, rlq.gamification);
+    if(!course.progress.lesson_quiz_scores) course.progress.lesson_quiz_scores = {};
+    course.progress.lesson_quiz_scores[lessonId] = rlq.score;
+    studentState.lessonQuizResult = { score: rlq.score, correctCount: rlq.correctCount, total: rlq.total, review: rlq.review };
+    maybeCelebrateProtocolsUnlock(wasProtoAvailLQ);
+    render(); window.scrollTo({ top:0, behavior:"smooth" });
+  }catch(err){ showToast(err.message); if(btn){ btn.disabled = false; btn.textContent = "Завершить тест"; } }
+}
+// Выбор ответа: отмечаем и через мгновение переходим к следующему вопросу.
+var lqAdvanceTimer = null;
+function lqPick(qid, oi){
+  var lesson = course.lessons[studentState.lessonIndex], qs = lesson.quiz || [];
+  studentState.lessonQuizAnswers[qid] = oi;
+  var step = studentState.lqStep||0;
+  render();
+  clearTimeout(lqAdvanceTimer);
+  if(step < qs.length-1){
+    lqAdvanceTimer = setTimeout(function(){
+      if(studentState.tab==="lesson" && studentState.lessonStage==="quiz" && !studentState.lessonQuizResult && (studentState.lqStep||0)===step && course.lessons[studentState.lessonIndex]===lesson){
+        studentState.lqStep = step+1; render();
+      }
+    }, 420);
+  }
+}
+document.addEventListener("keydown", function(e){
+  if(view!=="student" || studentState.tab!=="lesson" || studentState.lessonStage!=="quiz" || studentState.lessonQuizResult || studentState.quizMode) return;
+  if(e.ctrlKey || e.metaKey || e.altKey || isTypingNow()) return;
+  var lesson = course && course.lessons[studentState.lessonIndex]; if(!lesson || !lesson.quiz || !lesson.quiz.length) return;
+  var qs = lesson.quiz, step = Math.min(studentState.lqStep||0, qs.length-1), q = qs[step];
+  var k = e.key.toUpperCase(), map = { "1":0,"2":1,"3":2,"4":3,"5":4,"6":5, "A":0,"B":1,"C":2,"D":3,"E":4,"F":5, "А":0,"Б":1,"В":2,"Г":3 };
+  if(k in map && map[k] < q.options.length){ e.preventDefault(); lqPick(q.id, map[k]); return; }
+  if(e.key==="Enter" && typeof studentState.lessonQuizAnswers[q.id]==="number"){
+    e.preventDefault();
+    if(step < qs.length-1){ clearTimeout(lqAdvanceTimer); studentState.lqStep = step+1; render(); }
+    else if(qs.every(function(x){ return typeof studentState.lessonQuizAnswers[x.id]==="number"; })) submitLessonQuiz(lesson.id);
+  }
+  if(e.key==="ArrowLeft" && step>0){ clearTimeout(lqAdvanceTimer); studentState.lqStep = step-1; render(); }
+  if(e.key==="ArrowRight" && step<qs.length-1 && typeof studentState.lessonQuizAnswers[q.id]==="number"){ clearTimeout(lqAdvanceTimer); studentState.lqStep = step+1; render(); }
+});
 
 // Гейт после последнего урока модуля: сначала итоговый тест по модулю (если у него
 // есть вопросы), потом мини-опрос — оба шага в одном "плеере", без сайдбара с
@@ -6409,6 +6498,12 @@ function wireEvents(root){
       }catch(err){ showToast(err.message); }
       return;
     }
+    if(action==="lq-pick"){ lqPick(t.getAttribute("data-q"), parseInt(t.getAttribute("data-o"),10)); return; }
+    if(action==="lq-goto"){ clearTimeout(lqAdvanceTimer); studentState.lqStep=parseInt(t.getAttribute("data-i"),10); render(); return; }
+    if(action==="lq-prev"){ clearTimeout(lqAdvanceTimer); studentState.lqStep=Math.max(0,(studentState.lqStep||0)-1); render(); return; }
+    if(action==="lq-next"){ clearTimeout(lqAdvanceTimer); studentState.lqStep=(studentState.lqStep||0)+1; render(); return; }
+    if(action==="lq-submit"){ var lqL=course.lessons[studentState.lessonIndex]; if(lqL) await submitLessonQuiz(lqL.id); return; }
+    if(action==="lq-retry"){ studentState.lessonQuizAnswers={}; studentState.lessonQuizResult=null; studentState.lqStep=0; render(); return; }
     if(action==="nb-open-hl"){
       if(e.target.closest("[data-action='nb-del-hl']")) return;
       var hIdx=parseInt(t.getAttribute("data-idx"),10), hL=course.lessons[hIdx];
@@ -7670,31 +7765,6 @@ function wireEvents(root){
         await loadCourse(); // очки/стрик пересчитываются на сервере из всего прогресса разом — проще перезагрузить, чем дублировать формулу на клиенте
         studentState.quizSubmitted=true;
       }catch(err){ showToast(err.message); }
-      render(); return;
-    }
-    if(e.target.id==="lessonQuizForm"){
-      e.preventDefault();
-      var lqLessonId = e.target.getAttribute("data-lesson-id");
-      var lqLesson = course.lessons.find(function(l){ return l.id===lqLessonId; });
-      var fdlq=new FormData(e.target); var lqAnswers={};
-      (lqLesson.quiz||[]).forEach(function(q){ lqAnswers[q.id]=parseInt(fdlq.get(q.id),10); });
-      var btnlq=e.target.querySelector("button[type=submit]"); btnlq.disabled=true; btnlq.textContent="Считаем результат…";
-      var wasProtoAvailLQ = protocolsSectionAvailable();
-      if(previewMode){
-        studentState.lessonQuizResult={ score:100 };
-        if(course.progress.completed_lessons.indexOf(lqLessonId)===-1) course.progress.completed_lessons.push(lqLessonId);
-        maybeCelebrateProtocolsUnlock(wasProtoAvailLQ);
-        render(); return;
-      }
-      try{
-        var rlq = await api("/course/lessons/"+lqLessonId+"/quiz-submit", { method:"POST", body: JSON.stringify({ answers: lqAnswers }) });
-        course.progress.completed_lessons = rlq.completedLessons;
-        if(rlq.gamification) course.gamification = Object.assign({}, course.gamification, rlq.gamification);
-        if(!course.progress.lesson_quiz_scores) course.progress.lesson_quiz_scores={};
-        course.progress.lesson_quiz_scores[lqLessonId]=rlq.score;
-        studentState.lessonQuizResult = { score: rlq.score };
-        maybeCelebrateProtocolsUnlock(wasProtoAvailLQ);
-      }catch(err){ showToast(err.message); btnlq.disabled=false; btnlq.textContent="Завершить тест"; return; }
       render(); return;
     }
     if(e.target.id==="moduleQuizForm"){
