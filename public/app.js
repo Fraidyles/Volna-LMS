@@ -6442,14 +6442,20 @@ function wireEvents(root){
     }
     if(action==="move-lesson"){
       var mlId=t.getAttribute("data-id"); var mlDir=t.getAttribute("data-dir");
-      var mlIds=staffState.materials.map(function(x){ return x.id; });
-      var mlIdx=mlIds.indexOf(mlId);
+      var mlIdx=staffState.materials.findIndex(function(x){ return x.id===mlId; });
       var mlSwap = mlDir==="up" ? mlIdx-1 : mlIdx+1;
-      if(mlIdx===-1 || mlSwap<0 || mlSwap>=mlIds.length) return;
-      var tmp=mlIds[mlIdx]; mlIds[mlIdx]=mlIds[mlSwap]; mlIds[mlSwap]=tmp;
-      try{ await api("/course/lessons/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: mlIds }) }); await loadStaffData(); }
-      catch(err){ showToast(err.message); }
-      render(); return;
+      if(mlIdx===-1 || mlSwap<0 || mlSwap>=staffState.materials.length) return;
+      // Переставляем локально и рисуем сразу — порядок уже известен на клиенте,
+      // ждать полный loadStaffData() (~15 последовательных запросов дашборда)
+      // ради двух переставленных уроков незачем — именно это и было источником
+      // многосекундной задержки на клик.
+      var mlPrev = staffState.materials.slice();
+      var mlArr = staffState.materials;
+      var mlTmp = mlArr[mlIdx]; mlArr[mlIdx]=mlArr[mlSwap]; mlArr[mlSwap]=mlTmp;
+      render();
+      try{ await api("/course/lessons/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: mlArr.map(function(x){ return x.id; }) }) }); }
+      catch(err){ staffState.materials = mlPrev; showToast(err.message); render(); }
+      return;
     }
     if(action==="lesson-editor-mode"){
       var frm = document.getElementById("lessonEditorForm");
@@ -6525,14 +6531,16 @@ function wireEvents(root){
     }
     if(action==="move-quiz-question"){
       var mqId=t.getAttribute("data-id"); var mqDir=t.getAttribute("data-dir");
-      var mqIds=staffState.quizAdmin.map(function(x){ return x.id; });
-      var mqIdx=mqIds.indexOf(mqId);
+      var mqIdx=staffState.quizAdmin.findIndex(function(x){ return x.id===mqId; });
       var mqSwap = mqDir==="up" ? mqIdx-1 : mqIdx+1;
-      if(mqIdx===-1 || mqSwap<0 || mqSwap>=mqIds.length) return;
-      var tmpq=mqIds[mqIdx]; mqIds[mqIdx]=mqIds[mqSwap]; mqIds[mqSwap]=tmpq;
-      try{ await api("/course/quiz-admin/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: mqIds }) }); await loadStaffData(); }
-      catch(err){ showToast(err.message); }
-      render(); return;
+      if(mqIdx===-1 || mqSwap<0 || mqSwap>=staffState.quizAdmin.length) return;
+      var mqPrev = staffState.quizAdmin.slice();
+      var mqArr = staffState.quizAdmin;
+      var mqTmp = mqArr[mqIdx]; mqArr[mqIdx]=mqArr[mqSwap]; mqArr[mqSwap]=mqTmp;
+      render();
+      try{ await api("/course/quiz-admin/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: mqArr.map(function(x){ return x.id; }) }) }); }
+      catch(err){ staffState.quizAdmin = mqPrev; showToast(err.message); render(); }
+      return;
     }
 
     /* ---------- Видео урока ---------- */
@@ -6610,15 +6618,16 @@ function wireEvents(root){
     }
     if(action==="move-lesson-quiz-question"){
       var lmIdx=parseInt(t.getAttribute("data-idx"),10); var lmDir=t.getAttribute("data-dir");
-      var lmIds=lessonQuizManager.questions.map(function(x){ return x.id; });
       var lmSwap = lmDir==="up" ? lmIdx-1 : lmIdx+1;
-      if(lmSwap<0 || lmSwap>=lmIds.length) return;
-      var tmpl=lmIds[lmIdx]; lmIds[lmIdx]=lmIds[lmSwap]; lmIds[lmSwap]=tmpl;
+      if(lmSwap<0 || lmSwap>=lessonQuizManager.questions.length) return;
+      var lmPrev = lessonQuizManager.questions.slice();
+      var lmArr = lessonQuizManager.questions;
+      var lmTmp = lmArr[lmIdx]; lmArr[lmIdx]=lmArr[lmSwap]; lmArr[lmSwap]=lmTmp;
+      render();
       try{
-        await api("/course/lessons/"+lessonQuizManager.lessonId+"/quiz-admin/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: lmIds }) });
-        var lmd=await api("/course/lessons/"+lessonQuizManager.lessonId+"/quiz-admin"); lessonQuizManager.questions=lmd.quiz;
-      }catch(err){ showToast(err.message); }
-      render(); return;
+        await api("/course/lessons/"+lessonQuizManager.lessonId+"/quiz-admin/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: lmArr.map(function(x){ return x.id; }) }) });
+      }catch(err){ lessonQuizManager.questions = lmPrev; showToast(err.message); render(); }
+      return;
     }
 
     /* ---------- Модули курса ---------- */
@@ -6679,15 +6688,16 @@ function wireEvents(root){
     }
     if(action==="move-module-quiz-question"){
       var mmIdx=parseInt(t.getAttribute("data-idx"),10); var mmDir=t.getAttribute("data-dir");
-      var mmIds=moduleQuizManager.questions.map(function(x){ return x.id; });
       var mmSwap = mmDir==="up" ? mmIdx-1 : mmIdx+1;
-      if(mmSwap<0 || mmSwap>=mmIds.length) return;
-      var tmpm=mmIds[mmIdx]; mmIds[mmIdx]=mmIds[mmSwap]; mmIds[mmSwap]=tmpm;
+      if(mmSwap<0 || mmSwap>=moduleQuizManager.questions.length) return;
+      var mmPrev = moduleQuizManager.questions.slice();
+      var mmArr = moduleQuizManager.questions;
+      var mmTmp = mmArr[mmIdx]; mmArr[mmIdx]=mmArr[mmSwap]; mmArr[mmSwap]=mmTmp;
+      render();
       try{
-        await api("/course/modules/"+moduleQuizManager.moduleId+"/quiz-admin/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: mmIds }) });
-        var mmd=await api("/course/modules/"+moduleQuizManager.moduleId+"/quiz-admin"); moduleQuizManager.questions=mmd.quiz;
-      }catch(err){ showToast(err.message); }
-      render(); return;
+        await api("/course/modules/"+moduleQuizManager.moduleId+"/quiz-admin/reorder", { method:"PUT", body: JSON.stringify({ orderedIds: mmArr.map(function(x){ return x.id; }) }) });
+      }catch(err){ moduleQuizManager.questions = mmPrev; showToast(err.message); render(); }
+      return;
     }
     if(action==="open-module-feedback-viewer"){
       moduleFeedbackViewer = { open:true, moduleId:t.getAttribute("data-id"), moduleTitle:t.getAttribute("data-title"), feedback:[], average:null, count:0 };
