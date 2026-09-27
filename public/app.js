@@ -2071,19 +2071,20 @@ function renderStudentHome(){
       '<p>'+(lock.reason==="blocked" ? 'Куратор временно ограничил ваш доступ к демо-курсу.' : 'Срок доступа к демо-курсу истёк.')+' Чтобы продолжить обучение, напишите куратору в Telegram-группе потока — он может продлить или снять ограничение.</p>' +
       '<button class="btn btn-primary" data-action="open-telegram-modal">Написать куратору</button></div>';
   } else {
-    // Статус-трек: один слот на урок + слот теста. Это «Моя строка» — сигнатурный элемент направления.
+    // Статус-трек: ровно один слот на урок — итоговый тест не урок, у него своя
+    // плашка рядом с подписью ниже, а не десятое деление в этом ряду.
     var slots = '<div class="status-track">';
     course.lessons.forEach(function(l,i){
       var isDone = doneIds.indexOf(l.id)!==-1;
       var isCurrent = !isDone && doneIds.length===i;
       slots += '<div class="slot'+(isDone?' done':(isCurrent?' current':''))+'" title="'+escapeHtml(l.title)+'"></div>';
     });
-    var quizDone = !!pr.completed;
-    var quizCurrent = !quizDone && done===total;
-    slots += '<div class="slot'+(quizDone?' done':(quizCurrent?' current':''))+'" title="Итоговый тест"></div>';
     slots += '</div>';
+    var quizDone = !!pr.completed;
 
     var pct = Math.round((done + (quizDone?1:0)) / (total+1) * 100);
+    var testBadge = quizDone ? magnet("done","Тест пройден · "+pr.quiz_score+"%")
+      : (done===total ? magnet("attention","Итоговый тест доступен") : magnet("neutral","Итоговый тест впереди"));
     html += '<div class="card course-hero">' +
       '<div class="hero-aurora aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
       '<div class="course-hero-top">' +
@@ -2092,7 +2093,7 @@ function renderStudentHome(){
         '<p style="margin:4px 0 0;">'+total+' коротких уроков и итоговый тест. По завершении — сертификат и возможность оставить заявку на полную программу обучения.</p></div>' +
       '</div>' +
       slots +
-      '<div class="progress-label">'+done+' / '+total+' уроков'+(pr.completed?' · тест '+pr.quiz_score+'%':'')+'</div>';
+      '<div class="progress-label" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span>'+done+' / '+total+' уроков</span>'+testBadge+'</div>';
     // Название конкретного следующего шага рядом с кнопкой — чтобы врач видел,
     // куда именно попадёт, не открывая курс наугад.
     var nextStepLabel = null;
