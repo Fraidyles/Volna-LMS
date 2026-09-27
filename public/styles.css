@@ -1250,3 +1250,7 @@ a.btn{text-decoration:none;}
 .onb-aurora .dimple{position:absolute;left:-130px;top:-130px;width:260px;height:260px;border-radius:50%;pointer-events:none;opacity:0;will-change:transform,opacity;
   background:radial-gradient(closest-side,color-mix(in srgb,var(--surface) 88%,transparent),color-mix(in srgb,var(--surface) 45%,transparent) 50%,transparent);}
 @media (prefers-reduced-motion: reduce){.onb-aurora .band{animation:none;}}
+.seg{display:flex;gap:4px;padding:4px;border-radius:var(--radius-s);background:var(--surface-2);border:var(--border-hairline);margin-bottom:16px;}
+.seg-btn{flex:1;border:none;background:transparent;color:var(--muted);font:600 13px var(--sans);padding:9px 10px;border-radius:9px;cursor:pointer;transition:background .15s,color .15s;}
+.seg-btn:hover{color:var(--ink);}
+.seg-btn.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow);}

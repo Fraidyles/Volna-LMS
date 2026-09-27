@@ -45,7 +45,7 @@ var profileEditor = { open:false, name:"", phone:"", workplace:"", specializatio
 // interestIds) — потому что клик по выпадающему списку специализаций вызывает
 // render(), который иначе стирал бы уже введённый текст в соседних полях формы
 // (без этого draft'а он бы каждый раз выводился заново из пустоты — value="").
-var registerDraft = { name:"", email:"", phone:"", password:"", staffInviteCode:"", specializationIds:[], interestIds:[] };
+var registerDraft = { name:"", email:"", phone:"", password:"", staffInviteCode:"", specializationIds:[], interestIds:[], asStaff:false };
 // Какой из выпадающих списков специализаций сейчас открыт — один на всё
 // приложение, т.к. одновременно виден только один такой список — и что
 // набрано в его строке поиска.
@@ -1363,8 +1363,8 @@ function renderAuthScreen(mode){
   var left =
     '<div class="onb-left">' +
       '<div><div class="brand">'+brandMark()+'Медицина Долголетия</div>' +
-      '<h1 style="margin-top:56px;">'+(isLogin ? "С возвращением" : "Регистрация на демо-курс")+'</h1>' +
-      '<p>'+(isLogin ? "Войдите, чтобы продолжить обучение или открыть панель куратора." : "Пара полей — и вы сразу в первом уроке.")+'</p></div>' +
+      '<h1 style="margin-top:56px;">'+(isLogin ? "С возвращением" : (registerDraft.asStaff ? "Регистрация сотрудника" : "Регистрация на демо-курс"))+'</h1>' +
+      '<p>'+(isLogin ? "Войдите, чтобы продолжить обучение или открыть панель куратора." : (registerDraft.asStaff ? "По приглашению на ваш email и коду сотрудника — сразу в панель куратора." : "Пара полей — и вы сразу в первом уроке."))+'</p></div>' +
       '<div class="onb-aurora aurora" aria-hidden="true">' +
         '<span class="bw" data-k="0.6"><span class="band b3"></span></span><span class="bw" data-k="1"><span class="band b1"></span></span>' +
         '<span class="bw" data-k="1.3"><span class="band b2"></span></span><span class="bw" data-k="0.8"><span class="band b4"></span></span>' +
@@ -1390,19 +1390,23 @@ function renderAuthScreen(mode){
       '<div class="onb-right"><div class="onb-box">' +
         '<button class="back-link" data-action="go-login">← Уже есть аккаунт? Войти</button>' +
         '<div class="brand" style="margin-bottom:20px;">'+brandMark()+'Медицина Долголетия</div>' +
-        '<h2 style="font-size:19px;margin:0 0 20px;">Расскажите о себе</h2>' +
+        '<h2 style="font-size:19px;margin:0 0 14px;">Расскажите о себе</h2>' +
+        // Врач и сотрудник регистрируются по-разному: врачу нужна специализация
+        // (от неё зависят протоколы), сотруднику — приглашение на email и код.
+        '<div class="seg" role="tablist"><button type="button" class="seg-btn'+(registerDraft.asStaff?'':' on')+'" data-action="register-as" data-staff="0">Я врач</button>' +
+          '<button type="button" class="seg-btn'+(registerDraft.asStaff?' on':'')+'" data-action="register-as" data-staff="1">Я сотрудник</button></div>' +
+        (registerDraft.asStaff ? '<p class="hint" style="margin:-6px 0 14px;">Регистрируйтесь на email, на который вам отправили приглашение, и введите код сотрудника — его называет пригласивший. Специализация не нужна.</p>' : '') +
         '<form id="registerForm">' +
           '<div class="field"><label>Имя и фамилия</label><input class="input" id="registerName" required placeholder="Например, Анна Ковалёва" value="'+escapeHtml(registerDraft.name)+'"></div>' +
-          renderSpecPicker("register-current", "Текущая специализация", null, registerDraft.specializationIds) +
-          renderSpecPicker("register-desired", "Желаемые специализации", "выберите специализации, в которых хотите развиваться, можно оставить поле пустым", registerDraft.interestIds) +
+          (registerDraft.asStaff ? '' : renderSpecPicker("register-current", "Текущая специализация", null, registerDraft.specializationIds)+
+          renderSpecPicker("register-desired", "Желаемые специализации", "выберите специализации, в которых хотите развиваться, можно оставить поле пустым", registerDraft.interestIds)) +
           '<div class="field"><label>Email</label><input class="input" type="email" id="registerEmail" required value="'+escapeHtml(registerDraft.email)+'"></div>' +
           '<div class="field"><label>Телефон <span style="font-weight:400;color:var(--muted-2);">(необязательно)</span></label><input class="input" type="tel" id="registerPhone" value="'+escapeHtml(registerDraft.phone)+'"></div>' +
           '<div class="field"><label>Пароль <span style="font-weight:400;color:var(--muted-2);">(от 6 символов)</span></label><input class="input" type="password" id="registerPassword" required minlength="6" value="'+escapeHtml(registerDraft.password)+'"></div>' +
-          '<div class="field"><label>Код сотрудника <span style="font-weight:400;color:var(--muted-2);">(только если вас пригласили куратором/администратором — уточните код у пригласившего)</span></label><input class="input" id="registerStaffCode" placeholder="Оставьте пустым, если регистрируетесь на курс" value="'+escapeHtml(registerDraft.staffInviteCode)+'"></div>' +
+          (registerDraft.asStaff ? '<div class="field"><label>Код сотрудника <span style="font-weight:400;color:var(--muted-2);">(уточните код у пригласившего)</span></label><input class="input" id="registerStaffCode" required placeholder="Например, 6A794ZF9" value="'+escapeHtml(registerDraft.staffInviteCode)+'"></div>' : '') +
           '<div class="err-text" id="authError" style="display:none;"></div>' +
-          '<button class="btn btn-primary btn-block" type="submit">Начать курс</button>' +
+          '<button class="btn btn-primary btn-block" type="submit">'+(registerDraft.asStaff?'Зарегистрироваться':'Начать курс')+'</button>' +
         '</form>' +
-        '<p class="hint">Если вам уже выдали доступ куратора или администратора на этот email — роль назначится автоматически вместо регистрации на курс, но только вместе с верным кодом сотрудника выше.</p>' +
       '</div></div>';
   }
   return el('<div class="onb-shell">'+left+right+'</div>');
@@ -4532,6 +4536,7 @@ function wireEvents(root){
     if(action==="logout"){ stopNotificationPolling(); stopHeartbeat(); sendOfflineBeacon(); await api("/auth/logout", { method:"POST" }); me=null; course=null; view="login"; mySessionsList=[]; mySessionsLoaded=false; studentProtocols={forYou:[],additional:[]}; protocolExpanded={}; protocolGuideTab={}; render(); return; }
     if(action==="open-protocol"){ protocolReader = { id:t.getAttribute("data-id"), mine:t.getAttribute("data-mine")==="1" }; render(); return; }
     if(action==="close-protocol-reader" || (action==="overlay-close-protocol-reader" && !e.target.closest("[data-stop]"))){ protocolReader.id=null; render(); return; }
+    if(action==="register-as"){ registerDraft.asStaff = t.getAttribute("data-staff")==="1"; if(registerDraft.asStaff){ registerDraft.specializationIds=[]; registerDraft.interestIds=[]; } render(); return; }
     if(action==="pick-avatar"){ var fi=document.getElementById("avatarFileInput"); if(fi) fi.click(); return; }
     if(action==="remove-avatar"){
       askConfirm({ title:"Убрать фото?", body:"Вы уверены, что хотите убрать фото профиля? Вместо него будут показаны инициалы.", confirmLabel:"Убрать фото",
@@ -5718,11 +5723,11 @@ function wireEvents(root){
         var d2=await api("/auth/register", { method:"POST", body: JSON.stringify({
           name:registerDraft.name, specializationIds:registerDraft.specializationIds, email:registerDraft.email,
           phone:registerDraft.phone, password:registerDraft.password,
-          staffInviteCode:registerDraft.staffInviteCode,
+          staffInviteCode:registerDraft.asStaff ? registerDraft.staffInviteCode : "",
           interestIds: registerDraft.interestIds
         }) });
         me=d2.user; await routeAfterLogin();
-      }catch(err){ errBox2.textContent=err.message; errBox2.style.display="block"; btn2.disabled=false; btn2.textContent="Начать курс"; }
+      }catch(err){ errBox2.textContent=err.message; errBox2.style.display="block"; btn2.disabled=false; btn2.textContent=registerDraft.asStaff?"Зарегистрироваться":"Начать курс"; }
       return;
     }
     if(e.target.id==="lessonEditorForm"){

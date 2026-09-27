@@ -85,6 +85,14 @@ router.post("/register", authLimiter, async (req, res) => {
   // от неё зависит, какие протоколы потом попадут врачу в «Ваши протоколы».
   let specializationRows = [];
   if (role === "student") {
+    // Человек выбрал «Я сотрудник» и ввёл код, но на этот email нет приглашения
+    // куратора/админа — объясняем прямо, а не требуем специализацию врача.
+    if (staffInviteCode && String(staffInviteCode).trim() && (!Array.isArray(specializationIds) || !specializationIds.length)) {
+      return res.status(403).json({
+        error: "no_staff_invite",
+        message: "На этот email нет приглашения куратора или администратора — попросите пригласившего отправить его или зарегистрируйтесь как врач"
+      });
+    }
     if (!Array.isArray(specializationIds) || !specializationIds.length) {
       return res.status(400).json({ error: "invalid_input", message: "Укажите текущую специализацию" });
     }
