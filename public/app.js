@@ -237,6 +237,10 @@ function brandMark(style){ return '<span class="mark"'+(style?' style="'+style+'
 function magnet(kind, label){
   return '<span class="magnet '+kind+'"><span class="magnet-dot"></span><span class="magnet-label">'+escapeHtml(label)+'</span></span>';
 }
+// Шапка карточки: заголовок слева, кнопка перехода — справа на той же линии.
+function cardHead(title, actionHtml){
+  return '<div class="card-head"><b class="card-title">'+escapeHtml(title)+'</b>'+(actionHtml||'')+'</div>';
+}
 function fmtDate(iso){ if(!iso) return "—"; try{ return new Date(iso).toLocaleDateString("ru-RU",{day:"numeric",month:"short",year:"numeric"}); }catch(e){ return "—"; } }
 // Короткая дата для таблиц: без года, если он текущий («26 сент.»).
 function fmtDateShort(iso){ if(!iso) return "—"; try{ var d=new Date(iso), o={day:"numeric",month:"short"}; if(d.getFullYear()!==new Date().getFullYear()) o.year="numeric"; return d.toLocaleDateString("ru-RU",o); }catch(e){ return "—"; } }
@@ -2201,64 +2205,49 @@ function renderStudentHome(){
 
   html += '<div class="board-strip">';
 
-  html += '<div class="card board-tile">';
+  // Правила карточек (одинаковые по всему приложению, см. .card-head в styles.css):
+  // 1) заголовок карточки слева, кнопка перехода в раздел («Все эфиры →») — справа
+  //    на той же линии; 2) главное действие карточки — внизу слева (.tile-foot);
+  // 3) цвет — только у настоящего статуса (эфир идёт сейчас, «на проверке»),
+  //    а не для украшения заголовка.
+  html += '<div class="card board-tile">' +
+    cardHead(liveNow ? "Идёт эфир" : "Ближайший эфир", '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="schedule">Все эфиры →</button>');
   if(nextEvent){
-    html += (liveNow ? magnet("live","Идёт сейчас") : magnet("attention","Ближайший эфир")) +
-      '<b style="font-size:14px;display:block;margin:10px 0 2px;">'+escapeHtml(nextEvent.title)+'</b>' +
-      '<span style="font-size:13px;color:var(--muted);">'+fmtDate(nextEvent.event_date)+' · '+escapeHtml(nextEvent.event_time||"")+'</span>' +
-      '<div class="tile-foot">' + (liveNow && nextEvent.join_url ? '<a class="btn btn-sm btn-primary" href="'+escapeHtml(nextEvent.join_url)+'" target="_blank" rel="noopener">Подключиться</a>' :
-        '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="schedule">Все эфиры →</button>') + '</div>';
+    html += '<b class="tile-main">'+escapeHtml(nextEvent.title)+'</b>' +
+      '<span class="tile-sub">'+(liveNow ? magnet("live","идёт сейчас") : fmtDate(nextEvent.event_date)+' · '+escapeHtml(nextEvent.event_time||""))+'</span>' +
+      (liveNow && nextEvent.join_url ? '<div class="tile-foot"><a class="btn btn-sm btn-primary" href="'+escapeHtml(nextEvent.join_url)+'" target="_blank" rel="noopener">Подключиться</a></div>' : '');
   } else {
-    html += magnet("neutral","Эфиры") + '<p style="font-size:13px;color:var(--muted);margin:10px 0 0;">Пока не запланированы.</p>';
+    html += '<span class="tile-sub">Эфиры пока не запланированы.</span>';
   }
   html += '</div>';
 
   if(pr.completed){
     var certsOn = course && course.course && course.course.certificatesEnabled;
-    html += '<div class="card board-tile">';
-    if(certsOn){
-      var issued = pr.certificate_status==="issued";
-      html += magnet(issued?"done":"attention", issued?"Сертификат выдан":"На проверке") +
-        '<div style="font-family:var(--sans);font-weight:700;font-size:28px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
-        '<span style="font-size:12px;color:var(--muted);">результат теста</span>';
-      if(!issued && !pr.requested_full_access){
-        html += '<div class="tile-foot wide"><button class="btn btn-sm btn-primary btn-block" data-action="request-full">Заявка на полную программу</button></div>';
-      } else if(pr.requested_full_access){
-        html += '<div class="tile-foot">'+magnet("done","Заявка отправлена")+'</div>';
-      }
-    } else {
-      html += magnet("done","Демо пройдено") +
-        '<div style="font-family:var(--sans);font-weight:700;font-size:28px;margin:10px 0 2px;letter-spacing:-.02em;">'+pr.quiz_score+'%</div>' +
-        '<span style="font-size:12px;color:var(--muted);">результат теста · скидка 10% на полный курс</span>';
-      if(!pr.requested_full_access){
-        html += '<div class="tile-foot wide"><button class="btn btn-sm btn-primary btn-block" data-action="request-full">Хочу полное обучение</button></div>';
-      } else {
-        html += '<div class="tile-foot">'+magnet("done","Заявка отправлена")+'</div>';
-      }
+    var issued = certsOn && pr.certificate_status==="issued";
+    html += '<div class="card board-tile">' + cardHead(certsOn ? "Сертификат" : "Демо пройдено", "") +
+      '<div class="tile-row"><b class="tile-num">'+pr.quiz_score+'%</b><span class="tile-sub">результат теста'+(certsOn?'':' · скидка 10% на полный курс')+'</span></div>' +
+      (certsOn ? '<div style="margin-top:6px;">'+magnet(issued?"done":"attention", issued?"выдан":"на проверке")+'</div>' : '');
+    if(!issued && !pr.requested_full_access){
+      html += '<div class="tile-foot wide"><button class="btn btn-sm btn-primary btn-block" data-action="request-full">'+(certsOn?'Заявка на полную программу':'Хочу полное обучение')+'</button></div>';
+    } else if(pr.requested_full_access){
+      html += '<div class="tile-foot">'+magnet("done","Заявка отправлена")+'</div>';
     }
     html += '</div>';
   }
 
   html += '<div class="card board-tile">' +
-    magnet("neutral","Куратор") +
-    '<p style="font-size:13px;color:var(--muted);margin:10px 0 0;line-height:1.4;">Вопрос по курсу или доступу — напишите в Telegram-группе потока.</p>' +
-    '<div class="tile-foot"><button class="btn btn-sm btn-ghost" data-action="open-telegram-modal">Открыть Telegram →</button></div>' +
+    cardHead("Куратор", '<button class="btn btn-sm btn-ghost" data-action="open-telegram-modal">Telegram →</button>') +
+    '<span class="tile-sub">Вопрос по курсу или доступу — напишите в Telegram-группе потока.</span>' +
   '</div>';
 
   var gam = course.gamification || { points:0, currentStreak:0, longestStreak:0 };
   html += '<div class="card board-tile">' +
-    magnet("neutral","Прогресс") +
-    '<div style="display:flex;align-items:baseline;gap:6px;margin-top:10px;">' +
-      icon("flame","ic-sm streak-flame") +
-      '<span style="font-family:var(--sans);font-weight:700;font-size:22px;letter-spacing:-.02em;" data-count="'+(gam.currentStreak||0)+'">'+(gam.currentStreak||0)+'</span>' +
-      '<span style="font-size:12px;color:var(--muted);">'+(gam.currentStreak===1?"день подряд":"дней подряд")+'</span>' +
-    '</div>' +
-    '<span style="font-size:12px;color:var(--muted);display:block;margin-top:2px;">рекорд: '+(gam.longestStreak||0)+'</span>' +
-    '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line-2);align-self:stretch;">' +
-      '<span style="font-family:var(--sans);font-weight:700;font-size:18px;" data-count="'+(gam.points||0)+'">'+(gam.points||0)+'</span>' +
-      '<span style="font-size:12px;color:var(--muted);"> / 1000 очков</span>' +
-    '</div>' +
-    '<div class="tile-foot"><button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="progress">Как получить скидку →</button></div>' +
+    cardHead("Прогресс", '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="progress">Подробнее →</button>') +
+    '<div class="tile-row">'+icon("flame","ic-sm streak-flame") +
+      '<b class="tile-num" data-count="'+(gam.currentStreak||0)+'">'+(gam.currentStreak||0)+'</b>' +
+      '<span class="tile-sub">'+ruPluralClient(gam.currentStreak||0,"день подряд","дня подряд","дней подряд")+' · рекорд '+(gam.longestStreak||0)+'</span></div>' +
+    '<div class="tile-row"><b class="tile-num" data-count="'+(gam.points||0)+'">'+(gam.points||0)+'</b>' +
+      '<span class="tile-sub">из 1000 очков — это скидка на полный курс</span></div>' +
   '</div>';
 
   html += '</div>';
@@ -2269,10 +2258,7 @@ function renderStudentHome(){
   var homeNotifItems = homeReminders.concat(notifState.items.filter(function(n){ return !n.read_at; }));
   html += '<div class="grid-2" style="margin-top:14px;">';
   html += '<div class="card home-tile" style="padding:18px 20px;">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
-      '<b style="font-size:14px;">Уведомления</b>' +
-      (homeNotifItems.length ? '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="notifications">Все →</button>' : '') +
-    '</div>';
+    cardHead("Уведомления", homeNotifItems.length ? '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="notifications">Все →</button>' : '');
   if(!homeNotifItems.length){
     html += '<p style="font-size:13px;color:var(--muted);margin:0;">У вас нет новых уведомлений.</p>';
   } else {
@@ -2282,10 +2268,7 @@ function renderStudentHome(){
   }
   html += '</div>';
   html += '<div class="card home-tile" style="padding:18px 20px;">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
-      '<b style="font-size:14px;">Общение</b>' +
-      '<button class="btn btn-sm btn-ghost" data-action="open-telegram-modal">Открыть →</button>' +
-    '</div>' +
+    cardHead("Общение", '<button class="btn btn-sm btn-ghost" data-action="open-telegram-modal">Открыть →</button>') +
     '<p style="font-size:13px;color:var(--muted);margin:0;">Куратор, преподаватели и другие врачи вашего потока — в Telegram-группе.</p>' +
   '</div></div>';
 

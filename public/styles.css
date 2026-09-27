@@ -1753,6 +1753,21 @@ tr.ord-off td{opacity:.55;}
 
 /* Плитки под курсом на главной: содержимое сверху, кнопка всегда внизу слева —
    у всех плиток ряда на одной линии, а не «где закончился текст». */
-.board-tile{padding:18px;display:flex;flex-direction:column;align-items:flex-start;}
+.board-tile{padding:18px 20px;display:flex;flex-direction:column;align-items:flex-start;gap:0;}
 .board-tile .tile-foot{margin-top:auto;padding-top:14px;}
 .board-tile .tile-foot.wide{align-self:stretch;}
+
+/* Шапка карточки — единое правило: заголовок 14/700 слева, кнопка-переход
+   справа, по центру строки; высота строки фиксирована кнопкой (30px), поэтому
+   заголовки соседних карточек стоят на одной линии, есть кнопка или нет. */
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:30px;margin-bottom:10px;align-self:stretch;}
+.card-head .card-title{font-size:14px;font-weight:700;line-height:1.3;min-width:0;}
+.card-head .btn{flex:0 0 auto;}
+.board-tile .tile-main{font-size:14px;font-weight:600;line-height:1.35;margin:0 0 4px;}
+.board-tile .tile-sub{font-size:13px;color:var(--muted);line-height:1.45;}
+.board-tile .tile-row{display:flex;align-items:baseline;gap:8px;margin-top:4px;}
+.board-tile .tile-row + .tile-row{margin-top:8px;padding-top:8px;border-top:1px solid var(--line-2);align-self:stretch;}
+.board-tile .tile-num{font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.1;}
+.board-tile .tile-row .streak-flame{align-self:center;}
+/* Плашка «выбран сейчас» на карточке курса — в одну строку */
+.course-tile-badge{white-space:nowrap;}
