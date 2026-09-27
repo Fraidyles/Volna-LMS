@@ -365,6 +365,7 @@ async function routeAfterLogin(){
   if(me.role === "student"){
     view = "student";
     await loadCourse();
+    if(course && protocolsSectionAvailable()) loadProtocols().then(function(){ if(studentState.tab==="course") render(); });
     await loadCalendarData();
     await loadStudentTools();
     await loadNotifications();
@@ -2240,7 +2241,7 @@ function renderStudentShell(){
     main.appendChild(dnaHost);
     startDnaDecor(dnaHost);
   }
-  var shell = el('<div class="shell"><div class="wrap" id="studentContent"></div></div>');
+  var shell = el('<div class="shell"><div class="wrap'+(course && studentState.tab==="course" && !previewMode ? ' wrap-wide' : '')+'" id="studentContent"></div></div>');
   main.appendChild(shell);
   var content = shell.querySelector("#studentContent");
 
@@ -2441,7 +2442,9 @@ function renderStudentHome(){
   var done = doneIds.length;
   var lock = course.locked || {locked:false};
 
-  var html = '<div style="margin-top:10px;">' + renderOnboardingCard() + renderSurveyHomeCard();
+  // На широком экране — две колонки: слева курс и что дальше, справа — эфир,
+  // прогресс, куратор и прочее «сбоку». На узком всё идёт одной колонкой.
+  var html = '<div class="home-grid" style="margin-top:10px;"><div class="home-main">' + renderOnboardingCard() + renderSurveyHomeCard();
   if(lock.locked){
     html += '<div class="card course-hero" style="background:var(--status-blocked-tint);">' +
       magnet("blocked", "Доступ ограничен") +
@@ -2451,10 +2454,13 @@ function renderStudentHome(){
   } else {
     // Статус-трек: ровно один слот на урок — итоговый тест не урок, у него своя
     // плашка рядом с подписью ниже, а не десятое деление в этом ряду.
+    // Текущий — первый непройденный урок (уроки могут быть пройдены не по порядку).
+    var curIdxH = -1;
+    course.lessons.forEach(function(l,i){ if(curIdxH<0 && doneIds.indexOf(l.id)===-1) curIdxH = i; });
     var slots = '<div class="status-track">';
     course.lessons.forEach(function(l,i){
       var isDone = doneIds.indexOf(l.id)!==-1;
-      var isCurrent = !isDone && doneIds.length===i;
+      var isCurrent = i===curIdxH;
       slots += '<div class="slot'+(isDone?' done':(isCurrent?' current':''))+'" title="'+escapeHtml(l.title)+'"></div>';
     });
     slots += '</div>';
@@ -2475,33 +2481,32 @@ function renderStudentHome(){
     // Название конкретного следующего шага рядом с кнопкой — чтобы врач видел,
     // куда именно попадёт, не открывая курс наугад.
     var nextStepLabel = null;
-    if(done < total) nextStepLabel = "Урок "+(done+1)+": "+course.lessons[done].title;
+    if(curIdxH >= 0) nextStepLabel = "Урок "+(curIdxH+1)+": "+course.lessons[curIdxH].title;
     else if(!quizDone) nextStepLabel = "Итоговый тест";
     html += (nextStepLabel ? '<div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Далее: '+escapeHtml(nextStepLabel)+'</div>' : '') +
       '<button class="btn btn-primary" data-action="open-course">'+(done>0?'Продолжить курс':'Начать курс')+'</button>' +
       '</div>';
   }
 
-  // Строка доски: ближайший эфир / сертификат / сообщения — три разных по форме плитки, не одинаковые icon+heading карточки.
+  if(!lock.locked) html += renderHomeNextLessons(doneIds) + renderHomeExtras();
+  html += '</div><aside class="home-rail">';
+
   var mySid = me.stream_id || "";
   var relevantEvents = calendarState.events.filter(function(ev){ return !ev.stream_id || ev.stream_id===mySid; });
   var nextEvent = null, liveNow = false;
   relevantEvents.forEach(function(ev){
-    var startKey = ev.event_date+"T"+(ev.event_time||"00:00");
-    var start = new Date(startKey);
+    var start = new Date(ev.event_date+"T"+(ev.event_time||"00:00"));
     var end = new Date(start.getTime() + (ev.duration_min||60)*60000);
     var now = new Date();
     if(!nextEvent && end >= now){ nextEvent = ev; liveNow = (start<=now && now<=end); }
   });
-
-  html += '<div class="board-strip">';
 
   // Правила карточек (одинаковые по всему приложению, см. .card-head в styles.css):
   // 1) заголовок карточки слева, кнопка перехода в раздел («Все эфиры →») — справа
   //    на той же линии; 2) главное действие карточки — внизу слева (.tile-foot);
   // 3) цвет — только у настоящего статуса (эфир идёт сейчас, «на проверке»),
   //    а не для украшения заголовка.
-  html += '<div class="card board-tile">' +
+  html += '<div class="card board-tile ho-1">' +
     cardHead(liveNow ? "Идёт эфир" : "Ближайший эфир", '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="schedule">Все эфиры →</button>');
   if(nextEvent){
     html += '<b class="tile-main">'+escapeHtml(nextEvent.title)+'</b>' +
@@ -2515,7 +2520,7 @@ function renderStudentHome(){
   if(pr.completed){
     var certsOn = course && course.course && course.course.certificatesEnabled;
     var issued = certsOn && pr.certificate_status==="issued";
-    html += '<div class="card board-tile">' + cardHead(certsOn ? "Сертификат" : "Демо пройдено", "") +
+    html += '<div class="card board-tile ho-1">' + cardHead(certsOn ? "Сертификат" : "Демо пройдено", "") +
       '<div class="tile-row"><b class="tile-num">'+pr.quiz_score+'%</b><span class="tile-sub">результат теста'+(certsOn?'':' · скидка 10% на полный курс')+'</span></div>' +
       (certsOn ? '<div style="margin-top:6px;">'+magnet(issued?"done":"attention", issued?"выдан":"на проверке")+'</div>' : '');
     if(!issued && !pr.requested_full_access){
@@ -2526,57 +2531,90 @@ function renderStudentHome(){
     html += '</div>';
   }
 
-  html += '<div class="card board-tile">' +
-    cardHead("Куратор", '<button class="btn btn-sm btn-ghost" data-action="open-telegram-modal">Telegram →</button>') +
-    '<span class="tile-sub">Вопрос по курсу или доступу — напишите в Telegram-группе потока.</span>' +
-  '</div>';
-
   var gam = course.gamification || { points:0, currentStreak:0, longestStreak:0 };
-  html += '<div class="card board-tile">' +
+  var ptsPct = Math.min(100, Math.round((gam.points||0)/10));
+  html += '<div class="card board-tile ho-1">' +
     cardHead("Прогресс", '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="progress">Подробнее →</button>') +
     '<div class="tile-row">'+icon("flame","ic-sm streak-flame") +
       '<b class="tile-num" data-count="'+(gam.currentStreak||0)+'">'+(gam.currentStreak||0)+'</b>' +
       '<span class="tile-sub">'+ruPluralClient(gam.currentStreak||0,"день подряд","дня подряд","дней подряд")+' · рекорд '+(gam.longestStreak||0)+'</span></div>' +
     '<div class="tile-row"><b class="tile-num" data-count="'+(gam.points||0)+'">'+(gam.points||0)+'</b>' +
       '<span class="tile-sub">из 1000 очков — это скидка на полный курс</span></div>' +
+    '<div class="home-pts"><i style="width:'+ptsPct+'%"></i></div>' +
   '</div>';
 
-  html += '</div>';
+  // Куратор и группа потока — одна плитка (раньше «Куратор» и «Общение» вели в одно место).
+  var cur = me.curator;
+  html += '<div class="card board-tile ho-3">' +
+    cardHead("Куратор и группа", '<button class="btn btn-sm btn-ghost" data-action="open-telegram-modal">Telegram →</button>') +
+    (cur ? '<div class="home-cur">'+userAvatar(cur,"home-cur-av")+'<div><b>'+escapeHtml(cur.name)+'</b><span>ваш куратор</span></div></div>' : '') +
+    '<span class="tile-sub">Вопросы по курсу, доступу и оплате — в Telegram-группе потока: там куратор, преподаватели и коллеги.</span>' +
+  '</div>';
 
-  // Короткий предпросмотр на главной — не дублирует полную страницу «Уведомления»
-  // из сайдбара, а просто отвечает на вопрос «есть что-то новое?», не уходя со страницы.
-  var homeReminders = upcomingEventReminders();
-  var homeNotifItems = homeReminders.concat(notifState.items.filter(function(n){ return !n.read_at; }));
-  html += '<div class="grid-2" style="margin-top:14px;">';
-  html += '<div class="card home-tile" style="padding:18px 20px;">' +
-    cardHead("Уведомления", homeNotifItems.length ? '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="notifications">Все →</button>' : '');
-  if(!homeNotifItems.length){
-    html += '<p style="font-size:13px;color:var(--muted);margin:0;">У вас нет новых уведомлений.</p>';
-  } else {
-    homeNotifItems.slice(0,3).forEach(function(n){
-      html += '<div style="padding:8px 0;border-bottom:1px solid var(--line-2);"><b style="font-size:13px;display:block;">'+escapeHtml(n.title)+'</b></div>';
-    });
+  // Уведомления — только когда есть что показать (пустая плитка «нет новых» — лишний шум).
+  var homeNotifItems = upcomingEventReminders().concat(notifState.items.filter(function(n){ return !n.read_at; }));
+  if(homeNotifItems.length){
+    html += '<div class="card board-tile ho-3">' + cardHead("Уведомления", '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="notifications">Все →</button>') +
+      '<div class="home-notifs">' + homeNotifItems.slice(0,3).map(function(n){ return '<div>'+escapeHtml(n.title)+'</div>'; }).join("") + '</div></div>';
   }
-  html += '</div>';
-  html += '<div class="card home-tile" style="padding:18px 20px;">' +
-    cardHead("Общение", '<button class="btn btn-sm btn-ghost" data-action="open-telegram-modal">Открыть →</button>') +
-    '<p style="font-size:13px;color:var(--muted);margin:0;">Куратор, преподаватели и другие врачи вашего потока — в Telegram-группе.</p>' +
-  '</div></div>';
 
   if(me.referral_code){
     // От адреса самой платформы, а не корня домена — иначе при установке в
     // подпапку (/lms/) ссылка вела бы на главную основного сайта.
     var refLink = window.location.origin + window.location.pathname.replace(/[^/]*$/, "") + "?ref=" + me.referral_code;
-    html += '<div class="card home-tile" style="padding:18px 20px;margin-top:14px;">' +
-      '<b style="font-size:14px;display:block;margin-bottom:4px;">Пригласите коллегу</b>' +
-      '<p style="font-size:13px;color:var(--muted);margin:0 0 12px;">Поделитесь ссылкой — когда коллега зарегистрируется по ней, мы это увидим.</p>' +
-      '<div style="display:flex;gap:6px;">' +
-        '<input class="input" readonly value="'+escapeHtml(refLink)+'" style="font-size:12px;" id="refLinkInput">' +
-        '<button class="btn btn-sm btn-ghost" data-action="copy-ref-link">Скопировать</button>' +
-      '</div></div>';
+    html += '<div class="card board-tile ho-3">' + cardHead("Пригласите коллегу", "") +
+      '<span class="tile-sub">Поделитесь ссылкой — когда коллега зарегистрируется по ней, мы это увидим.</span>' +
+      '<div class="home-ref"><input class="input" readonly value="'+escapeHtml(refLink)+'" id="refLinkInput">' +
+        '<button class="btn btn-sm btn-ghost" data-action="copy-ref-link">Скопировать</button></div></div>';
   }
-  html += '</div>';
+  html += '</aside></div>';
   return el(html);
+}
+
+// «Дальше по курсу»: ближайшие уроки (текущий и 3 следующих) и итоговый тест —
+// чтобы с главной было видно, что впереди, а не только одну кнопку «Продолжить».
+function renderHomeNextLessons(doneIds){
+  var lessons = course.lessons, curIdx = -1;
+  lessons.forEach(function(l, i){ if(curIdx<0 && doneIds.indexOf(l.id)===-1) curIdx = i; });
+  var from = curIdx<0 ? Math.max(0, lessons.length-2) : Math.max(0, curIdx-1);
+  var rows = lessons.slice(from, from+4).map(function(l, k){
+    var i = from+k, done = doneIds.indexOf(l.id)!==-1, locked = l.hiddenForMe || l.dripLockedForMe, isCur = i===curIdx;
+    var st = done ? '<span class="hn-st done">'+icon("check","ic-sm")+'пройден</span>'
+      : locked ? '<span class="hn-st">'+icon("lock","ic-sm")+(l.hiddenForMe?'недоступен':'откроется '+fmtDateShort(l.availableAt))+'</span>'
+      : isCur ? '<span class="hn-st cur">сейчас</span>' : '<span class="hn-st">впереди</span>';
+    return '<div class="hn-row'+(isCur?' cur':'')+(locked?' locked':'')+'"'+(locked?'':' data-action="open-lesson-at" data-idx="'+i+'"')+'>' +
+      '<span class="hn-num">'+(done?icon("check","ic-sm"):(i+1))+'</span><div class="hn-body"><b>'+escapeHtml(l.title)+'</b>' +
+      '<span>'+(l.duration?escapeHtml(l.duration):'')+(l.quiz && l.quiz.length?' · тест '+l.quiz.length+' '+ruPluralClient(l.quiz.length,"вопрос","вопроса","вопросов"):'')+(l.assignment?' · задание':'')+'</span></div>'+st+'</div>';
+  }).join("");
+  var pr = course.progress || {}, left = lessons.length - doneIds.length;
+  rows += '<div class="hn-row hn-final'+(left?' locked':'')+'"'+(!left && !pr.completed ? ' data-action="open-final-quiz"' : '')+'>' +
+    '<span class="hn-num">'+icon("badge","ic-sm")+'</span><div class="hn-body"><b>Итоговый тест</b><span>'+(course.quiz?course.quiz.length+' '+ruPluralClient(course.quiz.length,"вопрос","вопроса","вопросов")+' · ':'')+'нужно от 60%</span></div>' +
+    (pr.completed ? '<span class="hn-st done">'+icon("check","ic-sm")+pr.quiz_score+'%</span>' : left ? '<span class="hn-st">после '+left+' '+ruPluralClient(left,"урока","уроков","уроков")+'</span>' : '<span class="hn-st cur">доступен</span>') + '</div>';
+  return '<div class="card home-next ho-2">' + cardHead("Дальше по курсу", '<button class="btn btn-sm btn-ghost" data-action="open-course">Все уроки →</button>') + rows + '</div>';
+}
+// Конспект и протоколы — с реальными цифрами; плитка появляется, только когда
+// в разделе уже есть что показать.
+function renderHomeExtras(){
+  var out = [];
+  var hl = (course.progress && course.progress.lesson_highlights) || {}, notes = (course.progress && course.progress.lesson_notes) || {};
+  var hlCount = 0, lastQuote = null;
+  Object.keys(hl).forEach(function(k){ (hl[k]||[]).forEach(function(h){ hlCount++; if(!lastQuote || (h.at||"") > (lastQuote.at||"")) lastQuote = h; }); });
+  var noteCount = Object.keys(notes).filter(function(k){ return (notes[k]||"").trim(); }).length;
+  var saved = (course.bookmarkedLessonIds||[]).length;
+  out.push('<div class="card board-tile">' + cardHead("Мой конспект", '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="materials">Открыть →</button>') +
+    (hlCount || noteCount || saved
+      ? '<div class="home-stats"><div><b>'+hlCount+'</b><span>'+ruPluralClient(hlCount,"выделение","выделения","выделений")+'</span></div><div><b>'+noteCount+'</b><span>'+ruPluralClient(noteCount,"заметка","заметки","заметок")+'</span></div><div><b>'+saved+'</b><span>'+ruPluralClient(saved,"урок сохранён","урока сохранено","уроков сохранено")+'</span></div></div>' +
+        (lastQuote ? '<p class="home-quote">«'+escapeHtml(lastQuote.text.length>140?lastQuote.text.slice(0,140)+'…':lastQuote.text)+'»</p>' : '')
+      : '<span class="tile-sub">Выделяйте главное в уроках маркером и делайте заметки — всё соберётся здесь.</span>') + '</div>');
+  if(protocolsSectionAvailable()){
+    var sp = studentProtocols, opened = (sp.forYou||[]).length + (sp.additional||[]).length, total = Math.max(sp.totalInCourse||0, opened);
+    out.push('<div class="card board-tile">' + cardHead("Протоколы", '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="protocols">Открыть →</button>') +
+      (studentState.protocolsLoaded
+        ? '<div class="home-stats"><div><b>'+opened+'</b><span>из '+total+' открыто</span></div>' + ((sp.forYou||[]).length ? '<div><b>'+(sp.forYou||[]).length+'</b><span>под вашу специализацию</span></div>' : '') + '</div>' +
+          (sp.nextLesson ? '<span class="tile-sub">Урок '+(sp.nextLesson.idx+1)+' откроет ещё '+sp.nextLesson.unlocks+' '+ruPluralClient(sp.nextLesson.unlocks,"протокол","протокола","протоколов")+'.</span>' : '')
+        : '<span class="tile-sub">Гайды применения протоколов из уроков под вашу специализацию.</span>') + '</div>');
+  }
+  return '<div class="home-extras ho-2">' + out.join("") + '</div>';
 }
 
 function stripHtml(html){

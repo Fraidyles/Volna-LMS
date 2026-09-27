@@ -2130,3 +2130,64 @@ mark.hl.hl-flash{animation:hlFlash 1.6s ease;}
   .qe-step-head{flex-wrap:wrap;}
   .qe-seg{margin-left:0;}
 }
+
+/* ===== Главная врача: две колонки на широком экране ===== */
+.wrap.wrap-wide{max-width:1320px;}
+.home-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;}
+.home-main,.home-rail{display:flex;flex-direction:column;gap:14px;min-width:0;}
+.home-main > .card{margin:0;}
+.home-rail > .card{margin:0;}
+@media (min-width:1100px){
+  .home-grid{grid-template-columns:minmax(0,1fr) 340px;align-items:start;}
+  .home-rail{position:sticky;top:16px;}
+}
+@media (min-width:1500px){ .home-grid{grid-template-columns:minmax(0,1fr) 380px;} }
+/* онбординг и анкета внутри колонки — без собственных внешних отступов */
+.home-main > .card[style*="margin-bottom"]{margin-bottom:0 !important;}
+
+/* «Дальше по курсу» */
+.home-next{padding:18px 20px 10px;}
+.hn-row{display:flex;align-items:center;gap:14px;padding:11px 10px;margin:0 -10px;border-radius:12px;cursor:pointer;transition:background .15s;}
+.hn-row:hover{background:var(--surface-2);}
+.hn-row.locked{cursor:default;opacity:.62;}
+.hn-row.locked:hover{background:none;}
+.hn-row + .hn-row{border-top:1px solid var(--line-2);border-radius:0;}
+.hn-row + .hn-row:hover{border-radius:0;}
+.hn-num{flex:0 0 30px;height:30px;border-radius:10px;display:grid;place-items:center;font-size:13px;font-weight:700;color:var(--muted);
+  background:var(--surface-2);border:1px solid var(--line-2);}
+.hn-row.cur .hn-num{background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:0 0 14px -2px color-mix(in srgb,var(--primary) 60%,transparent);}
+.hn-body{flex:1;min-width:0;}
+.hn-body b{display:block;font-size:14px;font-weight:600;line-height:1.35;}
+.hn-body span{display:block;font-size:12px;color:var(--muted);margin-top:2px;}
+.hn-st{flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);white-space:nowrap;}
+.hn-st.done{color:var(--status-active);}
+.hn-st.cur{color:var(--primary);font-weight:600;}
+.hn-final .hn-num{color:var(--status-attention);}
+
+/* конспект и протоколы */
+.home-extras{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;}
+.home-stats{display:flex;gap:22px;flex-wrap:wrap;margin:2px 0 8px;}
+.home-stats b{display:block;font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.1;}
+.home-stats span{display:block;font-size:12px;color:var(--muted);margin-top:2px;}
+.home-quote{margin:4px 0 0;padding:8px 12px;border-left:3px solid var(--primary);border-radius:8px;font-size:13px;line-height:1.5;
+  background:color-mix(in srgb,var(--primary) 9%,transparent);}
+
+/* правая колонка */
+.home-pts{height:6px;border-radius:99px;background:var(--line-2);margin-top:12px;overflow:hidden;align-self:stretch;}
+.home-pts i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--primary),var(--status-active));}
+.home-cur{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.home-cur .home-cur-av{width:38px;height:38px;font-size:13px;}
+.home-cur b{display:block;font-size:14px;font-weight:600;}
+.home-cur span{display:block;font-size:12px;color:var(--muted);}
+.home-notifs{display:flex;flex-direction:column;align-self:stretch;}
+.home-notifs div{font-size:13px;font-weight:600;padding:8px 0;border-top:1px solid var(--line-2);}
+.home-notifs div:first-child{border-top:none;padding-top:0;}
+.home-ref{display:flex;gap:6px;margin-top:12px;align-self:stretch;}
+.home-ref .input{font-size:12px;min-width:0;}
+/* Узкий экран — одна колонка в осмысленном порядке: курс → эфир и прогресс →
+   что дальше → куратор, уведомления, приглашение (а не вся правая колонка в конце). */
+@media (max-width:1099px){
+  .home-grid{display:flex;flex-direction:column;}
+  .home-main,.home-rail{display:contents;}
+  .ho-1{order:1;} .ho-2{order:2;} .ho-3{order:3;}
+}
