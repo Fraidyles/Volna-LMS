@@ -2924,7 +2924,7 @@ function guideRow(sent){
     var lead = "", chain = body, ci = body.indexOf(":");
     if(ci > 0 && ci < body.indexOf("→")){ lead = body.slice(0, ci); chain = body.slice(ci+1); }
     var tail = "";
-    var steps = chain.split("→").map(function(x){ return x.trim(); }).filter(Boolean);
+    var steps = chain.split("→").map(function(x){ return x.trim().replace(/^./, function(c){ return c.toUpperCase(); }); }).filter(Boolean);
     var last = steps[steps.length-1], cut = last.search(/\.\s/);
     if(cut > 0){ tail = last.slice(cut+1).trim(); steps[steps.length-1] = last.slice(0, cut); }
     return '<div class="gd-row gd-chain-row">' + (lead ? '<div class="gd-term">'+escapeHtml(lead)+'</div>' : '') +
