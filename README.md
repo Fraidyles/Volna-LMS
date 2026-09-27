@@ -131,15 +131,42 @@ server {
     listen 80;
     server_name edu.вашдомен.ру;
 
+    # Видео урока загружается файлом до 500 МБ. Без этой строки Nginx по умолчанию
+    # пропускает не больше 1 МБ — любая загрузка видео падала бы с ошибкой 413.
+    client_max_body_size 510m;
+
     location / {
         proxy_pass http://localhost:8790;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
+        # Обязательно: по этому заголовку сервер видит настоящий IP врача. Без него
+        # все запросы приходят «с IP Nginx», и защита от подбора пароля блокирует
+        # вход всем сразу после нескольких чужих неудачных попыток.
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 ```
 Затем: `sudo certbot --nginx -d edu.вашдомен.ру`
+
+### Если платформа живёт в подпапке существующего сайта
+
+Когда нет возможности завести отдельный поддомен, платформу можно открыть по адресу
+вида `https://сайт.ру/lms/`. В `.env` укажите `BASE_PATH=/lms`, а в конфиг уже
+работающего сайта добавьте (строки `client_max_body_size` и `X-Forwarded-For` —
+по тем же причинам, что выше):
+
+```nginx
+    location /lms/ {
+        client_max_body_size 510m;
+        proxy_pass http://localhost:8790;          # без слэша на конце — путь /lms/… передаётся как есть
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+```
+Проверено: вход, все разделы всех ролей, фото профиля, выгрузки CSV, сертификаты,
+загруженное видео с перемоткой и офлайн-оболочка работают по адресу `/lms/`.
 
 ## 7. Ежедневные бэкапы БД
 
