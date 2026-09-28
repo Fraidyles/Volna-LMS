@@ -2502,10 +2502,6 @@ mark.hl.hl-flash{animation:hlFlash 1.6s ease;}
 @media (max-width:1100px){ .lp-grid{grid-template-columns:minmax(0,1fr);} .lp-ready{position:static;} }
 @media (max-width:640px){ .lp-panel{padding:16px;} .lp-title{font-size:20px;} }
 /* протоколы */
-.pr-tabs{display:flex;gap:6px;flex-wrap:wrap;}
-.pr-tab{padding:8px 14px;border-radius:999px;font:500 14px var(--sans);color:var(--muted);border:var(--border-hairline);background:transparent;cursor:pointer;}
-.pr-tab i{font-style:normal;color:var(--muted);margin-left:4px;}
-.pr-tab.on{background:var(--primary-tint);color:var(--ink);border-color:color-mix(in srgb,var(--primary) 50%,transparent);}
 .pr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;}
 .pr-card{padding:18px 20px;display:flex;flex-direction:column;gap:10px;cursor:pointer;overflow:visible;}
 .pr-top{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:34px;}
@@ -2544,3 +2540,27 @@ mark.hl.hl-flash{animation:hlFlash 1.6s ease;}
 /* Открытое меню «⋯» — поверх следующих карточек (у каждой .card свой слой). */
 .ls-sec,.pr-card,.lp-head{position:relative;}
 .ls-sec:has(.ls-menu),.pr-card:has(.ls-menu),.lp-head:has(.ls-menu){z-index:20;}
+
+/* Главная персонала: быстрые действия и «Что доделать в курсе» */
+.qa-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:0 0 18px;}
+.qa-btn{display:flex;align-items:center;gap:12px;padding:14px 16px;min-width:0;text-align:left;cursor:pointer;color:var(--ink);font-family:var(--sans);}
+.qa-btn:hover{border-color:color-mix(in srgb,var(--primary) 45%,transparent);}
+.qa-ic{width:38px;height:38px;border-radius:12px;background:var(--primary-tint);color:var(--primary);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.qa-btn b{display:block;font-size:14px;font-weight:600;}
+.qa-btn em{display:block;font-style:normal;font-size:12px;color:var(--muted);margin-top:2px;}
+.ci-card{padding:18px 20px;}
+.ci-head{display:flex;align-items:center;gap:10px;margin-bottom:6px;} .ci-head b{font-size:15px;font-weight:700;}
+.ci-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line-2);font-size:13px;cursor:pointer;}
+.ci-row:hover .ci-text{color:var(--ink);}
+.ci-text{flex:1;min-width:0;color:var(--ink);}
+.ci-row em{font-style:normal;font-size:12px;font-weight:600;color:var(--primary);white-space:nowrap;}
+.ci-ok{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin:6px 0 0;}
+.ci-more{margin-top:8px;font-size:13px;}
+@media (max-width:640px){ .qa-row{grid-template-columns:repeat(2,minmax(0,1fr));} .qa-btn span:last-child{min-width:0;} .qa-btn{padding:12px;} .qa-ic{width:32px;height:32px;} .ci-row em{display:none;} }
+/* «Требует внимания» на телефоне: строка и так открывает врача — кнопка лишняя
+   и выдавливала имя в узкий столбик под бейджем. */
+@media (max-width:640px){
+  .inbox-row-link .btn{display:none;}
+  .days-pill{flex-shrink:0;}
+  .qa-btn em{display:none;}
+}

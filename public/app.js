@@ -2160,30 +2160,30 @@ function renderSidebar(){
     var snavKey = staffState.navKey || "students";
     var isAdmin = me.role==="admin" || me.role==="super_admin";
     var staffNotifBadge = upcomingEventReminders().length + (notifState.unreadCount||0);
-    items += sidebarItem("profile","user","Мой профиль", snavKey==="profile");
+    // Меню по задачам: главная → врачи и их ответы → расписание → обучение →
+    // продажи → управление. «Мой профиль» — вниз, к настройкам: у персонала он
+    // нужен редко.
     items += sidebarItem("home","home","Главная", snavKey==="home");
-    // Разделы сгруппированы, как в GetCourse: заголовок группы раскрывает
-    // вложенные пункты (состояние запоминается), группа с открытым разделом
-    // раскрыта всегда. В свёрнутой полосе видна только иконка группы.
     items += sidebarGroup("people","users","Врачи", snavKey, [
-      ["students","users","Ученики"], ["dashboard","chartbar","Аналитика"]
+      ["students","users","Список врачей"], ["dashboard","chartbar","Аналитика"]
+    ]);
+    items += sidebarGroup("answers","task","Ответы врачей", snavKey, [
+      ["assignments","task","Проверка заданий", (toolsState.assign.counts||{}).pending||0], ["feed","feed","Лента ответов"], ["surveys","poll","Анкеты"]
     ]);
     items += sidebarItem("calendar","calendar","Расписание", snavKey==="calendar");
     // «Уроки» объединяют прежние «Учебные материалы» и «Модули»: модули — секции списка.
     items += sidebarGroup("learning","book","Обучение", snavKey, (isAdmin?[["courses","folder","Курсы"]]:[]).concat([
       ["materials","folder","Уроки"]], [["protocols","doctor","Протоколы"]]));
-    items += sidebarGroup("answers","task","Ответы врачей", snavKey, [
-      ["assignments","task","Проверка заданий", (toolsState.assign.counts||{}).pending||0], ["feed","feed","Лента ответов"], ["surveys","poll","Анкеты"]
-    ]);
     items += sidebarGroup("sales","wallet","Продажи", snavKey, [
       ["orders","wallet","Заказы и оплаты", (toolsState.orders.summary||{}).overdueOrders||0]].concat(isAdmin?[["products","folder","Продукты"]]:[]));
     if(isAdmin){
       items += sidebarGroup("admin","shield","Управление", snavKey, [
-        ["team","users","Команда"], ["audit","list","Журнал действий"]
+        ["team","users","Команда"], ["specializations","doctor","Специализации"], ["audit","list","Журнал действий"]
       ]);
     }
     items += sidebarItem("telegram","message","Telegram", snavKey==="telegram");
     items += sidebarItem("notifications","bell","Уведомления", snavKey==="notifications", staffNotifBadge);
+    items += sidebarItem("profile","user","Мой профиль", snavKey==="profile");
     items += sidebarItem("settings","gear","Настройки", snavKey==="settings");
   }
 
@@ -4166,6 +4166,14 @@ function renderSettingsPage(){
 }
 
 /* ============================= РЕНДЕР: ПЕРСОНАЛ ============================= */
+var STAFF_PAGE_TITLES = { home:"Главная", students:"Врачи", dashboard:"Аналитика", calendar:"Расписание", courses:"Курсы",
+  materials:"Уроки", protocols:"Протоколы", assignments:"Проверка заданий", feed:"Лента ответов", surveys:"Анкеты и опросы",
+  orders:"Заказы и оплаты", products:"Продукты", team:"Команда", audit:"Журнал действий", specializations:"Специализации",
+  telegram:"Telegram", notifications:"Уведомления", settings:"Настройки", profile:"Мой профиль" };
+// Разделы, где данные зависят от выбранного курса (запросы с courseId); в остальных
+// (заказы, продукты, анкеты, команда, журнал, Telegram, профиль, настройки, сами
+// курсы — у них выбор плиткой) переключатель курса только занимал место.
+var STAFF_COURSE_SCOPED = ["home","students","dashboard","calendar","materials","protocols","assignments","feed","notifications"];
 function renderStaffShell(){
   var wrap = el('<div></div>');
   var mobNavBackdrop = renderMobileNavBackdrop();
@@ -4182,10 +4190,11 @@ function renderStaffShell(){
   // заголовок и переключатель курса там лишние.
   var ownPage = (staffState.mainTab==="materials" && staffState.lessonPageId) || (staffState.mainTab==="protocols" && protocolEditor.open);
   if(!ownPage){
-    var pageTitles = { materials:"Уроки", protocols:"Протоколы" };
-    content.appendChild(el('<h1 class="section-title">'+escapeHtml(pageTitles[staffState.mainTab] || roleLabel(me.role))+'</h1>'));
-    // Потоки и их группы общие для всех курсов — переключатель курса там лишний.
-    if(staffState.mainTab !== "telegram") content.appendChild(renderStaffCourseSwitcher());
+    // Заголовок — название раздела (раньше на каждом экране было «Главный
+    // администратор»: роль не подсказывает, где ты и что здесь делать).
+    content.appendChild(el('<h1 class="section-title">'+escapeHtml(STAFF_PAGE_TITLES[staffState.mainTab] || roleLabel(me.role))+'</h1>'));
+    // Переключатель курса — только там, где данные зависят от выбранного курса.
+    if(STAFF_COURSE_SCOPED.indexOf(staffState.mainTab)!==-1) content.appendChild(renderStaffCourseSwitcher());
   }
 
   if(staffState.mainTab === "courses" && (me.role==="admin"||me.role==="super_admin")){
@@ -4200,6 +4209,8 @@ function renderStaffShell(){
     content.appendChild(renderDashboardTab());
   } else if(staffState.mainTab === "protocols"){
     content.appendChild(renderProtocolsAdminTab());
+  } else if(staffState.mainTab === "specializations" && isAdminRole()){
+    content.appendChild(el('<div class="page-wide">'+renderSpecializationsCard()+'</div>'));
   } else if(staffState.mainTab === "audit" && (me.role==="admin"||me.role==="super_admin")){
     content.appendChild(renderAuditLogTab());
   } else if(staffState.mainTab === "notifications"){
@@ -4315,7 +4326,54 @@ function renderStaffNotificationsPage(){
 // окна уведомлений/сообщений (как на главной врача) и дайджест-«ИИ-ассистент»
 // за вчера (детерминированный шаблон из src/dailyDigest.js, не LLM-вызов —
 // см. комментарий в самом dailyDigest.js).
+// Быстрые действия на главной персонала — самое частое, без поиска по меню.
+function renderStaffQuickActions(){
+  var admin = isAdminRole();
+  var acts = [];
+  if(admin) acts.push(["open-lesson-creator","book","Урок","новый урок курса"]);
+  if(admin) acts.push(["home-new-protocol","doctor","Протокол","гайды по специализациям"]);
+  acts.push(["open-event-form","calendar","Эфир","в расписание потока", ' data-date="'+todayIso()+'"']);
+  acts.push(["home-invite","users","Врач","пригласить на курс"]);
+  return '<div class="qa-row">' + acts.map(function(a){
+    return '<button type="button" class="card qa-btn" data-action="'+a[0]+'"'+(a[4]||'')+'><span class="qa-ic">'+icon(a[1])+'</span><span><b>+ '+a[2]+'</b><em>'+a[3]+'</em></span></button>';
+  }).join('') + '</div>';
+}
+// «Что доделать в курсе» (только администратор): уроки без теста, неопубликованные
+// правки, итоговый тест без вопросов, протоколы без урока или гайдов, пустые
+// модули. Каждая строка ведёт прямо туда, где это исправляется.
+function staffContentIssues(){
+  var out = [], list = staffState.materials || [];
+  list.forEach(function(l, i){
+    if(l.has_draft) out.push({ kind:"warn", text:"Урок "+(i+1)+" «"+l.title+"» — правки не опубликованы", act:' data-action="open-lesson-page" data-id="'+l.id+'" data-tab="content"', go:"Опубликовать" });
+  });
+  list.forEach(function(l, i){
+    if(!l.quiz_count) out.push({ kind:"warn", text:"Урок "+(i+1)+" «"+l.title+"» — нет теста", act:' data-action="open-lesson-page" data-id="'+l.id+'" data-tab="quiz"', go:"Добавить" });
+  });
+  var noVideo = list.filter(function(l){ return !l.has_video; }).length;
+  if(noVideo) out.push({ kind:"info", text:noVideo+" "+ruPluralClient(noVideo,"урок","урока","уроков")+" без видео", act:' data-action="sidebar-nav" data-key="materials"', go:"К урокам" });
+  if(list.length && !(staffState.quizAdmin||[]).length) out.push({ kind:"warn", text:"В итоговом тесте нет вопросов — сертификат не выдать", act:' data-action="open-lesson-page" data-id="quiz" data-tab="questions"', go:"Добавить" });
+  (adminProtocolsState.list||[]).forEach(function(pr){
+    if(!(pr.lessonIds||[]).length) out.push({ kind:"warn", text:"Протокол «"+pr.title+"» не привязан к уроку — врачи его не получат", act:' data-action="home-open-protocol" data-id="'+pr.id+'"', go:"Привязать" });
+    else if(!(pr.guides||[]).length) out.push({ kind:"warn", text:"У протокола «"+pr.title+"» нет гайдов", act:' data-action="home-open-protocol" data-id="'+pr.id+'"', go:"Добавить" });
+  });
+  (moduleManagerState.modules||[]).forEach(function(m){
+    if(!(m.lessonIds||[]).length) out.push({ kind:"info", text:"В модуле «"+m.title+"» нет уроков", act:' data-action="sidebar-nav" data-key="materials"', go:"К урокам" });
+  });
+  return out;
+}
+function renderContentIssuesCard(){
+  var issues = staffContentIssues(), shown = issues.slice(0, 6);
+  var html = '<div class="card co-card ci-card"><div class="ci-head"><b>Что доделать в курсе</b>' +
+    (issues.length ? '<span class="ls-n">'+issues.length+' '+ruPluralClient(issues.length,"пункт","пункта","пунктов")+'</span>' : '') + '</div>';
+  if(!issues.length) return html + '<p class="ci-ok">'+icon("check","ic-sm")+'Во всех уроках есть тест, правки опубликованы, протоколы привязаны.</p></div>';
+  html += shown.map(function(x){
+    return '<div class="ci-row"'+x.act+'><span class="lp-dot '+(x.kind==="warn"?"no":"na")+'">'+(x.kind==="warn"?"!":"i")+'</span><span class="ci-text">'+escapeHtml(x.text)+'</span><em>'+x.go+' →</em></div>';
+  }).join('');
+  if(issues.length > shown.length) html += '<button type="button" class="link-btn ci-more" data-action="sidebar-nav" data-key="materials">Ещё '+(issues.length-shown.length)+' — в разделе «Уроки» →</button>';
+  return html + '</div>';
+}
 function renderStaffHome(container){
+  container.appendChild(el(renderStaffQuickActions()));
   var totalLessons = (staffState.materials||[]).length || 1;
   var students = staffState.students || [];
   var byStream = {};
@@ -4381,6 +4439,8 @@ function renderStaffHome(container){
       '<p style="font-size:13px;margin:4px 0 0;">Никто не ждёт ответа и не завис без активности — новые задачи появятся здесь сами.</p>' +
     '</div>'
   ));
+
+  if(isAdminRole() && (staffState.materials||[]).length) container.appendChild(el('<div style="margin-top:14px;">'+renderContentIssuesCard()+'</div>'));
 
   var reminders = upcomingEventReminders();
   var gridHtml = '<div class="grid-2" style="margin-top:20px;">';
@@ -5729,17 +5789,13 @@ function prLessonLabels(p){
 }
 function renderProtocolsAdminTab(){
   if(protocolEditor.open) return renderProtocolPage();
-  var admin = isAdminRole(), tab = admin ? (staffState.protoTab||"list") : "list";
+  var admin = isAdminRole(), tab = "list";
   var all = adminProtocolsState.list, q = (staffState.protoQuery||"").trim().toLowerCase();
   var list = q ? all.filter(function(p){ return (p.title+" "+(p.summary||"")).toLowerCase().indexOf(q)!==-1; }) : all;
   var html = '<div class="ls-page"><div class="ls-bar"><p class="ls-sub">Протокол открывается врачу после привязанных уроков — с гайдом под его специализацию.</p>' +
     '<div class="ls-actions">'+(tab==="list" ? '<label class="ls-search">'+icon("search","ic-sm")+'<input id="protocolsSearchInput" placeholder="Найти протокол" value="'+escapeHtml(staffState.protoQuery||"")+'" autocomplete="off"></label>' : '') +
       (admin ? '<button type="button" class="btn btn-primary" data-action="open-protocol-creator">+ Протокол</button>' : '') + '</div></div>';
-  if(admin){
-    html += '<div class="pr-tabs"><button type="button" class="pr-tab'+(tab==="list"?' on':'')+'" data-action="proto-tab" data-tab="list">Протоколы <i>'+all.length+'</i></button>' +
-      '<button type="button" class="pr-tab'+(tab==="specs"?' on':'')+'" data-action="proto-tab" data-tab="specs">Специализации <i>'+specializationsList.length+'</i></button></div>';
-  }
-  if(tab==="specs") return el(html + renderSpecializationsCard() + '</div>');
+
   if(!all.length){
     html += '<div class="card empty-state" style="padding:36px 16px;">Протоколов пока нет.'+(admin?' Нажмите «+ Протокол», чтобы добавить первый.':'')+'</div>';
     return el(html + '</div>');
@@ -5992,7 +6048,7 @@ function renderCoursesTab(){
   // статус сертификатов; «Изменить»/«Удалить» — по наведению. Создание курса —
   // пунктирная плитка «+ Новый курс», раскрывающаяся в форму.
   var list = staffState.coursesList;
-  var html = '<div class="page-wide"><div class="courses-head"><b class="page-h" style="margin:0;">Курсы</b>' +
+  var html = '<div class="page-wide"><div class="courses-head">' +
     '<span class="courses-count">'+list.length+' '+ruPluralClient(list.length,"курс","курса","курсов")+'</span></div>' +
     '<div class="courses-grid">';
   list.forEach(function(c){
@@ -6429,8 +6485,10 @@ function lessonNo(lessonId, idx){
   var i = (staffState.materials||[]).findIndex(function(l){ return l.id===lessonId; });
   return i!==-1 ? i+1 : (typeof idx==="number" ? idx+1 : "");
 }
+// Название раздела уже в общем заголовке страницы (STAFF_PAGE_TITLES) — здесь
+// только пояснение и кнопки справа; title оставлен для читаемости вызовов.
 function toolsHead(title, sub, right){
-  return '<div class="tools-head"><div><h2>'+escapeHtml(title)+'</h2>'+(sub?'<p>'+sub+'</p>':'')+'</div>'+(right?'<div class="tools-head-r">'+right+'</div>':'')+'</div>';
+  return '<div class="tools-head"><div>'+(sub?'<p>'+sub+'</p>':'')+'</div>'+(right?'<div class="tools-head-r">'+right+'</div>':'')+'</div>';
 }
 function starsHtml(n){ var h=''; for(var i=1;i<=5;i++) h += '<span class="'+(i<=n?'on':'')+'">'+icon("star","ic-sm")+'</span>'; return h; }
 function splitAmountClient(total, n){ var base=Math.floor(total/n), parts=[]; for(var i=0;i<n;i++) parts.push(base); parts[0]+=total-base*n; return parts; }
@@ -7996,6 +8054,23 @@ function wireEvents(root){
 
     /* ---------- Уроки: список и страница урока ---------- */
     if(action==="ls-noop") return;
+    if(action==="home-new-protocol" || action==="home-open-protocol"){
+      var hpId = t.getAttribute("data-id");
+      await navigateToTab("protocols");
+      if(staffState.mainTab!=="protocols") return;
+      var hp = hpId ? (adminProtocolsState.list||[]).find(function(x){ return x.id===hpId; }) : null;
+      protocolEditor = hp ? { open:true, id:hp.id, title:hp.title, summary:hp.summary||"", guides:hp.guides.slice(), lessonIds:hp.lessonIds.slice() }
+        : { open:true, id:null, title:"", summary:"", guides:[], lessonIds:[] };
+      render(); window.scrollTo(0,0); return;
+    }
+    if(action==="home-invite"){
+      await navigateToTab("students");
+      if(staffState.mainTab!=="students") return;
+      staffState.showInviteStudent = true; render();
+      var hiForm = document.getElementById("inviteStudentForm");
+      if(hiForm){ hiForm.scrollIntoView({ behavior:"smooth", block:"center" }); var hiIn = hiForm.querySelector("input"); if(hiIn) hiIn.focus(); }
+      return;
+    }
     if(action==="ls-menu"){ var lmKey=t.getAttribute("data-key"); staffState.lsMenu = staffState.lsMenu===lmKey ? null : lmKey; render(); return; }
     if(action==="toggle-module-create"){ staffState.showModuleCreate=!staffState.showModuleCreate; render(); return; }
     if(action==="open-lesson-page" || action==="lesson-page-go"){
@@ -8004,6 +8079,8 @@ function wireEvents(root){
       staffState.lsMenu=null;
       if(staffState.lessonPageId && !lpLeaveOk()){ render(); return; }
       var olpTab=t.getAttribute("data-tab") || (action==="lesson-page-go" ? staffState.lessonPageTab : null);
+      // Со главной («Что доделать в курсе») — сначала в раздел «Уроки».
+      if(staffState.mainTab!=="materials"){ staffState.mainTab="materials"; staffState.navKey="materials"; }
       lpCloseEditors(); lpAuto = { pending:null, fails:{} };
       staffState.lessonPageId=olpId;
       staffState.lessonPageTab=olpTab || (olpId==="quiz" ? (isAdminRole()?"questions":"access") : (isAdminRole()?"content":"schedule"));
@@ -8036,7 +8113,6 @@ function wireEvents(root){
       await lsApplyMove(t.getAttribute("data-id"), null, "into", t.getAttribute("data-module")||"");
       return;
     }
-    if(action==="proto-tab"){ staffState.protoTab=t.getAttribute("data-tab"); render(); return; }
     if(action==="pr-scroll"){ var prTarget=document.getElementById(t.getAttribute("data-target")); if(prTarget) prTarget.scrollIntoView({ behavior:"smooth", block:"start" }); return; }
     if(action==="pick-guide-spec"){
       protocolEditor.newSpec=t.getAttribute("data-spec"); render();
