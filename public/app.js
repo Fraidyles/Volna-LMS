@@ -1571,7 +1571,7 @@ function renderWysiwygToolbar(targetId, hiddenId){
   function btn(cmd, label, title){
     return '<button type="button" data-action="wysiwyg-cmd" data-cmd="'+cmd+'" data-target="'+targetId+'" data-hidden="'+hiddenId+'" title="'+escapeHtml(title)+'">'+label+'</button>';
   }
-  return '<div class="wysiwyg-toolbar">' +
+  return '<div class="wysiwyg-toolbar">' + (targetId==="lessonWysiwygEditor" ? lbMenuHtml() : '') +
     btn("bold","<b>Ж</b>","Жирный") + btn("italic","<i>К</i>","Курсив") + btn("underline","<u>Ч</u>","Подчёркнутый") +
     '<span class="wysiwyg-sep"></span>' +
     btn("h3","H3","Заголовок 3 уровня") + btn("h4","H4","Заголовок 4 уровня") + btn("h5","H5","Заголовок 5 уровня") + btn("p","¶","Обычный текст") +
@@ -1582,6 +1582,199 @@ function renderWysiwygToolbar(targetId, hiddenId){
     '<span class="wysiwyg-sep"></span>' +
     btn("clear","Очистить","Убрать форматирование") +
   '</div>';
+}
+
+/* ============================= БЛОКИ УРОКА: «+ Блок» и панель блока ============================= */
+// Оформленные блоки в тексте урока (Главное, Цифры, Что делать врачу, Важно, Дополнительно,
+// Шпаргалка). Разметка — div/span/h5/p/ul с классами lb-*, т.е. ровно то, что пропускает
+// sanitizeLessonHtml; иконки шагов — классы lbi-*, картинка задаётся в CSS. Блок вставляется
+// после абзаца с курсором, текст правится прямо в редакторе; когда курсор внутри блока,
+// над редактором появляется панель: добавить/убрать деление, число, шаг, сменить цвет или
+// иконку, передвинуть или удалить блок.
+var LB_ICONS = [["search","анализ"],["drop","кровь"],["cal","сроки"],["user","пациент"],["clip","анамнез"],["pill","препарат"],["heart","сердце"],["scale","вес"],["check","проверка"],["alert","осторожно"]];
+var LB_TONES = [["lbt-ok","норма"],["lbt-warn","пограничное"],["lbt-bad","отклонение"]];
+var LB_KINDS = {
+  key:   { name:"Главное", icon:"!", cls:"m-key", hint:"Цветной блок по центру: правило или порог, по желанию со шкалой",
+    html:'<div class="lb lb-key"><span class="lb-lab">Главное</span><div class="lb-big">Главная мысль или порог — одной фразой</div>' +
+      '<div class="lb-scale"><div class="lb-seg lbt-ok"><span class="lb-v">&gt; 12</span>норма</div><div class="lb-seg lbt-warn"><span class="lb-v">8–12</span>пограничное значение</div><div class="lb-seg lbt-bad"><span class="lb-v">&lt; 8</span>отклонение</div></div></div>' },
+  stats: { name:"Цифры", icon:"%", cls:"", hint:"2–4 крупных числа с подписями",
+    html:'<div class="lb lb-card"><h5>Заголовок</h5><div class="lb-stats"><div class="lb-stat"><span class="lb-v">40%</span>подпись к числу</div><div class="lb-stat"><span class="lb-v">&gt; 50%</span>подпись к числу</div></div></div>' },
+  steps: { name:"Что делать врачу", icon:"✓", cls:"", hint:"Шаги карточками: иконка, действие, пояснение",
+    html:'<div class="lb lb-card"><h5>Что делать врачу</h5><div class="lb-steps"><div class="lb-step lbi-search"><span class="lb-v">Действие</span>зачем или как</div><div class="lb-step lbi-clip"><span class="lb-v">Действие</span>зачем или как</div></div></div>' },
+  warn:  { name:"Важно", icon:"⚠", cls:"m-warn", hint:"Противопоказания, предупреждения — красная рамка",
+    html:'<div class="lb lb-warn"><span class="lb-lab">Важно</span><ul><li>Пункт</li></ul></div>' },
+  note:  { name:"Дополнительно", icon:"+", cls:"m-note", hint:"Для тех, кто хочет глубже — спокойный блок",
+    html:'<div class="lb lb-note"><span class="lb-lab">Дополнительно</span><p>Текст</p></div>' },
+  cheat: { name:"Шпаргалка", icon:"✓", cls:"m-cheat", hint:"Итоги урока списком с галочками",
+    html:'<div class="lb lb-cheat"><span class="lb-lab">Шпаргалка</span><ul><li>Итог</li></ul></div>' }
+};
+var LB_ORDER = ["key","stats","steps","warn","note","cheat"];
+var lbCur = null;
+
+function lbMenuHtml(){
+  return '<button type="button" class="lb-add" data-action="lb-menu-toggle" title="Вставить оформленный блок">＋ Блок ▾</button>' +
+    '<div class="lb-menu" id="lbMenu" hidden>' + LB_ORDER.map(function(k){ var d = LB_KINDS[k];
+      return '<button type="button" data-action="lb-insert" data-kind="'+k+'"><i class="'+d.cls+'">'+d.icon+'</i><span><b>'+d.name+'</b><span>'+d.hint+'</span></span></button>';
+    }).join('') + '</div><span class="wysiwyg-sep"></span>';
+}
+function lbKind(block){
+  if(!block) return null;
+  if(block.classList.contains("lb-key")) return "key";
+  if(block.classList.contains("lb-warn")) return "warn";
+  if(block.classList.contains("lb-note")) return "note";
+  if(block.classList.contains("lb-cheat")) return "cheat";
+  if(block.querySelector(".lb-steps")) return "steps";
+  if(block.querySelector(".lb-stats")) return "stats";
+  return "card";
+}
+// HTML редактора без служебной подсветки выбранного блока.
+function lbHtml(ed){ return ed.innerHTML.replace(/ lb-focus/g, ""); }
+function lbSync(){
+  var ed = document.getElementById("lessonWysiwygEditor");
+  if(!ed) return;
+  var h = lbHtml(ed), hidden = document.getElementById("lessonHtmlHidden");
+  if(hidden) hidden.value = h;
+  lessonEditor.html = h;
+  lpRefreshPreviewSoon();
+}
+function lbSelectText(el){
+  if(!el) return;
+  // Выделяем именно текстовый узел: выделение «содержимого элемента» Chrome сдвигает
+  // в конец предыдущего inline-элемента (подписи блока), и ввод уходит туда.
+  var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null), first = w.nextNode(), last = first, x;
+  while((x = w.nextNode())) last = x;
+  var r = document.createRange(), s = window.getSelection();
+  if(first){ r.setStart(first, 0); r.setEnd(last, last.nodeValue.length); } else r.selectNodeContents(el);
+  s.removeAllRanges(); s.addRange(r);
+}
+function lbCaretNode(){
+  var s = window.getSelection();
+  if(!s.rangeCount) return null;
+  var n = s.getRangeAt(0).startContainer;
+  return n.nodeType===1 ? n : n.parentElement;
+}
+function lbInsert(kind){
+  var ed = document.getElementById("lessonWysiwygEditor"), d = LB_KINDS[kind];
+  if(!ed || !d) return;
+  var n = lbCaretNode(), top = null;
+  if(n && ed.contains(n) && n!==ed){ top = n; while(top.parentNode!==ed) top = top.parentNode; }
+  var tmp = document.createElement("div"); tmp.innerHTML = d.html;
+  var block = tmp.firstChild;
+  if(top && top.tagName==="P" && !top.textContent.trim() && !top.querySelector("img,iframe")) ed.replaceChild(block, top);
+  else if(top) ed.insertBefore(block, top.nextSibling);
+  else ed.appendChild(block);
+  var next = block.nextElementSibling;
+  if(!next || next.tagName!=="P"){ var p = document.createElement("p"); p.innerHTML = "<br>"; ed.insertBefore(p, block.nextSibling); }
+  ed.focus();
+  lbSelectText(lbFirst(block, [".lb-big","h5","li","p",".lb-lab"]));
+  block.scrollIntoView({ block:"nearest" });
+  lbSync(); lbUpdateBar();
+}
+// querySelector со списком селекторов берёт первый по документу, а нужен первый по приоритету.
+function lbFirst(el, sels){ for(var i=0;i<sels.length;i++){ var x = el.querySelector(sels[i]); if(x) return x; } return null; }
+function lbItem(block, sel){
+  var n = lbCaretNode(), it = n && n.closest(sel);
+  return it && block.contains(it) ? it : null;
+}
+function lbBarHtml(block){
+  var k = lbKind(block), b = function(op, label, cls){ return '<button type="button" data-action="lb-op" data-op="'+op+'"'+(cls?' class="'+cls+'"':'')+'>'+label+'</button>'; };
+  var name = k==="card" ? "Карточка" : LB_KINDS[k].name, out = '<b>Блок «'+name+'»</b>';
+  if(k==="key"){
+    var seg = lbItem(block, ".lb-seg");
+    out += block.querySelector(".lb-scale") ? b("seg-add","+ деление") + (seg ? b("seg-tone","Цвет: "+(LB_TONES.filter(function(t){ return seg.classList.contains(t[0]); })[0]||LB_TONES[0])[1]) + b("seg-del","− деление") : "") + b("scale-del","Убрать шкалу") : b("scale-add","+ шкала");
+  } else if(k==="stats"){
+    out += b("stat-add","+ число") + (lbItem(block, ".lb-stat") ? b("stat-del","− число") : "");
+  } else if(k==="steps"){
+    var st = lbItem(block, ".lb-step");
+    out += b("step-add","+ шаг");
+    if(st){
+      var ic = LB_ICONS.filter(function(x){ return st.classList.contains("lbi-"+x[0]); })[0] || LB_ICONS[0];
+      out += b("step-icon","Иконка: "+ic[1]) + b("step-up","↑ шаг") + b("step-down","↓ шаг") + b("step-del","− шаг");
+    }
+  } else if(k==="warn" || k==="cheat"){
+    out += '<span style="color:var(--muted);font-size:12px;">Enter — новый пункт</span>';
+  }
+  return out + '<span class="lb-bar-sep"></span>' + b("up","↑ Выше") + b("down","↓ Ниже") + b("del","Удалить блок","danger");
+}
+function lbUpdateBar(){
+  var ed = document.getElementById("lessonWysiwygEditor"), bar = document.getElementById("lbBar");
+  if(!ed || !bar) { lbCur = null; return; }
+  var n = lbCaretNode(), block = n && ed.contains(n) ? n.closest(".lb") : null;
+  if(block && !ed.contains(block)) block = null;
+  if(lbCur && lbCur!==block) lbCur.classList.remove("lb-focus");
+  lbCur = block;
+  if(!block){ bar.hidden = true; bar.innerHTML = ""; return; }
+  block.classList.add("lb-focus");
+  var h = lbBarHtml(block);
+  if(bar.innerHTML!==h) bar.innerHTML = h;
+  bar.hidden = false;
+}
+document.addEventListener("selectionchange", function(){
+  var bar = document.getElementById("lbBar");
+  if(!bar) return;
+  var n = lbCaretNode();
+  // Клик по кнопкам панели выделение не трогает (mousedown погашен), так что уход
+  // курсора за пределы редактора — это действительно уход.
+  if(n && !n.closest("#lessonWysiwygEditor")){ if(lbCur){ lbCur.classList.remove("lb-focus"); lbCur = null; } bar.hidden = true; return; }
+  lbUpdateBar();
+});
+document.addEventListener("click", function(e){
+  var m = document.getElementById("lbMenu");
+  if(m && !m.hidden && !e.target.closest("#lbMenu, .lb-add")) m.hidden = true;
+});
+function lbOp(op){
+  var ed = document.getElementById("lessonWysiwygEditor"), block = lbCur;
+  if(!ed || !block || !ed.contains(block)) return;
+  var focusEl = null, mk = function(html){ var t = document.createElement("div"); t.innerHTML = html; return t.firstChild; };
+  var move = function(el, up){
+    var sib = up ? el.previousElementSibling : el.nextElementSibling;
+    if(sib) el.parentNode.insertBefore(el, up ? sib : sib.nextSibling);
+  };
+  var keepCaret = function(){ var s = window.getSelection(); return s.rangeCount ? s.getRangeAt(0).cloneRange() : null; };
+  var saved = keepCaret();
+  if(op==="up" || op==="down"){ var top = block; while(top.parentNode!==ed) top = top.parentNode; move(top, op==="up"); focusEl = lbFirst(block, [".lb-big","h5",".lb-lab"]); }
+  else if(op==="del"){
+    var nx = block.nextElementSibling || block.previousElementSibling;
+    block.remove(); lbCur = null; saved = null;
+    if(!ed.firstElementChild) ed.innerHTML = "<p><br></p>";
+    focusEl = nx && ed.contains(nx) ? nx : ed.firstElementChild;
+  }
+  else if(op==="scale-add"){ var sc = mk(LB_KINDS.key.html).querySelector(".lb-scale"); block.appendChild(sc); focusEl = sc.querySelector(".lb-v"); }
+  else if(op==="scale-del"){ var s0 = block.querySelector(".lb-scale"); if(s0) s0.remove(); focusEl = block.querySelector(".lb-big"); }
+  else if(op==="seg-add" || op==="stat-add" || op==="step-add"){
+    var cfg = { "seg-add":[".lb-seg",".lb-scale",'<div class="lb-seg lbt-ok"><span class="lb-v">значение</span>что это значит</div>'],
+      "stat-add":[".lb-stat",".lb-stats",'<div class="lb-stat"><span class="lb-v">число</span>подпись к числу</div>'],
+      "step-add":[".lb-step",".lb-steps",'<div class="lb-step lbi-check"><span class="lb-v">Действие</span>зачем или как</div>'] }[op];
+    var cur = lbItem(block, cfg[0]), box = block.querySelector(cfg[1]), el = mk(cfg[2]);
+    if(cur) cur.parentNode.insertBefore(el, cur.nextSibling); else box.appendChild(el);
+    focusEl = el.querySelector(".lb-v");
+  }
+  else if(op==="seg-del" || op==="stat-del" || op==="step-del"){
+    var sel = { "seg-del":".lb-seg", "stat-del":".lb-stat", "step-del":".lb-step" }[op];
+    var it = lbItem(block, sel);
+    if(it){
+      var other = it.nextElementSibling || it.previousElementSibling;
+      it.remove(); saved = null;
+      if(other) focusEl = other.querySelector(".lb-v") || other;
+      else if(op==="seg-del"){ var sc2 = block.querySelector(".lb-scale"); if(sc2) sc2.remove(); focusEl = block.querySelector(".lb-big"); }
+      else focusEl = block.querySelector("h5");
+    }
+  }
+  else if(op==="seg-tone"){
+    var sg = lbItem(block, ".lb-seg");
+    if(sg){ var i = LB_TONES.findIndex(function(t){ return sg.classList.contains(t[0]); });
+      LB_TONES.forEach(function(t){ sg.classList.remove(t[0]); }); sg.classList.add(LB_TONES[(i+1) % LB_TONES.length][0]); }
+  }
+  else if(op==="step-icon"){
+    var sp = lbItem(block, ".lb-step");
+    if(sp){ var j = LB_ICONS.findIndex(function(x){ return sp.classList.contains("lbi-"+x[0]); });
+      LB_ICONS.forEach(function(x){ sp.classList.remove("lbi-"+x[0]); }); sp.classList.add("lbi-"+LB_ICONS[(j+1) % LB_ICONS.length][0]); }
+  }
+  else if(op==="step-up" || op==="step-down"){ var s1 = lbItem(block, ".lb-step"); if(s1){ move(s1, op==="step-up"); focusEl = s1.querySelector(".lb-v") || s1; } }
+  ed.focus();
+  if(focusEl){ if(op==="del"){ var r = document.createRange(); r.selectNodeContents(focusEl); r.collapse(true); var ss = window.getSelection(); ss.removeAllRanges(); ss.addRange(r); } else lbSelectText(focusEl); }
+  else if(saved){ var s2 = window.getSelection(); s2.removeAllRanges(); s2.addRange(saved); }
+  lbSync(); lbUpdateBar();
 }
 
 function renderLessonEditorModal(){
@@ -1621,9 +1814,10 @@ function renderLessonEditorModal(){
         (!lessonEditor.isNew ? '<div class="field"><label>Открыть через дней после регистрации врача <span style="font-weight:400;color:var(--muted-2);">(пусто — сразу)</span></label><input class="input" type="number" min="0" id="lessonDripInput" value="'+(lessonEditor.dripDays===null||lessonEditor.dripDays===undefined?"":lessonEditor.dripDays)+'" style="max-width:120px;" placeholder="0"></div>' : '') +
         '<div class="field"><label>Содержимое</label>' +
           renderWysiwygToolbar("lessonWysiwygEditor","lessonHtmlHidden") +
+          '<div class="lb-bar" id="lbBar" hidden></div>' +
           '<div class="wysiwyg-editor" id="lessonWysiwygEditor" contenteditable="true">'+(lessonEditor.html||"")+'</div>' +
           '<textarea name="html" id="lessonHtmlHidden" required style="display:none;">'+escapeHtml(lessonEditor.html)+'</textarea>' +
-        '<p class="hint">Форматирование, списки, ссылки, изображения и видео — через панель выше. Опасные теги вырезаются автоматически при сохранении.</p></div>' +
+        '<p class="hint">«＋ Блок» — оформленные вставки (главное, цифры, шаги, важно, шпаргалка); текст в них правится прямо здесь. Форматирование, списки, ссылки, изображения и видео — через панель выше. Опасные теги вырезаются автоматически при сохранении.</p></div>' +
         '<div class="err-text" id="lessonEditorError" style="display:none;"></div>' +
         '<div style="display:flex;gap:10px;">' +
           (lessonEditor.isNew
@@ -3277,7 +3471,8 @@ function lessonOpener(lesson, idx, stages){
   if(sections.length){
     out += '<div class="lo-toc"><span class="lo-lab">В этом уроке</span><ol>' + toc.map(function(t, i){
       return t==="Шпаргалка" ? '' : '<li><button type="button" data-action="lesson-toc" data-i="'+i+'">'+escapeHtml(t)+'</button></li>';
-    }).join('') + '</ol>' + (toc.indexOf("Шпаргалка")!==-1 ? '<button type="button" class="lo-cheat" data-action="lesson-toc" data-i="'+toc.indexOf("Шпаргалка")+'">'+icon("check","ic-sm")+'Шпаргалка в конце урока</button>' : '') + '</div>';
+    }).join('') + '</ol>' + (toc.indexOf("Шпаргалка")!==-1 ? '<button type="button" class="lo-cheat" data-action="lesson-toc" data-i="'+toc.indexOf("Шпаргалка")+'">'+icon("check","ic-sm")+'Шпаргалка в конце урока</button>'
+      : /class="lb lb-cheat"/.test(rest) ? '<button type="button" class="lo-cheat" data-action="lesson-toc" data-i="cheat">'+icon("check","ic-sm")+'Шпаргалка в конце урока</button>' : '') + '</div>';
   }
   return { html: out + '</div>', rest: rest };
 }
@@ -6102,7 +6297,7 @@ document.addEventListener("click", function(e){
   if(a==="qr-submit"){ e.preventDefault(); e.stopPropagation(); showToast("Это предпросмотр — ответы не отправляются и не засчитываются"); return; }
   if(a==="prev-toc"){
     e.preventDefault(); e.stopPropagation();
-    var h = box.querySelectorAll(".prose h4")[parseInt(t.getAttribute("data-i"),10)];
+    var h = t.getAttribute("data-i")==="cheat" ? box.querySelector(".prose .lb-cheat") : box.querySelectorAll(".prose h4")[parseInt(t.getAttribute("data-i"),10)];
     if(h) h.scrollIntoView({ behavior:"smooth", block:"start" });
     return;
   }
@@ -7955,7 +8150,7 @@ function wireEvents(root){
   // из contenteditable (браузер снимает Range при потере фокуса), и к моменту клика
   // execCommand уже нечего форматировать — поэтому mousedown гасим отдельно от click.
   root.addEventListener("mousedown", function(e){
-    if(e.target.closest('[data-action="wysiwyg-cmd"]')) e.preventDefault();
+    if(e.target.closest('[data-action="wysiwyg-cmd"], [data-action="lb-menu-toggle"], [data-action="lb-insert"], [data-action="lb-op"]')) e.preventDefault();
     // Клик мышью по меню не оставляет в нём фокус: сайдбар не пересоздаётся при
     // перерисовке, и :focus-within держал бы его раскрытым после ухода курсора.
     // С клавиатуры (Tab) фокус и раскрытие работают как раньше. Пункты меню теперь
@@ -8169,7 +8364,7 @@ function wireEvents(root){
       render(); window.scrollTo(0,0); return;
     }
     if(action==="lesson-toc"){
-      var tocH = document.querySelectorAll("#lessonProse h4")[parseInt(t.getAttribute("data-i"),10)];
+      var tocH = t.getAttribute("data-i")==="cheat" ? document.querySelector("#lessonProse .lb-cheat") : document.querySelectorAll("#lessonProse h4")[parseInt(t.getAttribute("data-i"),10)];
       if(tocH) tocH.scrollIntoView({ behavior:"smooth", block:"start" });
       return;
     }
@@ -8697,6 +8892,9 @@ function wireEvents(root){
     }
     if(action==="close-lesson-editor"){ lessonEditor.open=false; render(); return; }
     if(action==="overlay-close-lesson-editor" && !e.target.closest("[data-stop]")){ lessonEditor.open=false; render(); return; }
+    if(action==="lb-menu-toggle"){ var lbm = document.getElementById("lbMenu"); if(lbm) lbm.hidden = !lbm.hidden; return; }
+    if(action==="lb-insert"){ var lbm2 = document.getElementById("lbMenu"); if(lbm2) lbm2.hidden = true; lbInsert(t.getAttribute("data-kind")); return; }
+    if(action==="lb-op"){ lbOp(t.getAttribute("data-op")); return; }
     if(action==="wysiwyg-cmd"){
       var wTarget=document.getElementById(t.getAttribute("data-target"));
       var wHidden=document.getElementById(t.getAttribute("data-hidden"));
@@ -8726,8 +8924,8 @@ function wireEvents(root){
         }
       }
       else document.execCommand(cmd);
-      if(wHidden) wHidden.value = wTarget.innerHTML;
-      if(wTarget.id==="lessonWysiwygEditor"){ lessonEditor.html = wTarget.innerHTML; lpRefreshPreviewSoon(); }
+      if(wTarget.id==="lessonWysiwygEditor") lbSync();
+      else if(wHidden) wHidden.value = wTarget.innerHTML;
       return;
     }
     if(action==="delete-lesson"){
@@ -9789,8 +9987,8 @@ function wireEvents(root){
       // и убило курсор/выделение в contenteditable. Скрытый textarea — единственный
       // канал, через который реальный HTML доходит до отправки формы.
       var hidden=document.getElementById("lessonHtmlHidden");
-      if(hidden) hidden.value = e.target.innerHTML;
-      lessonEditor.html = e.target.innerHTML;
+      if(hidden) hidden.value = lbHtml(e.target);
+      lessonEditor.html = lbHtml(e.target);
       lpRefreshPreviewSoon();
     }
     if(e.target.closest && e.target.closest("#lessonEditorForm") && e.target.id!=="lessonWysiwygEditor") lpRefreshPreviewSoon();
