@@ -362,6 +362,13 @@ function sendOfflineBeacon(){
 window.addEventListener("pagehide", sendOfflineBeacon);
 
 async function routeAfterLogin(){
+  // Обновление страницы (F5) заново выполняет init()/routeAfterLogin — раньше это
+  // всегда сбрасывало на главную/список врачей, потому что history.state (куда
+  // popstate уже умеет записывать текущий раздел) читался только при переходах
+  // по истории, а не при обычной перезагрузке той же записи. history.state
+  // переживает reload — просто раньше сюда не заглядывали.
+  var savedState = null;
+  try{ var hs = history.state; if(hs && (hs.view==="student"||hs.view==="staff")) savedState = hs; }catch(e){}
   if(me.role === "student"){
     view = "student";
     await loadCourse();
@@ -371,6 +378,7 @@ async function routeAfterLogin(){
     await loadNotifications();
     startNotificationPolling();
     if(!me.impersonator) startHeartbeat();
+    if(savedState && savedState.view==="student") applyNavState(savedState);
   } else {
     view = "staff";
     await loadStaffData();
@@ -380,6 +388,7 @@ async function routeAfterLogin(){
     // Вернулись из кабинета врача — сразу открываем его карточку, откуда пришли.
     var impBack = null; try{ impBack = sessionStorage.getItem("lms-imp-return"); sessionStorage.removeItem("lms-imp-return"); }catch(e){}
     if(impBack){ staffState.mainTab = "students"; staffState.navKey = "students"; render(); openStudentPage(impBack); return; }
+    if(savedState && savedState.view==="staff") applyNavState(savedState);
   }
   render();
 }
@@ -639,15 +648,11 @@ function syncNavHistory(){
     lastNavState = snap;
   }
 }
-window.addEventListener("popstate", function(e){
-  var s = e.state;
-  if(!s || (s.view!=="student" && s.view!=="staff")){
-    // Тот редкий случай, когда всё же попали на невалидную запись в своём же
-    // документе (а не ушли на другой) — подкладываем последнее известное состояние.
-    if(navHistoryReady && lastNavState){ history.pushState(lastNavState, ""); }
-    return;
-  }
-  applyingNavState = true;
+// Общее для popstate и для восстановления после обновления страницы (F5) —
+// раньше это было только внутри popstate, поэтому назад/вперёд помнили, где
+// был врач, а обновление страницы всегда сбрасывало на главную: она просто
+// не читалась заново при обычной перезагрузке, только при переходе по истории.
+function applyNavState(s){
   view = s.view;
   if(s.view==="student"){
     studentState.tab = s.studentTab || "home";
@@ -669,6 +674,17 @@ window.addEventListener("popstate", function(e){
       staffState.selectedStudentId = null;
     }
   }
+}
+window.addEventListener("popstate", function(e){
+  var s = e.state;
+  if(!s || (s.view!=="student" && s.view!=="staff")){
+    // Тот редкий случай, когда всё же попали на невалидную запись в своём же
+    // документе (а не ушли на другой) — подкладываем последнее известное состояние.
+    if(navHistoryReady && lastNavState){ history.pushState(lastNavState, ""); }
+    return;
+  }
+  applyingNavState = true;
+  applyNavState(s);
   lastNavState = s;
   render();
   applyingNavState = false;
