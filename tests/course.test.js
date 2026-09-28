@@ -339,6 +339,18 @@ describe("Курс врача", () => {
     expect(after.body.progress.onboarding_dismissed).toBe(true);
   });
 
+  test("приветствие на главной: показывается, пока врач не нажал «Приступить к обучению»", async () => {
+    const user = await createUser({ role: "student", courseId: course.courseId });
+    const cookie = await loginAs(user);
+    const before = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
+    expect(before.body.progress.welcome_seen).toBe(false);
+    expect((await request(app).put("/api/course/welcome-seen").set("Cookie", cookie)).status).toBe(200);
+    const after = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
+    expect(after.body.progress.welcome_seen).toBe(true);
+    const staff = await loginAs(await createUser({ role: "curator" }));
+    expect((await request(app).put("/api/course/welcome-seen").set("Cookie", staff)).status).toBe(403);
+  });
+
   test("«Мои материалы»: врач может сохранить и убрать урок из закладок", async () => {
     const user = await createUser({ role: "student", courseId: course.courseId });
     const cookie = await loginAs(user);

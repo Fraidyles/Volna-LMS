@@ -193,6 +193,8 @@ ALTER TABLE progress ADD COLUMN IF NOT EXISTS last_streak_date DATE;
 
 -- Онбординг-чеклист: врач может закрыть карточку вручную, не дожидаясь выполнения всех пунктов.
 ALTER TABLE progress ADD COLUMN IF NOT EXISTS onboarding_dismissed BOOLEAN NOT NULL DEFAULT false;
+-- Экран приветствия на главной врача: показан и закрыт кнопкой «Приступить к обучению».
+ALTER TABLE progress ADD COLUMN IF NOT EXISTS welcome_seen BOOLEAN NOT NULL DEFAULT false;
 
 -- Центр уведомлений врача.
 CREATE TABLE IF NOT EXISTS notifications (

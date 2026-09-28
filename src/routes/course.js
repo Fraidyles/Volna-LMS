@@ -404,6 +404,12 @@ router.put("/onboarding-dismiss", authRequired, requireRole("student"), async (r
   res.json({ ok: true });
 });
 
+// Экран «Добро пожаловать» на главной показывается один раз — до первого «Приступить к обучению».
+router.put("/welcome-seen", authRequired, requireRole("student"), async (req, res) => {
+  await pool.query("UPDATE progress SET welcome_seen=true WHERE user_id=$1", [req.user.id]);
+  res.json({ ok: true });
+});
+
 // «Ваши протоколы»: разблокируются по мере прохождения уроков (lesson_protocols),
 // каждый урок может открыть несколько протоколов. Делим на «по вашей специализации»
 // (есть гайд под основную специализацию ИЛИ любую из «хочу развиваться в...») и

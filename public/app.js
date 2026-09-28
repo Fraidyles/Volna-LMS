@@ -2968,78 +2968,28 @@ function renderOnboardingCard(){
   return html;
 }
 
-function renderStudentHome(){
-  var pr = course.progress || {};
-  var total = course.lessons.length;
-  var doneIds = pr.completed_lessons||[];
-  var done = doneIds.length;
-  var lock = course.locked || {locked:false};
-
-  // На широком экране — две колонки: слева курс и что дальше, справа — эфир,
-  // прогресс, куратор и прочее «сбоку». На узком всё идёт одной колонкой.
-  var html = '<div class="home-grid fx-'+homeFx()+homeBgClass()+'" style="margin-top:10px;">'+homeBgLayer()+'<div class="home-main">' + renderOnboardingCard() + renderSurveyHomeCard();
-  if(lock.locked){
-    html += '<div class="card course-hero" style="background:var(--status-blocked-tint);">' +
-      magnet("blocked", "Доступ ограничен") +
-      '<h2 style="margin-top:14px;">'+escapeHtml(course.course.title)+'</h2>' +
-      '<p>'+(lock.reason==="blocked" ? 'Куратор временно ограничил ваш доступ к демо-курсу.' : 'Срок доступа к демо-курсу истёк.')+' Чтобы продолжить обучение, напишите куратору в Telegram-группе потока — он может продлить или снять ограничение.</p>' +
-      '<button class="btn btn-primary" data-action="open-telegram-modal">Написать куратору</button></div>';
-  } else {
-    // Статус-трек: ровно один слот на урок — итоговый тест не урок, у него своя
-    // плашка рядом с подписью ниже, а не десятое деление в этом ряду.
-    // Текущий — первый непройденный урок (уроки могут быть пройдены не по порядку).
-    var curIdxH = -1;
-    course.lessons.forEach(function(l,i){ if(curIdxH<0 && doneIds.indexOf(l.id)===-1) curIdxH = i; });
-    var slots = '<div class="status-track">';
-    course.lessons.forEach(function(l,i){
-      var isDone = doneIds.indexOf(l.id)!==-1;
-      var isCurrent = i===curIdxH;
-      slots += '<div class="slot'+(isDone?' done':(isCurrent?' current':''))+'" title="'+escapeHtml(l.title)+'"></div>';
-    });
-    slots += '</div>';
-    var quizDone = !!pr.completed;
-
-    var pct = Math.round((done + (quizDone?1:0)) / (total+1) * 100);
-    var testBadge = quizDone ? magnet("done","Тест пройден · "+pr.quiz_score+"%")
-      : (done===total ? magnet("attention","Итоговый тест доступен") : magnet("neutral","Итоговый тест впереди"));
-    html += '<div class="card course-hero">' +
-      '<div class="hero-aurora aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
-      '<div class="course-hero-top">' +
-        '<div class="progress-ring" data-anim="ring" style="--ring-p:'+pct+'%;"><div class="progress-ring-inner"><span data-count="'+pct+'" data-suffix="%">'+pct+'%</span></div></div>' +
-        '<div><h2 style="margin:0;">'+escapeHtml(course.course.title)+'</h2>' +
-        '<p style="margin:4px 0 0;">'+total+' коротких уроков и итоговый тест. По завершении — сертификат и возможность оставить заявку на полную программу обучения.</p></div>' +
-      '</div>' +
-      slots +
-      '<div class="progress-label" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;"><span>'+done+' / '+total+' уроков</span>'+testBadge+'</div>';
-    // Название конкретного следующего шага рядом с кнопкой — чтобы врач видел,
-    // куда именно попадёт, не открывая курс наугад.
-    var nextStepLabel = null;
-    if(curIdxH >= 0) nextStepLabel = "Урок "+(curIdxH+1)+": "+course.lessons[curIdxH].title;
-    else if(!quizDone) nextStepLabel = "Итоговый тест";
-    html += (nextStepLabel ? '<div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Далее: '+escapeHtml(nextStepLabel)+'</div>' : '') +
-      '<button class="btn btn-primary" data-action="open-course">'+(done>0?'Продолжить курс':'Начать курс')+'</button>' +
-      '</div>';
-  }
-
-  if(!lock.locked) html += renderHomeNextLessons(doneIds) + renderHomeExtras();
-  html += '</div><aside class="home-rail">';
-
-  var mySid = me.stream_id || "";
-  var relevantEvents = calendarState.events.filter(function(ev){ return !ev.stream_id || ev.stream_id===mySid; });
-  var nextEvent = null, liveNow = false;
-  relevantEvents.forEach(function(ev){
+// Главная врача. При самом первом входе (ни одного урока, приветствие ещё не
+// закрыто) — экран «Добро пожаловать»: как устроен курс и кто куратор. Кнопка
+// «Приступить к обучению» с анимацией сменяет его обычной главной: один следующий
+// шаг, одна полоска прогресса, ближайшие уроки, справа куратор и эфир. Серия дней,
+// очки и «Пригласите коллегу» появляются после первого пройденного урока — до этого
+// там одни нули. Курс демо, поэтому про сертификат здесь ничего нет.
+var homeEnterAnim = false;
+function homeCuratorTile(){
+  var cur = me.curator;
+  return '<div class="card board-tile ho-1">' + cardHead("Ваш куратор", "") +
+    (cur ? '<div class="home-cur">'+userAvatar(cur,"home-cur-av")+'<div><b>'+escapeHtml(cur.name)+'</b><span>отвечает в Telegram-группе потока</span></div></div>' : '') +
+    '<span class="tile-sub">Непонятно, как проходить курс, нет доступа, вопрос по теме урока — пишите, здесь же преподаватели и коллеги.</span>' +
+    '<div class="tile-foot"><button class="btn btn-sm btn-ghost" data-action="open-telegram-modal">Написать в Telegram →</button></div></div>';
+}
+function homeEventTile(){
+  var mySid = me.stream_id || "", nextEvent = null, liveNow = false, now = new Date();
+  calendarState.events.filter(function(ev){ return !ev.stream_id || ev.stream_id===mySid; }).forEach(function(ev){
     var start = new Date(ev.event_date+"T"+(ev.event_time||"00:00"));
     var end = new Date(start.getTime() + (ev.duration_min||60)*60000);
-    var now = new Date();
     if(!nextEvent && end >= now){ nextEvent = ev; liveNow = (start<=now && now<=end); }
   });
-
-  // Правила карточек (одинаковые по всему приложению, см. .card-head в styles.css):
-  // 1) заголовок карточки слева, кнопка перехода в раздел («Все эфиры →») — справа
-  //    на той же линии; 2) главное действие карточки — внизу слева (.tile-foot);
-  // 3) цвет — только у настоящего статуса (эфир идёт сейчас, «на проверке»),
-  //    а не для украшения заголовка.
-  html += '<div class="card board-tile ho-1">' +
+  var html = '<div class="card board-tile ho-1">' +
     cardHead(liveNow ? "Идёт эфир" : "Ближайший эфир", '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="schedule">Все эфиры →</button>');
   if(nextEvent){
     html += '<b class="tile-main">'+escapeHtml(nextEvent.title)+'</b>' +
@@ -3048,41 +2998,109 @@ function renderStudentHome(){
   } else {
     html += '<span class="tile-sub">Эфиры пока не запланированы.</span>';
   }
-  html += '</div>';
+  return html + '</div>';
+}
+function renderWelcomeHome(){
+  var L = course.lessons, first = L[0] || {}, q = first.quiz ? first.quiz.length : 0;
+  var name = (me.name||"").trim().split(/\s+/)[0] || "";
+  var step = function(n, ic, title, text){ return '<div class="wl-step"><em>'+n+'</em><span class="wl-si">'+icon(ic)+'</span><b>'+title+'</b><span>'+text+'</span></div>'; };
+  return '<div class="home-grid wl-mode fx-'+homeFx()+homeBgClass()+'" style="margin-top:10px;">'+homeBgLayer() +
+    '<div class="wl" id="welcomeHome">' +
+      '<div class="card course-hero wl-hello"><div class="hero-aurora aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
+        '<span class="wl-kick">Демо-курс «'+escapeHtml(course.course.title)+'»</span>' +
+        '<h2 class="wl-h">Добро пожаловать'+(name?', '+escapeHtml(name):'')+'!</h2>' +
+        '<p class="wl-sub">'+L.length+' '+ruPluralClient(L.length,"короткий урок","коротких урока","коротких уроков")+' от практикующих врачей. Вот как всё устроено:</p>' +
+        '<div class="wl-steps">' +
+          step(1, "book", "Урок ~10 минут", "Текст с ключевыми цифрами, где-то видео. Важное можно отмечать маркером и писать заметки.") +
+          step(2, "check", "Короткий тест", (q ? q+' '+ruPluralClient(q,"вопрос","вопроса","вопросов")+' после урока' : 'После урока')+" — сразу видно, что понятно, а что стоит перечитать.") +
+          step(3, "badge", "Итоговый тест", "После всех уроков. Затем можно оставить заявку на полную программу обучения — баллы за уроки дают на неё скидку.") +
+        '</div>' +
+        '<div class="wl-foot"><span>'+(first.title ? 'Первый урок: '+escapeHtml(first.title)+(first.duration?' · '+escapeHtml(first.duration):'') : '')+'</span>' +
+          '<button class="btn btn-primary" data-action="welcome-start">Приступить к обучению →</button></div>' +
+      '</div>' +
+      '<div class="wl-two">'+homeCuratorTile()+homeEventTile()+'</div>' +
+    '</div></div>';
+}
 
-  if(pr.completed){
-    var certsOn = course && course.course && course.course.certificatesEnabled;
-    var issued = certsOn && pr.certificate_status==="issued";
-    html += '<div class="card board-tile ho-1">' + cardHead(certsOn ? "Сертификат" : "Демо пройдено", "") +
-      '<div class="tile-row"><b class="tile-num">'+pr.quiz_score+'%</b><span class="tile-sub">результат теста'+(certsOn?'':' · скидка 10% на полный курс')+'</span></div>' +
-      (certsOn ? '<div style="margin-top:6px;">'+magnet(issued?"done":"attention", issued?"выдан":"на проверке")+'</div>' : '');
-    if(!issued && !pr.requested_full_access){
-      html += '<div class="tile-foot wide"><button class="btn btn-sm btn-primary btn-block" data-action="request-full">'+(certsOn?'Заявка на полную программу':'Хочу полное обучение')+'</button></div>';
-    } else if(pr.requested_full_access){
-      html += '<div class="tile-foot">'+magnet("done","Заявка отправлена")+'</div>';
+function renderStudentHome(){
+  var pr = course.progress || {};
+  var total = course.lessons.length;
+  var doneIds = pr.completed_lessons||[];
+  var done = doneIds.length;
+  var lock = course.locked || {locked:false};
+  if(!lock.locked && !done && !pr.completed && !pr.welcome_seen) return el(renderWelcomeHome());
+
+  // На широком экране — две колонки: слева следующий шаг и что потом, справа —
+  // куратор, эфир и прочее «сбоку». На узком всё идёт одной колонкой.
+  var enter = homeEnterAnim; homeEnterAnim = false;
+  // Следующий шаг — первым; анкета и чеклист «Первые шаги» идут после «Потом».
+  var html = '<div class="home-grid fx-'+homeFx()+homeBgClass()+(enter?' home-enter':'')+'" style="margin-top:10px;">'+homeBgLayer()+'<div class="home-main">';
+  var curIdx = -1;
+  course.lessons.forEach(function(l,i){ if(curIdx<0 && doneIds.indexOf(l.id)===-1) curIdx = i; });
+  if(lock.locked){
+    html += '<div class="card course-hero" style="background:var(--status-blocked-tint);">' +
+      magnet("blocked", "Доступ ограничен") +
+      '<h2 style="margin-top:14px;">'+escapeHtml(course.course.title)+'</h2>' +
+      '<p>'+(lock.reason==="blocked" ? 'Куратор временно ограничил ваш доступ к демо-курсу.' : 'Срок доступа к демо-курсу истёк.')+' Чтобы продолжить обучение, напишите куратору в Telegram-группе потока — он может продлить или снять ограничение.</p>' +
+      '<button class="btn btn-primary" data-action="open-telegram-modal">Написать куратору</button></div>';
+  } else {
+    var quizDone = !!pr.completed, kick, title, sub, acts;
+    var allBtn = '<button class="btn btn-ghost" data-action="open-course">Все уроки</button>';
+    if(curIdx >= 0){
+      var l = course.lessons[curIdx], q = l.quiz ? l.quiz.length : 0, locked = l.hiddenForMe || l.dripLockedForMe;
+      kick = "Ваш следующий шаг";
+      title = "Урок "+(curIdx+1)+". "+escapeHtml(l.title);
+      sub = locked ? (l.hiddenForMe ? "Урок пока недоступен — куратор откроет его." : "Урок откроется "+fmtDateShort(l.availableAt)+".")
+        : (l.duration ? escapeHtml(l.duration)+" чтения" : "Короткий урок") + (q ? ", затем короткий тест из "+q+" "+ruPluralClient(q,"вопроса","вопросов","вопросов")+" — он проверяет, что главное понятно." : ".");
+      acts = (locked ? '' : '<button class="btn btn-primary" data-action="open-lesson-at" data-idx="'+curIdx+'">Начать урок</button>') + allBtn;
+    } else if(!quizDone){
+      var fq = course.quiz ? course.quiz.length : 0;
+      kick = "Остался последний шаг";
+      title = "Итоговый тест";
+      sub = (fq ? fq+" "+ruPluralClient(fq,"вопрос","вопроса","вопросов")+", нужно от 60%. " : "") + "После него можно оставить заявку на полную программу обучения.";
+      acts = '<button class="btn btn-primary" data-action="open-final-quiz">Пройти тест</button>' + allBtn;
+    } else {
+      kick = "Демо-курс пройден";
+      title = escapeHtml(course.course.title);
+      sub = "Итоговый тест — "+pr.quiz_score+"%. "+(pr.requested_full_access ? "Заявка на полную программу отправлена — куратор свяжется с вами." : "Если хотите продолжить — оставьте заявку на полную программу обучения.");
+      acts = (pr.requested_full_access ? magnet("done","Заявка отправлена") : '<button class="btn btn-primary" data-action="request-full">Хочу полное обучение</button>') + allBtn;
     }
-    html += '</div>';
+    var pct = Math.round((done + (quizDone?1:0)) / (total+1) * 100);
+    html += '<div class="card course-hero hs-hero">' +
+      '<div class="hero-aurora aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
+      '<span class="hs-kick">'+kick+'</span><h2 class="hs-h">'+title+'</h2><p class="hs-sub">'+sub+'</p>' +
+      '<div class="hs-act">'+acts+'</div>' +
+      '<div class="hs-bar"><div class="hs-bar-t"><span><b>'+escapeHtml(course.course.title)+'</b> · '+done+' из '+total+' '+ruPluralClient(total,"урока","уроков","уроков")+'</span>' +
+        '<span>'+(quizDone ? (curIdx<0 ? 'курс пройден' : 'итоговый тест сдан') : done===total ? 'остался итоговый тест' : 'дальше — итоговый тест')+'</span></div>' +
+        '<div class="hs-track"><i style="width:'+Math.max(pct,2)+'%"></i></div></div>' +
+    '</div>';
   }
 
-  var gam = course.gamification || { points:0, currentStreak:0, longestStreak:0 };
-  var ptsPct = Math.min(100, Math.round((gam.points||0)/10));
-  html += '<div class="card board-tile ho-1">' +
-    cardHead("Прогресс", '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="progress">Подробнее →</button>') +
-    '<div class="tile-row">'+icon("flame","ic-sm streak-flame") +
-      '<b class="tile-num" data-count="'+(gam.currentStreak||0)+'">'+(gam.currentStreak||0)+'</b>' +
-      '<span class="tile-sub">'+ruPluralClient(gam.currentStreak||0,"день подряд","дня подряд","дней подряд")+' · рекорд '+(gam.longestStreak||0)+'</span></div>' +
-    '<div class="tile-row"><b class="tile-num" data-count="'+(gam.points||0)+'">'+(gam.points||0)+'</b>' +
-      '<span class="tile-sub">из 1000 очков — это скидка на полный курс</span></div>' +
-    '<div class="home-pts"><i style="width:'+ptsPct+'%"></i></div>' +
-  '</div>';
+  if(!lock.locked) html += renderHomeNextLessons(doneIds, curIdx);
+  html += renderSurveyHomeCard() + renderOnboardingCard();
+  if(!lock.locked) html += renderHomeExtras();
+  html += '</div><aside class="home-rail">' + homeCuratorTile() + homeEventTile();
 
-  // Куратор и группа потока — одна плитка (раньше «Куратор» и «Общение» вели в одно место).
-  var cur = me.curator;
-  html += '<div class="card board-tile ho-3">' +
-    cardHead("Куратор и группа", '<button class="btn btn-sm btn-ghost" data-action="open-telegram-modal">Telegram →</button>') +
-    (cur ? '<div class="home-cur">'+userAvatar(cur,"home-cur-av")+'<div><b>'+escapeHtml(cur.name)+'</b><span>ваш куратор</span></div></div>' : '') +
-    '<span class="tile-sub">Вопросы по курсу, доступу и оплате — в Telegram-группе потока: там куратор, преподаватели и коллеги.</span>' +
-  '</div>';
+  if(pr.completed && course.course && course.course.certificatesEnabled){
+    var issued = pr.certificate_status==="issued";
+    html += '<div class="card board-tile ho-1">' + cardHead("Сертификат", "") +
+      '<div class="tile-row"><b class="tile-num">'+pr.quiz_score+'%</b><span class="tile-sub">результат теста</span></div>' +
+      '<div style="margin-top:6px;">'+magnet(issued?"done":"attention", issued?"выдан":"на проверке")+'</div></div>';
+  }
+
+  if(done > 0 || pr.completed){
+    var gam = course.gamification || { points:0, currentStreak:0, longestStreak:0 };
+    var ptsPct = Math.min(100, Math.round((gam.points||0)/10));
+    html += '<div class="card board-tile ho-1">' +
+      cardHead("Прогресс", '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="progress">Подробнее →</button>') +
+      '<div class="tile-row">'+icon("flame","ic-sm streak-flame") +
+        '<b class="tile-num" data-count="'+(gam.currentStreak||0)+'">'+(gam.currentStreak||0)+'</b>' +
+        '<span class="tile-sub">'+ruPluralClient(gam.currentStreak||0,"день подряд","дня подряд","дней подряд")+' · рекорд '+(gam.longestStreak||0)+'</span></div>' +
+      '<div class="tile-row"><b class="tile-num" data-count="'+(gam.points||0)+'">'+(gam.points||0)+'</b>' +
+        '<span class="tile-sub">из 1000 очков — это скидка на полный курс</span></div>' +
+      '<div class="home-pts"><i style="width:'+ptsPct+'%"></i></div>' +
+    '</div>';
+  }
 
   // Уведомления — только когда есть что показать (пустая плитка «нет новых» — лишний шум).
   var homeNotifItems = upcomingEventReminders().concat(notifState.items.filter(function(n){ return !n.read_at; }));
@@ -3091,7 +3109,7 @@ function renderStudentHome(){
       '<div class="home-notifs">' + homeNotifItems.slice(0,3).map(function(n){ return '<div>'+escapeHtml(n.title)+'</div>'; }).join("") + '</div></div>';
   }
 
-  if(me.referral_code){
+  if(me.referral_code && (done > 0 || pr.completed)){
     // От адреса самой платформы, а не корня домена — иначе при установке в
     // подпапку (/lms/) ссылка вела бы на главную основного сайта.
     var refLink = window.location.origin + window.location.pathname.replace(/[^/]*$/, "") + "?ref=" + me.referral_code;
@@ -3104,28 +3122,23 @@ function renderStudentHome(){
   return el(html);
 }
 
-// «Дальше по курсу»: ближайшие уроки (текущий и 3 следующих) и итоговый тест —
-// чтобы с главной было видно, что впереди, а не только одну кнопку «Продолжить».
-function renderHomeNextLessons(doneIds){
-  var lessons = course.lessons, curIdx = -1;
-  lessons.forEach(function(l, i){ if(curIdx<0 && doneIds.indexOf(l.id)===-1) curIdx = i; });
-  // В варианте «Нить прогресса» — два пройденных урока перед текущим, чтобы нить была видна.
-  var back = homeFx()==="thread" ? 2 : 1;
-  var from = curIdx<0 ? Math.max(0, lessons.length-2) : Math.max(0, curIdx-back);
-  var rows = lessons.slice(from, from+4).map(function(l, k){
-    var i = from+k, done = doneIds.indexOf(l.id)!==-1, locked = l.hiddenForMe || l.dripLockedForMe, isCur = i===curIdx;
+// «Потом»: два урока после текущего (а когда текущий — последний, итоговый тест),
+// остальные — по «Все уроки». Текущий урок уже крупно в карточке выше.
+function renderHomeNextLessons(doneIds, curIdx){
+  var lessons = course.lessons, pr = course.progress || {};
+  if(curIdx < 0) return "";
+  var rows = lessons.slice(curIdx+1, curIdx+3).map(function(l, k){
+    var i = curIdx+1+k, done = doneIds.indexOf(l.id)!==-1, locked = l.hiddenForMe || l.dripLockedForMe;
     var st = done ? '<span class="hn-st done">'+icon("check","ic-sm")+'пройден</span>'
-      : locked ? '<span class="hn-st">'+icon("lock","ic-sm")+(l.hiddenForMe?'недоступен':'откроется '+fmtDateShort(l.availableAt))+'</span>'
-      : isCur ? '<span class="hn-st cur">сейчас</span>' : '<span class="hn-st">впереди</span>';
-    return '<div class="hn-row'+(isCur?' cur':'')+(done?' done':'')+(locked?' locked':'')+'" style="--k:'+k+'"'+(locked?'':' data-action="open-lesson-at" data-idx="'+i+'"')+'>' +
+      : locked ? '<span class="hn-st">'+icon("lock","ic-sm")+(l.hiddenForMe?'недоступен':'откроется '+fmtDateShort(l.availableAt))+'</span>' : '';
+    return '<div class="hn-row'+(done?' done':'')+(locked?' locked':'')+'" style="--k:'+k+'"'+(locked?'':' data-action="open-lesson-at" data-idx="'+i+'"')+'>' +
       '<span class="hn-num">'+(done?icon("check","ic-sm"):(i+1))+'</span><div class="hn-body"><b>'+escapeHtml(l.title)+'</b>' +
       '<span>'+(l.duration?escapeHtml(l.duration):'')+(l.quiz && l.quiz.length?' · тест '+l.quiz.length+' '+ruPluralClient(l.quiz.length,"вопрос","вопроса","вопросов"):'')+(l.assignment?' · задание':'')+'</span></div>'+st+'</div>';
   }).join("");
-  var pr = course.progress || {}, left = lessons.length - doneIds.length;
-  rows += '<div class="hn-row hn-final'+(left?' locked':'')+'"'+(!left && !pr.completed ? ' data-action="open-final-quiz"' : '')+'>' +
-    '<span class="hn-num">'+icon("badge","ic-sm")+'</span><div class="hn-body"><b>Итоговый тест</b><span>'+(course.quiz?course.quiz.length+' '+ruPluralClient(course.quiz.length,"вопрос","вопроса","вопросов")+' · ':'')+'нужно от 60%</span></div>' +
-    (pr.completed ? '<span class="hn-st done">'+icon("check","ic-sm")+pr.quiz_score+'%</span>' : left ? '<span class="hn-st">после '+left+' '+ruPluralClient(left,"урока","уроков","уроков")+'</span>' : '<span class="hn-st cur">доступен</span>') + '</div>';
-  return '<div class="card home-next ho-2">' + cardHead("Дальше по курсу", '<button class="btn btn-sm btn-ghost" data-action="open-course">Все уроки →</button>') + rows + '</div>';
+  if(curIdx >= lessons.length-2 && !pr.completed){
+    rows += '<div class="hn-row hn-final locked"><span class="hn-num">'+icon("badge","ic-sm")+'</span><div class="hn-body"><b>Итоговый тест</b><span>'+(course.quiz&&course.quiz.length?course.quiz.length+' '+ruPluralClient(course.quiz.length,"вопрос","вопроса","вопросов")+' · ':'')+'нужно от 60%</span></div><span class="hn-st">после всех уроков</span></div>';
+  }
+  return '<div class="card home-next ho-2">' + cardHead("Потом", '<button class="btn btn-sm btn-ghost" data-action="open-course">Все '+lessons.length+' '+ruPluralClient(lessons.length,"урок","урока","уроков")+' →</button>') + rows + '</div>';
 }
 // Конспект и протоколы — с реальными цифрами; плитка появляется, только когда
 // в разделе уже есть что показать.
@@ -3696,7 +3709,7 @@ function renderLessonQuizStage(lesson){
   if(studentState.lessonQuizResult) return renderLessonQuizResult(lesson, studentState.lessonQuizResult);
   var prevScore = course.progress && course.progress.lesson_quiz_scores && course.progress.lesson_quiz_scores[lesson.id];
   return renderQuizRunner("lesson:"+lesson.id, lesson.quiz || [], {
-    hint: typeof prevScore==="number" ? 'прошлый результат — '+prevScore+'%' : 'для закрепления, на сертификат не влияет'
+    hint: typeof prevScore==="number" ? 'прошлый результат — '+prevScore+'%' : 'для закрепления, на итоговый результат не влияет'
   });
 }
 function qzPill(ok, letter, text){ return '<span class="qz-rv-pill '+(ok?'ok':'bad')+'">'+(letter?'<i>'+letter+'</i>':'')+escapeHtml(text)+'</span>'; }
@@ -8519,6 +8532,14 @@ function wireEvents(root){
       // advanceAfterLesson() ДО того, как renderCoursePlayer показал этот гейт
       // (см. findPendingModuleGate); здесь просто убираем гейт с дороги.
       render(); return;
+    }
+    if(action==="welcome-start"){
+      // Приветствие уезжает, главная въезжает (см. .wl-leave / .home-enter в styles.css).
+      var wl = document.getElementById("welcomeHome");
+      var go = function(){ course.progress = course.progress || {}; course.progress.welcome_seen = true; homeEnterAnim = true; render(); window.scrollTo(0, 0); };
+      if(!previewMode) api("/course/welcome-seen", { method:"PUT" }).catch(function(){});
+      if(wl && !(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches)){ wl.classList.add("wl-leave"); setTimeout(go, 460); } else go();
+      return;
     }
     if(action==="request-full"){
       if(previewMode){ showToast("Режим просмотра — заявки не отправляются"); return; }
