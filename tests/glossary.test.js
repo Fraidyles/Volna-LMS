@@ -12,6 +12,8 @@ const matchers = (g) => g.aliases.map((a) => {
   return new RegExp("(^|[^A-Za-zА-Яа-яЁё0-9])(" + esc(a) + ")(?![A-Za-zА-Яа-яЁё0-9])", caps ? "" : "i");
 });
 
+afterAll(async () => { await pool.end(); });
+
 describe("контент глоссария", () => {
   test("id уникальны, у каждого термина есть урок, название и написания", () => {
     expect(new Set(GLOSSARY.map((g) => g.id)).size).toBe(GLOSSARY.length);
@@ -41,7 +43,6 @@ describe("API глоссария", () => {
     student = await loginAs(await createUser({ courseId: course.courseId }));
     staff = await loginAs(await createUser({ role: "curator" }));
   });
-  afterAll(async () => { await pool.end(); });
 
   test("врач получает термины своего курса, пока ничего не открыто", async () => {
     const r = await request(app).get("/api/glossary?courseId=" + course.courseId).set("Cookie", student);
@@ -64,5 +65,62 @@ describe("API глоссария", () => {
     expect(r.status).toBe(200);
     expect(r.body.terms.map((t) => t.id)).toEqual([otherTermId]);
     expect((await request(app).post("/api/glossary/" + termId + "/seen").set("Cookie", staff)).status).toBe(403);
+  });
+});
+
+describe("раздел «Термины»: куратор и админ правят глоссарий", () => {
+  let course, curator, admin, student, termId;
+  beforeAll(async () => {
+    course = await seedCourse();
+    await pool.query("UPDATE lessons SET html=$1 WHERE id=$2", ["<p>Возрастной <b>гипогонадизм</b> и ПСА.</p>", course.lessonIds[0]]);
+    curator = await loginAs(await createUser({ role: "curator" }));
+    admin = await loginAs(await createUser({ role: "admin" }));
+    student = await loginAs(await createUser({ courseId: course.courseId }));
+  });
+
+  test("проверка написаний показывает уроки, где слово найдено (аббревиатура — с учётом регистра)", async () => {
+    const r = await request(app).post("/api/glossary/check").set("Cookie", curator).send({ courseId: course.courseId, aliases: ["гипогонадизм"] });
+    expect(r.body.foundIn).toEqual([course.lessonIds[0]]);
+    const low = await request(app).post("/api/glossary/check").set("Cookie", curator).send({ courseId: course.courseId, aliases: ["пса"] });
+    expect(low.body.foundIn).toEqual([course.lessonIds[0]]); // не заглавными — ищется без учёта регистра
+    const caps = await request(app).post("/api/glossary/check").set("Cookie", curator).send({ courseId: course.courseId, aliases: ["ПС"] });
+    expect(caps.body.foundIn).toEqual([]); // целым словом
+  });
+
+  test("куратор создаёт термин; обязательны название и написания", async () => {
+    expect((await request(app).post("/api/glossary").set("Cookie", curator).send({ courseId: course.courseId, title: "", aliases: ["x"] })).status).toBe(400);
+    expect((await request(app).post("/api/glossary").set("Cookie", curator).send({ courseId: course.courseId, title: "Т", aliases: [] })).status).toBe(400);
+    const r = await request(app).post("/api/glossary").set("Cookie", curator).send({
+      courseId: course.courseId, title: "Гипогонадизм", category: "Эндокринология", lessonId: course.lessonIds[0],
+      aliases: ["гипогонадизм", "гипогонадизм", " "], lead: "Коротко",
+      body: { key: { label: "Главное", text: "Ниже 8", scale: [["< 8", "гипогонадизм", "bad"], ["", "", "ok"], ["x", "y", "зелёный"]] },
+        actions: [["unknown-icon", "Шаг", "пояснение"], ["check", "", "без заголовка — отбросится"]], more: [["Абзац", "Текст"]] }
+    });
+    expect(r.status).toBe(200);
+    termId = r.body.id;
+    const row = (await pool.query("SELECT * FROM glossary_terms WHERE id=$1", [termId])).rows[0];
+    expect(row.aliases).toEqual(["гипогонадизм"]);
+    expect(row.body.key.scale).toEqual([["< 8", "гипогонадизм", "bad"], ["x", "y", "ok"]]);
+    expect(row.body.actions).toEqual([["check", "Шаг", "пояснение"]]);
+    const list = await request(app).get("/api/glossary/admin?courseId=" + course.courseId).set("Cookie", curator);
+    expect(list.body.terms.find((t) => t.id === termId).foundIn).toEqual([course.lessonIds[0]]);
+  });
+
+  test("админ правит, урок другого курса не принимается", async () => {
+    const other = await seedCourse();
+    expect((await request(app).put("/api/glossary/" + termId).set("Cookie", admin).send({ title: "Т", aliases: ["т"], lessonId: other.lessonIds[0] })).status).toBe(400);
+    expect((await request(app).put("/api/glossary/" + termId).set("Cookie", admin).send({ title: "Гипогонадизм (правка)", aliases: ["гипогонадизм"], lessonId: course.lessonIds[0] })).status).toBe(200);
+    expect((await pool.query("SELECT title FROM glossary_terms WHERE id=$1", [termId])).rows[0].title).toBe("Гипогонадизм (правка)");
+  });
+
+  test("врачу правка и удаление недоступны; удаление убирает и отметки «открыл»", async () => {
+    expect((await request(app).put("/api/glossary/" + termId).set("Cookie", student).send({ title: "x", aliases: ["x"] })).status).toBe(403);
+    expect((await request(app).get("/api/glossary/admin?courseId=" + course.courseId).set("Cookie", student)).status).toBe(403);
+    await request(app).post("/api/glossary/" + termId + "/seen").set("Cookie", student);
+    expect((await request(app).delete("/api/glossary/" + termId).set("Cookie", student)).status).toBe(403);
+    expect((await request(app).delete("/api/glossary/" + termId).set("Cookie", curator)).status).toBe(200);
+    expect((await pool.query("SELECT count(*)::int AS n FROM glossary_seen WHERE term_id=$1", [termId])).rows[0].n).toBe(0);
+    const log = await pool.query("SELECT action FROM audit_log WHERE target_id=$1 ORDER BY created_at", [termId]);
+    expect(log.rows.map((x) => x.action)).toEqual(["glossary.create", "glossary.update", "glossary.delete"]);
   });
 });

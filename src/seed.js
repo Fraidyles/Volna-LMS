@@ -74,19 +74,21 @@ const { GLOSSARY } = require("./content-glossary");
   }
   console.log("Вопросы теста загружены:", QUIZ.length);
 
-  // Глоссарий курса — как и вопросы, целиком из файла: лишние термины удаляются.
-  await pool.query("DELETE FROM glossary_terms WHERE course_id=$1 AND id <> ALL($2::text[])", [COURSE.id, GLOSSARY.map((g) => g.id)]);
+  // Глоссарий курса: файл — только стартовый набор. Термины правят куратор и
+  // админ в разделе «Термины», поэтому сид добавляет лишь те, которых ещё нет,
+  // и ничего не перезаписывает и не удаляет.
+  let glossaryAdded = 0;
   for (let i = 0; i < GLOSSARY.length; i++) {
     const g = GLOSSARY[i];
     const body = { key: g.key || null, meaning: g.meaning || null, actions: g.actions || [], more: g.more || [] };
-    await pool.query(
+    const r = await pool.query(
       `INSERT INTO glossary_terms (id, course_id, lesson_id, idx, title, category, aliases, lead, body)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       ON CONFLICT (id) DO UPDATE SET course_id=$2, lesson_id=$3, idx=$4, title=$5, category=$6, aliases=$7, lead=$8, body=$9`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (id) DO NOTHING`,
       [g.id, COURSE.id, g.lessonId, i, g.title, g.category || "", JSON.stringify(g.aliases), g.lead || "", JSON.stringify(body)]
     );
+    glossaryAdded += r.rowCount;
   }
-  console.log("Термины глоссария загружены:", GLOSSARY.length);
+  console.log("Термины глоссария: новых добавлено", glossaryAdded, "из", GLOSSARY.length);
 
   for (const p of PROTOCOLS) {
     await pool.query(

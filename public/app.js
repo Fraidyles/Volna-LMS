@@ -635,7 +635,8 @@ function navSnapshot(){
     drawerTab: (view==="staff" && staffState.selectedStudentId) ? staffState.drawerTab : null,
     lessonPageId: (view==="staff" && staffState.mainTab==="materials") ? (staffState.lessonPageId||null) : null,
     lessonPageTab: (view==="staff" && staffState.mainTab==="materials" && staffState.lessonPageId) ? staffState.lessonPageTab : null,
-    protocolId: (view==="staff" && staffState.mainTab==="protocols" && protocolEditor.open) ? (protocolEditor.id||"new") : null
+    protocolId: (view==="staff" && staffState.mainTab==="protocols" && protocolEditor.open) ? (protocolEditor.id||"new") : null,
+    glossaryId: (view==="staff" && staffState.mainTab==="glossary" && glossaryAdmin.edit) ? (glossaryAdmin.edit.id||"new") : null
   };
 }
 function navStatesEqual(a, b){
@@ -644,7 +645,7 @@ function navStatesEqual(a, b){
     a.quizMode===b.quizMode && a.staffMainTab===b.staffMainTab &&
     a.selectedStudentId===b.selectedStudentId && a.drawerTab===b.drawerTab &&
     // Вкладки страницы урока в историю не пишутся — «Назад» ведёт к списку уроков.
-    (a.lessonPageId||null)===(b.lessonPageId||null) && (a.protocolId||null)===(b.protocolId||null);
+    (a.lessonPageId||null)===(b.lessonPageId||null) && (a.protocolId||null)===(b.protocolId||null) && (a.glossaryId||null)===(b.glossaryId||null);
 }
 // Вызывается в конце каждого render() — навигационные переходы (клик по вкладке,
 // открытие урока/карточки врача) естественным образом проходят через render(), а
@@ -705,6 +706,13 @@ function applyNavState(s){
         else protocolEditor.open = false;
       }
     } else if(protocolEditor.open){ protocolEditor.open = false; }
+    // Страница термина: «Назад» из неё ведёт к списку (несохранённое — как при уходе из раздела).
+    if(!(staffState.mainTab==="glossary" && s.glossaryId)){ glossaryAdmin.edit = null; glossaryAdmin.dirty = false; }
+    else if(!glossaryAdmin.edit || (glossaryAdmin.edit.id||"new")!==s.glossaryId){
+      var nsG = s.glossaryId==="new" ? null : glossaryAdmin.list.find(function(x){ return x.id===s.glossaryId; });
+      glossaryAdmin.edit = (s.glossaryId==="new" || nsG) ? glDraft(nsG) : null; glossaryAdmin.dirty = false;
+      glossaryAdmin.check = nsG ? (nsG.foundIn||[]) : [];
+    }
     if(s.selectedStudentId){
       // Синхронная часть openStudentPage отработает до первого await ещё до
       // возврата сюда (JS однопоточный) — drawerTab можно проставить сразу после.
@@ -952,44 +960,54 @@ function glossaryLessonsWith(term){
   }).filter(Boolean);
 }
 var GL_TONES = { ok:"#9C86FF", warn:"#FF8FA3", bad:"#FF4D6D" };
-function renderGlossaryPanel(){
-  var term = glossary.terms.find(function(t){ return t.id===glossary.open; });
-  if(!term) return el('<div></div>');
-  var b = term.body || {}, more = b.more || [], tab = glossary.tab;
-  var tabs = [["brief","Кратко"]].concat(more.length ? [["more","Подробнее"]] : [], [["course","В курсе"]]);
-  var html = '<button type="button" class="gl-x" data-action="close-term" aria-label="Закрыть">'+icon("close","ic-sm")+'</button>' +
-    '<span class="gl-cat">Термин курса'+(term.category ? ' · '+escapeHtml(term.category) : '')+'</span>' +
-    '<h2 class="gl-title">'+escapeHtml(term.title)+'</h2>' +
+// Статья термина — общая для панели врача и предпросмотра в разделе «Термины».
+// opts.courseRows — строки вкладки «В курсе» (у врача — уроки с текстом, у персонала — foundIn).
+function glossaryArticleHtml(term, tab, opts){
+  opts = opts || {};
+  var b = term.body || {}, more = b.more || [];
+  var tabs = [["brief","Кратко"]].concat(more.length ? [["more","Подробнее"]] : [], opts.noCourseTab ? [] : [["course","В курсе"]]);
+  if(!tabs.some(function(t){ return t[0]===tab; })) tab = "brief";
+  var html = '<span class="gl-cat">Термин курса'+(term.category ? ' · '+escapeHtml(term.category) : '')+'</span>' +
+    '<h2 class="gl-title">'+escapeHtml(term.title||"Без названия")+'</h2>' +
     (term.lead ? '<p class="gl-lead">'+escapeHtml(term.lead)+'</p>' : '') +
-    '<div class="gl-tabs" role="tablist">'+tabs.map(function(t){ return '<button type="button" role="tab" class="'+(t[0]===tab?'on':'')+'" data-action="term-tab" data-tab="'+t[0]+'">'+t[1]+'</button>'; }).join('')+'</div>';
+    '<div class="gl-tabs" role="tablist">'+tabs.map(function(t){ return '<button type="button" role="tab" class="'+(t[0]===tab?'on':'')+'" data-action="'+(opts.tabAction||"term-tab")+'" data-tab="'+t[0]+'">'+t[1]+'</button>'; }).join('')+'</div>';
   if(tab==="brief"){
-    if(b.key){
+    if(b.key && b.key.text){
       html += '<div class="gl-hero">'+(b.key.label ? '<span class="gl-badge">'+escapeHtml(b.key.label)+'</span>' : '')+'<b>'+escapeHtml(b.key.text)+'</b>' +
-        ((b.key.scale||[]).length ? '<div class="gl-scale" style="grid-template-columns:repeat('+b.key.scale.length+',minmax(0,1fr));">'+b.key.scale.map(function(s){
-          return '<div><i style="background:'+(GL_TONES[s[2]]||GL_TONES.ok)+'"></i><b>'+escapeHtml(s[0])+'</b>'+escapeHtml(s[1])+'</div>';
+        ((b.key.scale||[]).length ? '<div class="gl-scale" style="grid-template-columns:repeat('+b.key.scale.length+',minmax(0,1fr));">'+b.key.scale.map(function(sc){
+          return '<div><i style="background:'+(GL_TONES[sc[2]]||GL_TONES.ok)+'"></i><b>'+escapeHtml(sc[0]||"")+'</b>'+escapeHtml(sc[1]||"")+'</div>';
         }).join('')+'</div>' : '') + '</div>';
     }
-    if(b.meaning){
-      html += '<div class="gl-card"><h5>Что это означает?</h5><p>'+escapeHtml(b.meaning.text||"")+'</p>' +
-        ((b.meaning.stats||[]).length ? '<div class="gl-stat">'+b.meaning.stats.map(function(s){ return '<div><b>'+escapeHtml(s[0])+'</b><span>'+escapeHtml(s[1])+'</span></div>'; }).join('')+'</div>' : '') + '</div>';
+    if(b.meaning && (b.meaning.text || (b.meaning.stats||[]).length)){
+      html += '<div class="gl-card"><h5>Что это означает?</h5>'+(b.meaning.text ? '<p>'+escapeHtml(b.meaning.text)+'</p>' : '') +
+        ((b.meaning.stats||[]).length ? '<div class="gl-stat">'+b.meaning.stats.map(function(st){ return '<div><b>'+escapeHtml(st[0]||"")+'</b><span>'+escapeHtml(st[1]||"")+'</span></div>'; }).join('')+'</div>' : '') + '</div>';
     }
     if((b.actions||[]).length){
-      html += '<div class="gl-h">Что делать врачу?</div>' + b.actions.map(function(a){
-        return '<div class="gl-act"><span class="gl-ic">'+icon(a[0]||"check")+'</span><div><b>'+escapeHtml(a[1])+'</b>'+(a[2]?'<span>'+escapeHtml(a[2])+'</span>':'')+'</div></div>';
+      html += '<div class="gl-h">Что делать врачу?</div>' + b.actions.map(function(ac){
+        return '<div class="gl-act"><span class="gl-ic">'+icon(ac[0]||"check")+'</span><div><b>'+escapeHtml(ac[1]||"")+'</b>'+(ac[2]?'<span>'+escapeHtml(ac[2])+'</span>':'')+'</div></div>';
       }).join('');
     }
   } else if(tab==="more"){
-    html += more.map(function(m){ return '<div class="gl-card"><h5>'+escapeHtml(m[0])+'</h5><p>'+escapeHtml(m[1])+'</p></div>'; }).join('');
+    html += more.map(function(m){ return '<div class="gl-card"><h5>'+escapeHtml(m[0]||"")+'</h5><p>'+escapeHtml(m[1]||"")+'</p></div>'; }).join('');
   } else {
-    var here = course && course.lessons[studentState.lessonIndex];
-    var rows = glossaryLessonsWith(term);
+    var rows = opts.courseRows || [];
     html += '<div class="gl-card"><h5>Где встречается в курсе</h5>' + (rows.length ? rows.map(function(r){
-      var locked = r.l.hiddenForMe || r.l.dripLockedForMe, isHere = here && here.id===r.l.id;
-      return '<div class="gl-link'+(locked?' locked':'')+'"'+(locked||isHere ? '' : ' data-action="term-goto-lesson" data-idx="'+r.i+'"')+'>' +
-        '<i>Урок '+(r.i+1)+'</i><span>'+escapeHtml(r.l.title)+'</span>' +
-        '<em>'+(isHere ? 'вы здесь' : (locked ? icon("lock","ic-sm") : 'Открыть →'))+'</em></div>';
+      return '<div class="gl-link'+(r.locked?' locked':'')+'"'+(r.locked||r.here ? '' : ' data-action="term-goto-lesson" data-idx="'+r.i+'"')+'>' +
+        '<i>Урок '+(r.i+1)+'</i><span>'+escapeHtml(r.title)+'</span>' +
+        '<em>'+(r.here ? 'вы здесь' : (r.locked ? icon("lock","ic-sm") : 'Открыть →'))+'</em></div>';
     }).join('') : '<p>Пока только в этом уроке.</p>') + '</div>';
   }
+  return html;
+}
+function renderGlossaryPanel(){
+  var term = glossary.terms.find(function(t){ return t.id===glossary.open; });
+  if(!term) return el('<div></div>');
+  var here = course && course.lessons[studentState.lessonIndex];
+  var rows = glossaryLessonsWith(term).map(function(r){
+    return { i:r.i, title:r.l.title, locked: r.l.hiddenForMe || r.l.dripLockedForMe, here: here && here.id===r.l.id };
+  });
+  var html = '<button type="button" class="gl-x" data-action="close-term" aria-label="Закрыть">'+icon("close","ic-sm")+'</button>' +
+    glossaryArticleHtml(term, glossary.tab, { courseRows: rows });
   return el('<div class="overlay gl-overlay" data-action="overlay-close-term"><aside class="drawer gl-panel" data-stop="1" role="dialog" aria-label="'+escapeHtml(term.title)+'">'+html+'</aside></div>');
 }
 
@@ -2297,7 +2315,7 @@ function renderSidebar(){
     items += sidebarItem("calendar","calendar","Расписание", snavKey==="calendar");
     // «Уроки» объединяют прежние «Учебные материалы» и «Модули»: модули — секции списка.
     items += sidebarGroup("learning","book","Обучение", snavKey, (isAdmin?[["courses","folder","Курсы"]]:[]).concat([
-      ["materials","folder","Уроки"]], [["protocols","doctor","Протоколы"]]));
+      ["materials","folder","Уроки"]], [["glossary","book","Термины"], ["protocols","doctor","Протоколы"]]));
     items += sidebarGroup("sales","wallet","Продажи", snavKey, [
       ["orders","wallet","Заказы и оплаты", (toolsState.orders.summary||{}).overdueOrders||0]].concat(isAdmin?[["products","folder","Продукты"]]:[]));
     if(isAdmin){
@@ -4318,13 +4336,13 @@ function renderSettingsPage(){
 
 /* ============================= РЕНДЕР: ПЕРСОНАЛ ============================= */
 var STAFF_PAGE_TITLES = { home:"Главная", students:"Врачи", dashboard:"Аналитика", calendar:"Расписание", courses:"Курсы",
-  materials:"Уроки", protocols:"Протоколы", assignments:"Проверка заданий", feed:"Лента ответов", surveys:"Анкеты и опросы",
+  materials:"Уроки", glossary:"Термины", protocols:"Протоколы", assignments:"Проверка заданий", feed:"Лента ответов", surveys:"Анкеты и опросы",
   orders:"Заказы и оплаты", products:"Продукты", team:"Команда", audit:"Журнал действий", specializations:"Специализации",
   telegram:"Telegram", notifications:"Уведомления", settings:"Настройки", profile:"Мой профиль" };
 // Разделы, где данные зависят от выбранного курса (запросы с courseId); в остальных
 // (заказы, продукты, анкеты, команда, журнал, Telegram, профиль, настройки, сами
 // курсы — у них выбор плиткой) переключатель курса только занимал место.
-var STAFF_COURSE_SCOPED = ["home","students","dashboard","calendar","materials","protocols","assignments","feed","notifications"];
+var STAFF_COURSE_SCOPED = ["home","students","dashboard","calendar","materials","glossary","protocols","assignments","feed","notifications"];
 function renderStaffShell(){
   var wrap = el('<div></div>');
   var mobNavBackdrop = renderMobileNavBackdrop();
@@ -4339,7 +4357,7 @@ function renderStaffShell(){
   if(staffState.mainTab === "modules"){ staffState.mainTab = "materials"; staffState.navKey = "materials"; }
   // У страницы урока и протокола своя шапка с «хлебными крошками» — общий
   // заголовок и переключатель курса там лишние.
-  var ownPage = (staffState.mainTab==="materials" && staffState.lessonPageId) || (staffState.mainTab==="protocols" && protocolEditor.open);
+  var ownPage = (staffState.mainTab==="materials" && staffState.lessonPageId) || (staffState.mainTab==="protocols" && protocolEditor.open) || (staffState.mainTab==="glossary" && glossaryAdmin.edit);
   if(!ownPage){
     // Заголовок — название раздела (раньше на каждом экране было «Главный
     // администратор»: роль не подсказывает, где ты и что здесь делать).
@@ -4360,6 +4378,8 @@ function renderStaffShell(){
     content.appendChild(renderDashboardTab());
   } else if(staffState.mainTab === "protocols"){
     content.appendChild(renderProtocolsAdminTab());
+  } else if(staffState.mainTab === "glossary"){
+    content.appendChild(renderGlossaryAdminTab());
   } else if(staffState.mainTab === "specializations" && isAdminRole()){
     content.appendChild(el('<div class="page-wide">'+renderSpecializationsCard()+'</div>'));
   } else if(staffState.mainTab === "audit" && (me.role==="admin"||me.role==="super_admin")){
@@ -5904,6 +5924,159 @@ async function lsApplyMove(lessonId, targetId, where, moduleId){
   render();
 }
 
+/* ============================= РЕНДЕР: ТЕРМИНЫ (куратор и админ) ============================= */
+// Раздел «Обучение → Термины»: глоссарий курса. Список сгруппирован по урокам, у
+// каждого термина видно, подсвечивается ли он (нашлось ли написание в тексте урока).
+// Страница термина — форма из понятных блоков (всё, кроме названия и написаний,
+// необязательно) и рядом живой предпросмотр «так увидит врач»; написания
+// проверяются по текстам уроков прямо во время ввода.
+var glossaryAdmin = { list:[], loaded:false, loading:false, courseId:null, q:"", edit:null, dirty:false, tab:"brief", check:null, checkTimer:null };
+var GL_ICON_CHOICES = [["check","Галочка"],["clipboard","Опросник"],["search","Анализ"],["calendar","Срок / график"],["users","Консультация"],["doctor","Врач"],["task","Задача"],["star","Важно"],["book","Материал"],["chartbar","Показатель"],["bell","Напоминание"]];
+var GL_TONE_CHOICES = [["ok","Норма"],["warn","Внимание"],["bad","Опасно"]];
+
+function glAdminLoad(){
+  var cid = staffState.activeCourseId;
+  if(!cid || glossaryAdmin.loading) return Promise.resolve();
+  glossaryAdmin.loading = true;
+  return api("/glossary/admin?courseId="+encodeURIComponent(cid)).then(function(d){
+    glossaryAdmin.list = d.terms || []; glossaryAdmin.loaded = true; glossaryAdmin.courseId = cid; glossaryAdmin.loading = false;
+  }, function(e){ glossaryAdmin.loading = false; glossaryAdmin.loaded = true; glossaryAdmin.courseId = cid; showToast(e.message); });
+}
+function glLessonLabel(id){
+  var list = lsLessons(), i = list.findIndex(function(l){ return l.id===id; });
+  return i===-1 ? null : { n:i+1, title:list[i].title };
+}
+function glFoundText(found, homeId){
+  if(!found || !found.length) return { kind:"warn", text:"не найден в тексте уроков — проверьте написания" };
+  var names = found.map(function(id){ var l = glLessonLabel(id); return l ? "уроке "+l.n : null; }).filter(Boolean);
+  var inHome = homeId && found.indexOf(homeId)!==-1;
+  if(homeId && !inHome) return { kind:"warn", text:"в своём уроке не найден · есть в "+names.join(", ") };
+  return { kind:"ok", text:"подсвечивается в "+names.join(", ") };
+}
+function renderGlossaryAdminTab(){
+  if(!glossaryAdmin.loaded || glossaryAdmin.courseId!==staffState.activeCourseId){
+    glAdminLoad().then(render);
+    return el('<div class="card empty-state" style="padding:36px 16px;">Загрузка терминов…</div>');
+  }
+  if(glossaryAdmin.edit) return renderGlossaryTermPage();
+  var q = glossaryAdmin.q.trim().toLowerCase(), all = glossaryAdmin.list;
+  var list = q ? all.filter(function(t){ return (t.title+" "+t.category+" "+(t.aliases||[]).join(" ")).toLowerCase().indexOf(q)!==-1; }) : all;
+  var html = '<div class="ls-page"><div class="ls-bar"><p class="ls-sub">Термины подсвечиваются в тексте уроков — врач нажимает на слово и читает короткую статью. В своём уроке термин подсвечен всегда, в остальных — пока врач его ещё не открывал.</p>' +
+    '<div class="ls-actions"><label class="ls-search">'+icon("search","ic-sm")+'<input id="glossarySearchInput" placeholder="Найти термин" value="'+escapeHtml(glossaryAdmin.q)+'" autocomplete="off"></label>' +
+    '<button type="button" class="btn btn-primary" data-action="gl-new">+ Термин</button></div></div>';
+  if(!all.length) return el(html + '<div class="card empty-state" style="padding:36px 16px;">Терминов пока нет. Нажмите «+ Термин» — например, название болезни или методики из урока.</div></div>');
+  if(!list.length) html += '<div class="card empty-state" style="padding:28px 16px;">Ничего не нашлось.</div>';
+  var groups = [], byLesson = {};
+  lsLessons().forEach(function(l, i){ byLesson[l.id] = { title:"Урок "+(i+1)+" · "+l.title, items:[] }; groups.push(byLesson[l.id]); });
+  var none = { title:"Без урока", items:[] };
+  list.forEach(function(t){ (byLesson[t.lessonId] || none).items.push(t); });
+  groups.concat([none]).forEach(function(g){
+    if(!g.items.length) return;
+    html += '<div class="card ls-sec"><div class="ls-sec-h"><b>'+escapeHtml(g.title)+'</b><span class="ls-n">'+g.items.length+' '+ruPluralClient(g.items.length,"термин","термина","терминов")+'</span></div>';
+    g.items.forEach(function(t){
+      var f = glFoundText(t.foundIn, t.lessonId);
+      html += '<div class="ls-row" data-action="gl-edit" data-id="'+t.id+'"><div class="ls-main"><b>'+escapeHtml(t.title)+'</b>' +
+        '<div class="ls-chips">'+(t.category ? lsPill("info", t.category) : '')+lsPill(f.kind, f.text, f.kind==="ok"?"eye":null)+
+          '<span class="ls-pill gl-aliases" title="Написания в тексте">'+escapeHtml((t.aliases||[]).slice(0,3).join(", ")+((t.aliases||[]).length>3?" …":""))+'</span></div></div>' +
+        '<button type="button" class="btn btn-sm btn-ghost ls-open" data-action="gl-edit" data-id="'+t.id+'">Изменить</button></div>';
+    });
+    html += '</div>';
+  });
+  return el(html + '</div>');
+}
+
+// Черновик формы ↔ термин
+function glDraft(t){
+  var b = (t && t.body) || {};
+  return {
+    id: t ? t.id : null, title: t ? t.title : "", category: t ? (t.category||"") : "", lessonId: t ? (t.lessonId||"") : "",
+    aliasesText: t ? (t.aliases||[]).join("\n") : "", lead: t ? (t.lead||"") : "",
+    key: { label: (b.key && b.key.label) || "", text: (b.key && b.key.text) || "", scale: ((b.key && b.key.scale) || []).map(function(r){ return r.slice(); }) },
+    meaning: { text: (b.meaning && b.meaning.text) || "", stats: ((b.meaning && b.meaning.stats) || []).map(function(r){ return r.slice(); }) },
+    actions: (b.actions || []).map(function(r){ return r.slice(); }),
+    more: (b.more || []).map(function(r){ return r.slice(); }),
+    foundIn: t ? t.foundIn : null
+  };
+}
+function glAliases(d){ return d.aliasesText.split(/\n|,/).map(function(x){ return x.trim(); }).filter(Boolean); }
+function glDraftTerm(d){
+  return { title:d.title, category:d.category, lead:d.lead, lessonId:d.lessonId||null, aliases:glAliases(d),
+    body:{ key: d.key.text ? d.key : null, meaning: (d.meaning.text || d.meaning.stats.length) ? d.meaning : null, actions:d.actions, more:d.more } };
+}
+function glSetPath(obj, path, val){
+  var ps = path.split("."), o = obj;
+  for(var i=0;i<ps.length-1;i++) o = o[ps[i]];
+  o[ps[ps.length-1]] = val;
+}
+function glPreviewHtml(){
+  var d = glossaryAdmin.edit;
+  return glossaryArticleHtml(glDraftTerm(d), glossaryAdmin.tab, { noCourseTab:true, tabAction:"gl-preview-tab" });
+}
+function glCheckAliases(){
+  var d = glossaryAdmin.edit;
+  if(!d) return;
+  clearTimeout(glossaryAdmin.checkTimer);
+  glossaryAdmin.checkTimer = setTimeout(function(){
+    var aliases = glAliases(d);
+    if(!aliases.length){ glossaryAdmin.check = []; glPaintCheck(); return; }
+    api("/glossary/check", { method:"POST", body: JSON.stringify({ courseId: staffState.activeCourseId, aliases: aliases }) })
+      .then(function(r){ glossaryAdmin.check = r.foundIn || []; glPaintCheck(); }, function(){});
+  }, 350);
+}
+function glCheckHtml(){
+  var d = glossaryAdmin.edit, found = glossaryAdmin.check;
+  if(found===null) return '<span class="gl-chk wait">Проверяем по текстам уроков…</span>';
+  if(!glAliases(d).length) return '<span class="gl-chk warn">Добавьте хотя бы одно написание</span>';
+  var f = glFoundText(found, d.lessonId || null);
+  return '<span class="gl-chk '+f.kind+'">'+icon(f.kind==="ok"?"check":"eye","ic-sm")+(f.kind==="ok" ? "Найдено: " : "")+escapeHtml(f.text.replace(/^подсвечивается в /, "будет подсвечен в "))+'</span>';
+}
+function glPaintCheck(){ var c = document.getElementById("glAliasCheck"); if(c) c.innerHTML = glCheckHtml(); }
+function glRows(list, path, cols, addLabel){
+  var html = '<div class="gl-rows">';
+  list.forEach(function(r, i){
+    html += '<div class="gl-rowf">' + cols.map(function(c, j){
+      if(c.stack) return '<div class="gl-stack">'+c.stack.map(function(sc){ return '<input class="input'+(sc.strong?' strong':'')+'" data-gb="'+path+'.'+i+'.'+sc.j+'" value="'+escapeHtml(r[sc.j]||"")+'" placeholder="'+escapeHtml(sc.ph||"")+'">'; }).join('')+'</div>';
+      if(c.select) return '<select class="input" data-gb="'+path+'.'+i+'.'+j+'">'+c.select.map(function(o){ return '<option value="'+o[0]+'"'+(r[j]===o[0]?' selected':'')+'>'+escapeHtml(o[1])+'</option>'; }).join('')+'</select>';
+      if(c.area) return '<textarea class="input" rows="3" data-gb="'+path+'.'+i+'.'+j+'" placeholder="'+escapeHtml(c.ph||"")+'">'+escapeHtml(r[j]||"")+'</textarea>';
+      return '<input class="input'+(c.narrow?' narrow':'')+'" data-gb="'+path+'.'+i+'.'+j+'" value="'+escapeHtml(r[j]||"")+'" placeholder="'+escapeHtml(c.ph||"")+'">';
+    }).join('') + '<button type="button" class="gl-rowx" data-action="gl-row-del" data-list="'+path+'" data-i="'+i+'" title="Убрать">'+icon("close","ic-sm")+'</button></div>';
+  });
+  return html + '<button type="button" class="link-btn" data-action="gl-row-add" data-list="'+path+'">+ '+addLabel+'</button></div>';
+}
+function renderGlossaryTermPage(){
+  var d = glossaryAdmin.edit, isNew = !d.id;
+  var lessonOpts = '<option value="">— без урока —</option>' + lsLessons().map(function(l, i){ return '<option value="'+l.id+'"'+(d.lessonId===l.id?' selected':'')+'>Урок '+(i+1)+' · '+escapeHtml(l.title)+'</option>'; }).join('');
+  var sec = function(n, title, hint, body, optional){
+    return '<div class="card pr-sec"><div class="pr-sec-h"><i>'+n+'</i><b>'+title+'</b>'+(optional?'<span class="gl-opt">необязательно</span>':'')+'</div><p class="pr-sec-s">'+hint+'</p>'+body+'</div>';
+  };
+  var html = '<div class="lp-page"><div class="lp-crumbs"><button type="button" class="link-btn" data-action="gl-close">← Термины</button><span>/</span><b>'+(isNew?'Новый термин':escapeHtml(d.title))+'</b></div>' +
+    '<div class="lp-head"><div class="lp-head-main"><h1 class="lp-title">'+(isNew ? 'Новый термин' : escapeHtml(d.title))+'</h1></div>' +
+    '<div class="lp-head-acts">'+(isNew ? '' : '<button type="button" class="btn btn-ghost" data-action="gl-delete">'+icon("trash","ic-sm")+'Удалить</button>')+
+      '<button type="button" class="btn btn-primary" data-action="gl-save">'+(isNew?'Создать термин':'Сохранить')+'</button></div></div>' +
+    '<div class="gl-edit"><div class="pr-secs">';
+  html += sec(1, "Термин и где он встречается", "Название — заголовок статьи. Написания — как слово стоит в тексте урока: по ним термин находится и подсвечивается.",
+    '<div class="gl-grid2"><div class="field"><label>Название</label><input class="input" data-gb="title" value="'+escapeHtml(d.title)+'" placeholder="Например, «Возрастной гипогонадизм»"></div>' +
+    '<div class="field"><label>Категория</label><input class="input" data-gb="category" value="'+escapeHtml(d.category)+'" placeholder="Например, «Эндокринология»"></div></div>' +
+    '<div class="field"><label>Урок, где термин вводится</label><select class="input" data-gb="lessonId">'+lessonOpts+'</select><p class="hint">В этом уроке слово подсвечено всегда, в остальных — пока врач не открыл статью.</p></div>' +
+    '<div class="field"><label>Написания в тексте — по одному в строке</label><textarea class="input" rows="4" data-gb="aliasesText" placeholder="гипогонадизм&#10;гипогонадизма&#10;гипогонадизму">'+escapeHtml(d.aliasesText)+'</textarea>' +
+      '<p class="hint">Добавьте нужные падежи: «гипогонадизм», «гипогонадизма»… Сокращения вроде «ПСА» ищутся с учётом регистра.</p><div id="glAliasCheck">'+glCheckHtml()+'</div></div>' +
+    '<div class="field" style="margin-bottom:0;"><label>Коротко, что это</label><textarea class="input" rows="2" data-gb="lead" placeholder="1–2 предложения под заголовком статьи">'+escapeHtml(d.lead)+'</textarea></div>');
+  html += sec(2, "Главное", "Цветной блок по центру статьи: одно правило или число, которое важно запомнить. Шкала — если есть пороги или этапы.",
+    '<div class="field"><label>Текст крупно</label><textarea class="input" rows="2" data-gb="key.text" placeholder="Например, «Общий тестостерон ниже 8 нмоль/л — гипогонадизм»">'+escapeHtml(d.key.text)+'</textarea></div>' +
+    '<div class="field" style="max-width:320px;"><label>Подпись над текстом</label><input class="input" data-gb="key.label" value="'+escapeHtml(d.key.label)+'" placeholder="Главное число"></div>' +
+    '<label class="gl-sublab">Шкала — до 5 делений: значение, подпись и цвет (норма — фиолетовый, внимание — розовый, опасно — красный)</label>' + glRows(d.key.scale, "key.scale", [{ ph:"> 12,1", narrow:true }, { ph:"норма" }, { select:GL_TONE_CHOICES }], "деление шкалы"), true);
+  html += sec(3, "Что это означает?", "Пояснение простым языком и, если есть, крупные цифры — распространённость, доли, пороги.",
+    '<div class="field"><textarea class="input" rows="3" data-gb="meaning.text" placeholder="Что важно понимать про этот термин">'+escapeHtml(d.meaning.text)+'</textarea></div>' +
+    '<label class="gl-sublab">Крупные цифры (до 4)</label>' + glRows(d.meaning.stats, "meaning.stats", [{ ph:"≈ 40%", narrow:true }, { ph:"мужчин старше 45 лет" }], "цифру"), true);
+  html += sec(4, "Что делать врачу?", "Короткие практические шаги — каждый отдельной карточкой с иконкой и красной подписью.",
+    glRows(d.actions, "actions", [{ select:GL_ICON_CHOICES }, { stack:[{ j:1, ph:"Шаг — например, «Скрининг опросником AMS»", strong:true }, { j:2, ph:"Пояснение красным — например, «выше 26 баллов — симптомы выражены»" }] }], "шаг"), true);
+  html += sec(5, "Подробнее", "Отдельная вкладка статьи для тех, кто хочет глубже: несколько абзацев с заголовками.",
+    glRows(d.more, "more", [{ ph:"Заголовок абзаца" }, { ph:"Текст", area:true }], "абзац"), true);
+  html += '<div class="gl-savebar"><button type="button" class="btn btn-primary" data-action="gl-save">'+(isNew?'Создать термин':'Сохранить')+'</button><button type="button" class="btn btn-ghost" data-action="gl-close">Отмена</button></div>';
+  html += '</div><div class="gl-prevcol"><div class="gl-prevlab">'+icon("eye","ic-sm")+'Так врач увидит статью</div><div class="gl-prev" id="glPreview">'+glPreviewHtml()+'</div></div></div></div>';
+  return el(html);
+}
+
 /* ============================= РЕНДЕР: ПРОТОКОЛЫ (АДМИН) ============================= */
 // Специализации — фиксированный справочник (см. schema.sql «Этап 11»): отсюда админ
 // им управляет, отсюда же их читают форма регистрации и профиль врача.
@@ -6592,6 +6765,8 @@ async function navigateToTab(navKey){
   }
   if(staffState.lessonPageId && !lpLeaveOk()) return;
   if(protocolEditor.open && staffState.mainTab==="protocols" && !prLeaveOk()) return;
+  if(glossaryAdmin.edit && glossaryAdmin.dirty && !window.confirm("Уйти без сохранения? Изменения термина пропадут.")) return;
+  glossaryAdmin.edit = null; glossaryAdmin.dirty = false;
   if(navKey==="modules") navKey = "materials";
   staffState.navKey = navKey;
   staffState.mainTab = navKey;
@@ -8218,6 +8393,56 @@ function wireEvents(root){
 
     /* ---------- Уроки: список и страница урока ---------- */
     if(action==="ls-noop") return;
+    /* ---------- Термины ---------- */
+    if(action==="gl-new"){ glossaryAdmin.edit = glDraft(null); glossaryAdmin.dirty = false; glossaryAdmin.tab = "brief"; glossaryAdmin.check = []; render(); window.scrollTo(0,0); return; }
+    if(action==="gl-edit"){
+      var glT = glossaryAdmin.list.find(function(x){ return x.id===t.getAttribute("data-id"); });
+      if(!glT) return;
+      glossaryAdmin.edit = glDraft(glT); glossaryAdmin.dirty = false; glossaryAdmin.tab = "brief"; glossaryAdmin.check = glT.foundIn || [];
+      render(); window.scrollTo(0,0); return;
+    }
+    if(action==="gl-close"){
+      if(glossaryAdmin.dirty && !window.confirm("Уйти без сохранения? Изменения термина пропадут.")) return;
+      glossaryAdmin.edit = null; glossaryAdmin.dirty = false; render(); return;
+    }
+    if(action==="gl-preview-tab"){ glossaryAdmin.tab = t.getAttribute("data-tab"); var glPv = document.getElementById("glPreview"); if(glPv) glPv.innerHTML = glPreviewHtml(); return; }
+    if(action==="gl-row-add" || action==="gl-row-del"){
+      var glPath = t.getAttribute("data-list"), glArr = glPath.split(".").reduce(function(o, k){ return o[k]; }, glossaryAdmin.edit);
+      var glLimits = { "key.scale":5, "meaning.stats":4, "actions":8, "more":10 };
+      if(action==="gl-row-add"){
+        if(glArr.length >= (glLimits[glPath]||10)){ showToast("Больше не поместится — лучше короче"); return; }
+        glArr.push(glPath==="key.scale" ? ["","","ok"] : glPath==="actions" ? ["check","",""] : ["",""]);
+      } else glArr.splice(parseInt(t.getAttribute("data-i"),10), 1);
+      glossaryAdmin.dirty = true; render(); return;
+    }
+    if(action==="gl-save"){
+      var gd = glossaryAdmin.edit;
+      if(!gd.title.trim()){ showToast("Укажите название термина"); return; }
+      if(!glAliases(gd).length){ showToast("Добавьте хотя бы одно написание — по нему термин ищется в тексте"); return; }
+      var gPayload = Object.assign({ courseId: staffState.activeCourseId }, glDraftTerm(gd));
+      t.disabled = true;
+      try{
+        var gRes = gd.id ? await api("/glossary/"+encodeURIComponent(gd.id), { method:"PUT", body: JSON.stringify(gPayload) })
+                         : await api("/glossary", { method:"POST", body: JSON.stringify(gPayload) });
+        await glAdminLoad();
+        var gSaved = glossaryAdmin.list.find(function(x){ return x.id===(gd.id || gRes.id); });
+        glossaryAdmin.edit = gSaved ? glDraft(gSaved) : null; glossaryAdmin.dirty = false;
+        if(gSaved) glossaryAdmin.check = gSaved.foundIn || [];
+        glossary.courseId = null; // врачу в предпросмотре — свежий глоссарий
+        showToast(gd.id ? "Термин сохранён" : "Термин создан — он уже подсвечивается в уроках");
+      }catch(err){ showToast(err.message); t.disabled = false; return; }
+      render(); return;
+    }
+    if(action==="gl-delete"){
+      var gdel = glossaryAdmin.edit;
+      askConfirm({ title:'Удалить термин «'+gdel.title+'»?', body:"Слово перестанет подсвечиваться в уроках.", confirmLabel:"Удалить", danger:true,
+        onConfirm: async function(){
+          try{ await api("/glossary/"+encodeURIComponent(gdel.id), { method:"DELETE" }); glossaryAdmin.edit = null; glossaryAdmin.dirty = false; await glAdminLoad(); showToast("Термин удалён"); }
+          catch(err){ showToast(err.message); }
+          render();
+        } });
+      return;
+    }
     if(action==="home-new-protocol" || action==="home-open-protocol"){
       var hpId = t.getAttribute("data-id");
       await navigateToTab("protocols");
@@ -9318,6 +9543,19 @@ function wireEvents(root){
         render();
         setTimeout(function(){ var s=document.getElementById("ordersSearch"); if(s){ s.focus(); s.selectionStart=s.selectionEnd=s.value.length; } },0);
       }
+      return;
+    }
+    if(e.target.getAttribute && e.target.getAttribute("data-gb") && glossaryAdmin.edit){
+      var gbPath = e.target.getAttribute("data-gb");
+      glSetPath(glossaryAdmin.edit, gbPath, e.target.value);
+      glossaryAdmin.dirty = true;
+      var gbPrev = document.getElementById("glPreview"); if(gbPrev) gbPrev.innerHTML = glPreviewHtml();
+      if(gbPath==="aliasesText" || gbPath==="lessonId"){ glossaryAdmin.check = null; glPaintCheck(); glCheckAliases(); }
+      return;
+    }
+    if(e.target.id==="glossarySearchInput"){
+      glossaryAdmin.q = e.target.value; render();
+      setTimeout(function(){ var s=document.getElementById("glossarySearchInput"); if(s){ s.focus(); s.selectionStart=s.selectionEnd=s.value.length; } },0);
       return;
     }
     if(e.target.id==="lessonsSearchInput" || e.target.id==="protocolsSearchInput"){
