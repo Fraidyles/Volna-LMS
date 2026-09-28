@@ -1259,6 +1259,7 @@ function render(){
   wireEvents(app);
   runEntranceAnimations();
   if(view==="login" || view==="register") initAuroraFx();
+  ensureEmbers();
   if(view==="student"){
     applyLessonHighlights();
     if(studentState.scrollToHl){
@@ -2142,6 +2143,53 @@ function addSideFlow(main){
   });
 }
 
+// «Искры» — редкие огоньки (красный, янтарный, фиолетовый) медленно поднимаются
+// за стеклянными плитками главной и слегка расходятся от курсора. Частицы живут
+// вне DOM, поэтому перерисовка страницы (раз в 30 с) их не сбрасывает: цикл просто
+// находит новый холст. 30 кадров/с, без курсора и при «уменьшить движение» — нет.
+var embers = [], emberRaf = 0, emberLast = 0, emberMouse = { x:-9999, y:-9999 };
+document.addEventListener("pointermove", function(e){ emberMouse.x = e.clientX; emberMouse.y = e.clientY; }, { passive:true });
+function ensureEmbers(){
+  if(emberRaf || !document.querySelector(".fx-ember-cv")) return;
+  if(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  emberRaf = requestAnimationFrame(emberTick);
+}
+function emberSpawn(w, h, anywhere){
+  var cs = getComputedStyle(document.documentElement), pick = Math.random();
+  var col = pick < .45 ? cs.getPropertyValue("--rose") : (pick < .75 ? cs.getPropertyValue("--accent") : cs.getPropertyValue("--primary"));
+  return { x: Math.random()*w, y: anywhere ? Math.random()*h : h + 10, r: 1.3 + Math.random()*2.2, vy: .25 + Math.random()*.45,
+    ph: Math.random()*6.28, sw: .3 + Math.random()*.5, life: 0, max: 380 + Math.random()*420, col: col.trim() || "#FF4D6D", dx:0 };
+}
+function emberTick(ts){
+  var cv = document.querySelector(".fx-ember-cv");
+  if(!cv){ emberRaf = 0; embers = []; return; }
+  emberRaf = requestAnimationFrame(emberTick);
+  if(ts - emberLast < 33) return; // ~30 кадров/с
+  emberLast = ts;
+  var host = cv.parentElement, r = host.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio||1);
+  var w = Math.round(r.width), h = Math.round(r.height);
+  if(cv.width !== w*dpr || cv.height !== h*dpr){ cv.width = w*dpr; cv.height = h*dpr; cv.style.width = w+"px"; cv.style.height = h+"px"; }
+  var ctx = cv.getContext("2d"); ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,w,h);
+  var want = Math.min(90, Math.round(w*h/10000));
+  while(embers.length < want) embers.push(emberSpawn(w, h, true)); // сразу по всей площади, а не волной снизу
+  if(embers.length > want) embers.length = want;
+  var mx = emberMouse.x - r.left, my = emberMouse.y - r.top;
+  ctx.globalCompositeOperation = "lighter";
+  embers.forEach(function(p, i){
+    p.life++; p.y -= p.vy; p.ph += .03;
+    var ddx = p.x - mx, ddy = p.y - my, d2 = ddx*ddx + ddy*ddy;
+    if(d2 < 14400){ var f = (1 - d2/14400) * 1.6; p.dx += ddx/Math.sqrt(d2+1)*f; }
+    p.dx *= .92; p.x += Math.sin(p.ph)*p.sw + p.dx;
+    var a = Math.min(1, p.life/60) * Math.min(1, (p.max - p.life)/80);
+    if(p.life > p.max || p.y < -20){ embers[i] = emberSpawn(w, h, false); return; }
+    var g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r*6);
+    g.addColorStop(0, p.col); g.addColorStop(1, "transparent");
+    ctx.globalAlpha = a*.35; ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p.x, p.y, p.r*6, 0, 6.283); ctx.fill();
+    ctx.globalAlpha = a*.95; ctx.fillStyle = p.col; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.283); ctx.fill();
+  });
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over";
+}
+
 // Спираль ДНК (два витка по центру): медленно вращается, звенья по одному плавно
 // меняются цветами (фиолет ↔ бирюза), вдоль проходит мягкая волна подсветки.
 // Canvas в родном разрешении экрана. Состояние звеньев живёт вне функции, чтобы
@@ -2475,7 +2523,7 @@ function renderStudentHome(){
 
   // На широком экране — две колонки: слева курс и что дальше, справа — эфир,
   // прогресс, куратор и прочее «сбоку». На узком всё идёт одной колонкой.
-  var html = '<div class="home-grid fx-'+homeFx()+'" style="margin-top:10px;"><div class="home-main">' + renderOnboardingCard() + renderSurveyHomeCard();
+  var html = '<div class="home-grid fx-'+homeFx()+'" style="margin-top:10px;">'+(homeFx()==="ember"?'<canvas class="fx-ember-cv" aria-hidden="true"></canvas>':'')+'<div class="home-main">' + renderOnboardingCard() + renderSurveyHomeCard();
   if(lock.locked){
     html += '<div class="card course-hero" style="background:var(--status-blocked-tint);">' +
       magnet("blocked", "Доступ ограничен") +
@@ -2501,7 +2549,7 @@ function renderStudentHome(){
     var testBadge = quizDone ? magnet("done","Тест пройден · "+pr.quiz_score+"%")
       : (done===total ? magnet("attention","Итоговый тест доступен") : magnet("neutral","Итоговый тест впереди"));
     html += '<div class="card course-hero">' +
-      '<div class="hero-aurora aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
+      '<div class="hero-aurora aurora" aria-hidden="true">'+AURORA_BANDS+'</div><div class="fx-ecg" aria-hidden="true"></div>' +
       '<div class="course-hero-top">' +
         '<div class="progress-ring" data-anim="ring" style="--ring-p:'+pct+'%;"><div class="progress-ring-inner"><span data-count="'+pct+'" data-suffix="%">'+pct+'%</span></div></div>' +
         '<div><h2 style="margin:0;">'+escapeHtml(course.course.title)+'</h2>' +
@@ -3936,12 +3984,15 @@ async function uploadAvatarFile(file){
 //             к текущему уроку бегут искры, текущий урок пульсирует, по полоске
 //             уроков курса и полоске очков проходит блик;
 //   off     — без анимаций (и всегда, если в системе включено «уменьшить движение»).
-var HOME_FX = [["cascade","Каскад","Плитки собираются по очереди при входе"],["light","Живой свет","Свет за стеклом следует за курсором"],["thread","Нить прогресса","Путь по урокам светится и течёт к текущему"],["off","Без анимации","Только сами данные"]];
-// У сотрудников на главной — потоки, задачи и лента, поэтому «нить» там своя.
-var HOME_FX_STAFF_TEXT = { thread:"Потоки связаны светящейся линией, кольца прогресса пульсируют" };
+// Новые варианты с красным (пульс, закат, искры) — «на пробу», помечены в настройках.
+var HOME_FX = [["cascade","Каскад","Плитки собираются по очереди при входе"],["light","Живой свет","Свет за стеклом следует за курсором"],["thread","Нить прогресса","Путь по урокам светится и течёт к текущему"],
+  ["pulse","Пульс","Кардиограмма бежит по курсу, текущий урок бьётся, как сердце",1],["sunset","Закат","Тёплое красно-фиолетовое сияние медленно дрейфует за стеклом",1],["ember","Искры","Красные и янтарные огоньки поднимаются за плитками",1],
+  ["off","Без анимации","Только сами данные"]];
+// У сотрудников на главной — потоки, задачи и лента, поэтому «нить» и «пульс» там свои.
+var HOME_FX_STAFF_TEXT = { thread:"Потоки связаны светящейся линией, кольца прогресса пульсируют", pulse:"Кардиограмма над потоками, кольца прогресса бьются в ритм" };
 function homeFx(){
   var v = null; try{ v = localStorage.getItem("lms-home-fx"); }catch(e){}
-  var q = /[?&]fx=(cascade|light|thread|off)\b/.exec(location.search); if(q) v = q[1];
+  var q = /[?&]fx=(cascade|light|thread|pulse|sunset|ember|off)\b/.exec(location.search); if(q) v = q[1];
   return HOME_FX.some(function(x){ return x[0]===v; }) ? v : "cascade";
 }
 function renderSettingsPage(){
@@ -3959,7 +4010,7 @@ function renderSettingsPage(){
     '<div class="card co-card"><b class="co-card-title">Внешний вид</b><div class="theme-cards">'+themeCard("dark","Тёмная")+themeCard("light","Светлая")+'</div>' +
       '<b class="fx-title">Анимация главной</b><div class="fx-cards">' + HOME_FX.map(function(x){
         var on = homeFx()===x[0], text = me.role!=="student" && HOME_FX_STAFF_TEXT[x[0]] ? HOME_FX_STAFF_TEXT[x[0]] : x[2];
-        return '<button type="button" class="fx-card'+(on?' on':'')+'" data-action="set-home-fx" data-fx="'+x[0]+'"><span class="fx-prev fxp-'+x[0]+'"><i></i><i></i><i></i></span><b>'+x[1]+(on?' <em>выбрана</em>':'')+'</b><span>'+text+'</span></button>';
+        return '<button type="button" class="fx-card'+(on?' on':'')+'" data-action="set-home-fx" data-fx="'+x[0]+'"><span class="fx-prev fxp-'+x[0]+'"><i></i><i></i><i></i></span><b>'+x[1]+(on?' <em>выбрана</em>':(x[3]?' <em class="fx-new">новое</em>':''))+'</b><span>'+text+'</span></button>';
       }).join("") + '</div></div>' +
     '<div class="card co-card"><b class="co-card-title">Безопасность</b>' +
       '<div class="set-row"><div><b>Пароль</b><span>Меняйте пароль, если входили с чужого устройства.</span></div><button class="btn btn-sm btn-ghost" data-action="open-change-password">Сменить пароль</button></div>' +
@@ -4045,7 +4096,7 @@ function renderStaffShell(){
   } else {
     addSideFlow(main);
     // Главная сотрудника — в обёртке с выбранным вариантом анимации (как у врача).
-    var staffHomeBox = el('<div class="staff-home fx-'+homeFx()+'"></div>');
+    var staffHomeBox = el('<div class="staff-home fx-'+homeFx()+'">'+(homeFx()==="ember"?'<canvas class="fx-ember-cv" aria-hidden="true"></canvas>':'')+'</div>');
     content.appendChild(staffHomeBox);
     renderStaffHome(staffHomeBox);
   }
@@ -4140,7 +4191,7 @@ function renderStaffHome(container){
   });
   var streamKeys = Object.keys(byStream);
 
-  var streamsHtml = '<b style="font-size:15px;display:block;margin-bottom:10px;">Ваши потоки</b>';
+  var streamsHtml = '<div class="fx-ecg-row"><b style="font-size:15px;display:block;margin-bottom:10px;">Ваши потоки</b><div class="fx-ecg" aria-hidden="true"></div></div>';
   if(!streamKeys.length){
     streamsHtml += '<div class="card empty-state" style="padding:32px 20px;">' +
       '<div class="tile-icon" style="background:var(--primary-tint);color:var(--primary);margin:0 auto 12px;">'+icon("users")+'</div>' +
