@@ -698,6 +698,13 @@ function runEntranceAnimations(){
       elx.style.setProperty("--ring-p", "0%");
       elx.querySelectorAll("[data-count]").forEach(function(c){ c.textContent = "0"+(c.getAttribute("data-suffix")||""); });
     } else if(parseInt(elx.getAttribute("data-count"),10) > 0){
+      // Ширина итогового числа держится с начала отсчёта: иначе «0» → «45» делает
+      // число шире, подпись рядом переносится, и плитка прыгает по высоте.
+      var cw = elx.getBoundingClientRect().width;
+      if(cw){
+        if(getComputedStyle(elx).display==="inline") elx.style.display = "inline-block";
+        elx.style.minWidth = cw+"px";
+      }
       elx.textContent = "0"+(elx.getAttribute("data-suffix")||"");
     }
   });
@@ -936,6 +943,30 @@ document.addEventListener("pointermove", function(e){
   var r = c.getBoundingClientRect();
   c.style.setProperty("--mx", (e.clientX - r.left)+"px");
   c.style.setProperty("--my", (e.clientY - r.top)+"px");
+  // «Живой свет» на главной: наклон плитки навстречу курсору (±2.5°)
+  if(c.closest(".home-grid.fx-light") && !c.classList.contains("course-hero")){
+    c.style.setProperty("--tx", (((e.clientY - r.top)/r.height - .5) * -5).toFixed(2)+"deg");
+    c.style.setProperty("--ty", (((e.clientX - r.left)/r.width - .5) * 5).toFixed(2)+"deg");
+  }
+}, { passive:true });
+// Свет за стеклом (вариант «Живой свет») следует за курсором по всей сетке главной.
+var fxLightRaf = 0;
+document.addEventListener("pointermove", function(e){
+  if(fxLightRaf) return;
+  fxLightRaf = requestAnimationFrame(function(){
+    fxLightRaf = 0;
+    var g = document.querySelector(".home-grid.fx-light"); if(!g) return;
+    var r = g.getBoundingClientRect();
+    g.style.setProperty("--lx", Math.max(-10, Math.min(110, (e.clientX - r.left)/r.width*100)).toFixed(1)+"%");
+    g.style.setProperty("--ly", Math.max(-10, Math.min(110, (e.clientY - r.top)/r.height*100)).toFixed(1)+"%");
+    // Свет «фонариком» по стеклу: координаты курсора — в каждую плитку, а не
+    // только в ту, что под ним, — рамки соседних плиток ловят край света.
+    g.querySelectorAll(".board-tile, .home-next").forEach(function(c){
+      var cr = c.getBoundingClientRect();
+      c.style.setProperty("--mx", (e.clientX - cr.left)+"px");
+      c.style.setProperty("--my", (e.clientY - cr.top)+"px");
+    });
+  });
 }, { passive:true });
 
 
@@ -2444,7 +2475,7 @@ function renderStudentHome(){
 
   // На широком экране — две колонки: слева курс и что дальше, справа — эфир,
   // прогресс, куратор и прочее «сбоку». На узком всё идёт одной колонкой.
-  var html = '<div class="home-grid" style="margin-top:10px;"><div class="home-main">' + renderOnboardingCard() + renderSurveyHomeCard();
+  var html = '<div class="home-grid fx-'+homeFx()+'" style="margin-top:10px;"><div class="home-main">' + renderOnboardingCard() + renderSurveyHomeCard();
   if(lock.locked){
     html += '<div class="card course-hero" style="background:var(--status-blocked-tint);">' +
       magnet("blocked", "Доступ ограничен") +
@@ -2576,13 +2607,15 @@ function renderStudentHome(){
 function renderHomeNextLessons(doneIds){
   var lessons = course.lessons, curIdx = -1;
   lessons.forEach(function(l, i){ if(curIdx<0 && doneIds.indexOf(l.id)===-1) curIdx = i; });
-  var from = curIdx<0 ? Math.max(0, lessons.length-2) : Math.max(0, curIdx-1);
+  // В варианте «Нить прогресса» — два пройденных урока перед текущим, чтобы нить была видна.
+  var back = homeFx()==="thread" ? 2 : 1;
+  var from = curIdx<0 ? Math.max(0, lessons.length-2) : Math.max(0, curIdx-back);
   var rows = lessons.slice(from, from+4).map(function(l, k){
     var i = from+k, done = doneIds.indexOf(l.id)!==-1, locked = l.hiddenForMe || l.dripLockedForMe, isCur = i===curIdx;
     var st = done ? '<span class="hn-st done">'+icon("check","ic-sm")+'пройден</span>'
       : locked ? '<span class="hn-st">'+icon("lock","ic-sm")+(l.hiddenForMe?'недоступен':'откроется '+fmtDateShort(l.availableAt))+'</span>'
       : isCur ? '<span class="hn-st cur">сейчас</span>' : '<span class="hn-st">впереди</span>';
-    return '<div class="hn-row'+(isCur?' cur':'')+(locked?' locked':'')+'"'+(locked?'':' data-action="open-lesson-at" data-idx="'+i+'"')+'>' +
+    return '<div class="hn-row'+(isCur?' cur':'')+(done?' done':'')+(locked?' locked':'')+'" style="--k:'+k+'"'+(locked?'':' data-action="open-lesson-at" data-idx="'+i+'"')+'>' +
       '<span class="hn-num">'+(done?icon("check","ic-sm"):(i+1))+'</span><div class="hn-body"><b>'+escapeHtml(l.title)+'</b>' +
       '<span>'+(l.duration?escapeHtml(l.duration):'')+(l.quiz && l.quiz.length?' · тест '+l.quiz.length+' '+ruPluralClient(l.quiz.length,"вопрос","вопроса","вопросов"):'')+(l.assignment?' · задание':'')+'</span></div>'+st+'</div>';
   }).join("");
@@ -3892,6 +3925,23 @@ async function uploadAvatarFile(file){
   render();
 }
 
+// Анимация главной врача — три варианта на выбор (Настройки → Внешний вид):
+//   cascade — плитки собираются каскадом: левая колонка сверху вниз, правая
+//             выезжает справа, уроки «Дальше по курсу» по одному, полоска очков
+//             заполняется; только при заходе на главную, не при фоновых обновлениях;
+//   light   — живой свет: за стеклянными плитками два мягких пятна света следуют
+//             за курсором (без курсора — медленно дрейфуют), плитка под курсором
+//             слегка наклоняется навстречу;
+//   thread  — нить прогресса: пройденные уроки соединены светящейся линией, по ней
+//             к текущему уроку бегут искры, текущий урок пульсирует, по полоске
+//             уроков курса и полоске очков проходит блик;
+//   off     — без анимаций (и всегда, если в системе включено «уменьшить движение»).
+var HOME_FX = [["cascade","Каскад","Плитки собираются по очереди при входе"],["light","Живой свет","Свет за стеклом следует за курсором"],["thread","Нить прогресса","Путь по урокам светится и течёт к текущему"],["off","Без анимации","Только сами данные"]];
+function homeFx(){
+  var v = null; try{ v = localStorage.getItem("lms-home-fx"); }catch(e){}
+  var q = /[?&]fx=(cascade|light|thread|off)\b/.exec(location.search); if(q) v = q[1];
+  return HOME_FX.some(function(x){ return x[0]===v; }) ? v : "cascade";
+}
 function renderSettingsPage(){
   // Слева — внешний вид (превью тем) и безопасность (пароль, сеансы с устройствами),
   // справа — карточка аккаунта. Сеансы подгружаются лениво при первом открытии.
@@ -3904,7 +3954,11 @@ function renderSettingsPage(){
       '<span class="theme-label">'+icon(key==="dark"?"moon":"sun","ic-sm")+label+(on?'<em>выбрана</em>':'')+'</span></button>';
   }
   var left = '<div class="pp-col">' +
-    '<div class="card co-card"><b class="co-card-title">Внешний вид</b><div class="theme-cards">'+themeCard("dark","Тёмная")+themeCard("light","Светлая")+'</div></div>' +
+    '<div class="card co-card"><b class="co-card-title">Внешний вид</b><div class="theme-cards">'+themeCard("dark","Тёмная")+themeCard("light","Светлая")+'</div>' +
+      (me.role==="student" ? '<b class="fx-title">Анимация главной</b><div class="fx-cards">' + HOME_FX.map(function(x){
+        var on = homeFx()===x[0];
+        return '<button type="button" class="fx-card'+(on?' on':'')+'" data-action="set-home-fx" data-fx="'+x[0]+'"><span class="fx-prev fxp-'+x[0]+'"><i></i><i></i><i></i></span><b>'+x[1]+(on?' <em>выбрана</em>':'')+'</b><span>'+x[2]+'</span></button>';
+      }).join("") + '</div>' : '') + '</div>' +
     '<div class="card co-card"><b class="co-card-title">Безопасность</b>' +
       '<div class="set-row"><div><b>Пароль</b><span>Меняйте пароль, если входили с чужого устройства.</span></div><button class="btn btn-sm btn-ghost" data-action="open-change-password">Сменить пароль</button></div>' +
       '<div class="set-row" style="border-bottom:none;"><div><b>Активные сеансы</b><span>С каких устройств входили в аккаунт.</span></div><button class="btn btn-sm btn-ghost" data-action="logout-everywhere">Выйти со всех устройств</button></div>' +
@@ -6982,6 +7036,7 @@ function wireEvents(root){
       if(mtPrev===mtT) delete mtVal[mtL]; else mtVal[mtL]=mtT;
       mtRun.answers[mtPath]=mtVal; render(); return;
     }
+    if(action==="set-home-fx"){ try{ localStorage.setItem("lms-home-fx", t.getAttribute("data-fx")); }catch(err){} render(); showToast("Анимация главной: «"+t.querySelector("b").childNodes[0].textContent.trim()+"» — посмотрите на главной"); return; }
     if(action==="final-quiz-retry"){ delete quizRuns["final"]; studentState.quizSubmitted=false; render(); window.scrollTo(0,0); return; }
     if(action==="final-quiz-done"){ studentState.quizSubmitted=false; render(); window.scrollTo(0,0); return; }
     if(action==="lq-retry"){ var lrL=course.lessons[studentState.lessonIndex]; if(lrL) delete quizRuns["lesson:"+lrL.id]; studentState.lessonQuizResult=null; render(); return; }
