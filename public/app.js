@@ -2156,7 +2156,8 @@ function ensureEmbers(){
 }
 function emberSpawn(w, h, anywhere){
   var cs = getComputedStyle(document.documentElement), pick = Math.random();
-  var col = pick < .45 ? cs.getPropertyValue("--rose") : (pick < .75 ? cs.getPropertyValue("--accent") : cs.getPropertyValue("--primary"));
+  var pal = HOME_BG_COLORS[homeBg()] || HOME_BG_COLORS["ember-warm"], col = "";
+  for(var ci=0; ci<pal.length; ci++){ if(pick < pal[ci][1]){ col = cs.getPropertyValue(pal[ci][0]); break; } }
   return { x: Math.random()*w, y: anywhere ? Math.random()*h : h + 10, r: 1.3 + Math.random()*2.2, vy: .25 + Math.random()*.45,
     ph: Math.random()*6.28, sw: .3 + Math.random()*.5, life: 0, max: 380 + Math.random()*420, col: col.trim() || "#FF4D6D", dx:0 };
 }
@@ -2523,7 +2524,7 @@ function renderStudentHome(){
 
   // На широком экране — две колонки: слева курс и что дальше, справа — эфир,
   // прогресс, куратор и прочее «сбоку». На узком всё идёт одной колонкой.
-  var html = '<div class="home-grid fx-'+homeFx()+'" style="margin-top:10px;">'+(homeFx()==="ember"?'<canvas class="fx-ember-cv" aria-hidden="true"></canvas>':'')+'<div class="home-main">' + renderOnboardingCard() + renderSurveyHomeCard();
+  var html = '<div class="home-grid fx-'+homeFx()+homeBgClass()+'" style="margin-top:10px;">'+homeBgLayer()+'<div class="home-main">' + renderOnboardingCard() + renderSurveyHomeCard();
   if(lock.locked){
     html += '<div class="card course-hero" style="background:var(--status-blocked-tint);">' +
       magnet("blocked", "Доступ ограничен") +
@@ -3986,13 +3987,26 @@ async function uploadAvatarFile(file){
 //   off     — без анимаций (и всегда, если в системе включено «уменьшить движение»).
 // Новые варианты с красным (пульс, закат, искры) — «на пробу», помечены в настройках.
 var HOME_FX = [["cascade","Каскад","Плитки собираются по очереди при входе"],["light","Живой свет","Свет за стеклом следует за курсором"],["thread","Нить прогресса","Путь по урокам светится и течёт к текущему"],
-  ["pulse","Пульс","Кардиограмма бежит по курсу, текущий урок бьётся, как сердце",1],["sunset","Закат","Тёплое красно-фиолетовое сияние медленно дрейфует за стеклом",1],["ember","Искры","Красные и янтарные огоньки поднимаются за плитками",1],
+  ["pulse","Пульс","Кардиограмма бежит по курсу, текущий урок бьётся, как сердце",1],["sunset","Закат","Тёплое красно-фиолетовое сияние медленно дрейфует за стеклом",1],
   ["off","Без анимации","Только сами данные"]];
 // У сотрудников на главной — потоки, задачи и лента, поэтому «нить» и «пульс» там свои.
 var HOME_FX_STAFF_TEXT = { thread:"Потоки связаны светящейся линией, кольца прогресса пульсируют", pulse:"Кардиограмма над потоками, кольца прогресса бьются в ритм" };
+// Фон главной — отдельная настройка, сочетается с любой анимацией: огоньки-искры
+// в одной из палитр или без фона.
+var HOME_BG = [["none","Без фона","Только стекло и цвета темы"],["ember-warm","Искры · тёплые","Красные и янтарные огоньки"],["ember-cool","Искры · холодные","Фиолетовые и бирюзовые — в цветах платформы"],["ember-mix","Искры · смешанные","Все четыре цвета вместе"]];
+var HOME_BG_COLORS = { "ember-warm":[["--rose",.55],["--accent",1]], "ember-cool":[["--primary",.6],["--teal",1]], "ember-mix":[["--rose",.3],["--accent",.5],["--primary",.78],["--teal",1]] };
+function homeBg(){
+  var v = null; try{ v = localStorage.getItem("lms-home-bg"); }catch(e){}
+  // Раньше «Искры» были одной из анимаций — переносим выбор в фон.
+  try{ if(!v && localStorage.getItem("lms-home-fx")==="ember"){ v = "ember-warm"; localStorage.setItem("lms-home-bg", v); localStorage.setItem("lms-home-fx", "cascade"); } }catch(e){}
+  var q = /[?&]bg=(none|ember-warm|ember-cool|ember-mix)\b/.exec(location.search); if(q) v = q[1];
+  return HOME_BG.some(function(x){ return x[0]===v; }) ? v : "none";
+}
+function homeBgLayer(){ return homeBg()!=="none" ? '<canvas class="fx-ember-cv" aria-hidden="true"></canvas>' : ''; }
+function homeBgClass(){ return homeBg()!=="none" ? ' bg-ember' : ''; }
 function homeFx(){
   var v = null; try{ v = localStorage.getItem("lms-home-fx"); }catch(e){}
-  var q = /[?&]fx=(cascade|light|thread|pulse|sunset|ember|off)\b/.exec(location.search); if(q) v = q[1];
+  var q = /[?&]fx=(cascade|light|thread|pulse|sunset|off)\b/.exec(location.search); if(q) v = q[1];
   return HOME_FX.some(function(x){ return x[0]===v; }) ? v : "cascade";
 }
 function renderSettingsPage(){
@@ -4011,6 +4025,10 @@ function renderSettingsPage(){
       '<b class="fx-title">Анимация главной</b><div class="fx-cards">' + HOME_FX.map(function(x){
         var on = homeFx()===x[0], text = me.role!=="student" && HOME_FX_STAFF_TEXT[x[0]] ? HOME_FX_STAFF_TEXT[x[0]] : x[2];
         return '<button type="button" class="fx-card'+(on?' on':'')+'" data-action="set-home-fx" data-fx="'+x[0]+'"><span class="fx-prev fxp-'+x[0]+'"><i></i><i></i><i></i></span><b>'+x[1]+(on?' <em>выбрана</em>':(x[3]?' <em class="fx-new">новое</em>':''))+'</b><span>'+text+'</span></button>';
+      }).join("") + '</div>' +
+      '<b class="fx-title">Фон главной</b><div class="fx-cards">' + HOME_BG.map(function(x){
+        var on = homeBg()===x[0];
+        return '<button type="button" class="fx-card'+(on?' on':'')+'" data-action="set-home-bg" data-bg="'+x[0]+'"><span class="fx-prev fxp-bg fxp-'+x[0]+'"><i></i><i></i><i></i></span><b>'+x[1]+(on?' <em>выбран</em>':'')+'</b><span>'+x[2]+'</span></button>';
       }).join("") + '</div></div>' +
     '<div class="card co-card"><b class="co-card-title">Безопасность</b>' +
       '<div class="set-row"><div><b>Пароль</b><span>Меняйте пароль, если входили с чужого устройства.</span></div><button class="btn btn-sm btn-ghost" data-action="open-change-password">Сменить пароль</button></div>' +
@@ -4096,7 +4114,7 @@ function renderStaffShell(){
   } else {
     addSideFlow(main);
     // Главная сотрудника — в обёртке с выбранным вариантом анимации (как у врача).
-    var staffHomeBox = el('<div class="staff-home fx-'+homeFx()+'">'+(homeFx()==="ember"?'<canvas class="fx-ember-cv" aria-hidden="true"></canvas>':'')+'</div>');
+    var staffHomeBox = el('<div class="staff-home fx-'+homeFx()+homeBgClass()+'">'+homeBgLayer()+'</div>');
     content.appendChild(staffHomeBox);
     renderStaffHome(staffHomeBox);
   }
@@ -7091,6 +7109,11 @@ function wireEvents(root){
       Object.keys(mtVal).forEach(function(k){ if(k!==mtL && mtVal[k]===mtT){ if(mtPrev) mtVal[k]=mtPrev; else delete mtVal[k]; } });
       if(mtPrev===mtT) delete mtVal[mtL]; else mtVal[mtL]=mtT;
       mtRun.answers[mtPath]=mtVal; render(); return;
+    }
+    if(action==="set-home-bg"){
+      try{ localStorage.setItem("lms-home-bg", t.getAttribute("data-bg")); }catch(err){}
+      embers = []; render();
+      showToast("Фон главной: «"+t.querySelector("b").childNodes[0].textContent.trim()+"» — посмотрите на главной"); return;
     }
     if(action==="set-home-fx"){ try{ localStorage.setItem("lms-home-fx", t.getAttribute("data-fx")); }catch(err){} render(); showToast("Анимация главной: «"+t.querySelector("b").childNodes[0].textContent.trim()+"» — посмотрите на главной"); return; }
     if(action==="final-quiz-retry"){ delete quizRuns["final"]; studentState.quizSubmitted=false; render(); window.scrollTo(0,0); return; }

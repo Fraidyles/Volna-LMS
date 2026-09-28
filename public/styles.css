@@ -2381,9 +2381,9 @@ mark.hl.hl-flash{animation:hlFlash 1.6s ease;}
 .staff-home.fx-pulse .board-strip > .card:nth-child(2) .progress-ring{animation-delay:.2s;}
 .staff-home.fx-pulse .board-strip > .card:nth-child(3) .progress-ring{animation-delay:.4s;}
 /* свечение рамок у всех красных вариантов — розово-фиолетовое */
-#app .fx-pulse .card::after,#app .fx-sunset .card::after,#app .fx-ember .card::after{
+#app .fx-pulse .card::after,#app .fx-sunset .card::after{
   background:radial-gradient(260px circle at var(--mx,50%) var(--my,50%),color-mix(in srgb,var(--rose) 85%,transparent),color-mix(in srgb,var(--primary) 60%,transparent) 45%,transparent 75%);}
-#app .fx-pulse .card::before,#app .fx-sunset .card::before,#app .fx-ember .card::before{
+#app .fx-pulse .card::before,#app .fx-sunset .card::before{
   background:radial-gradient(420px circle at var(--mx,50%) var(--my,50%),color-mix(in srgb,var(--rose) 9%,transparent),transparent 60%);}
 
 /* ---- «Закат»: тёплое сияние дрейфует за стеклом ---- */
@@ -2400,10 +2400,10 @@ mark.hl.hl-flash{animation:hlFlash 1.6s ease;}
 .fx-sunset .course-hero .hero-aurora{filter:hue-rotate(70deg) saturate(1.15);}
 
 /* ---- «Искры»: холст с огоньками под плитками ---- */
-.home-grid.fx-ember,.staff-home.fx-ember{position:relative;isolation:isolate;}
+/* ---- Фон главной «Искры» (отдельная настройка, сочетается с любой анимацией) ---- */
+.home-grid.bg-ember,.staff-home.bg-ember{position:relative;isolation:isolate;}
 .fx-ember-cv{position:absolute;inset:0;z-index:-1;pointer-events:none;}
-.home-grid.fx-ember .board-tile,.home-grid.fx-ember .home-next,.staff-home.fx-ember .board-strip > .card,.staff-home.fx-ember .home-tile{background:color-mix(in srgb,var(--surface) 60%,transparent);}
-@media (max-width:1099px){ .home-grid.fx-ember > .fx-ember-cv{order:-1;} }
+.home-grid.bg-ember .board-tile,.home-grid.bg-ember .home-next,.staff-home.bg-ember .board-strip > .card,.staff-home.bg-ember .home-tile{background:color-mix(in srgb,var(--surface) 60%,transparent);}
 
 @media (prefers-reduced-motion:reduce){ .fx-ecg{animation:none !important;} .fx-ember-cv{display:none;} }
 
@@ -2418,8 +2418,13 @@ mark.hl.hl-flash{animation:hlFlash 1.6s ease;}
 .fxp-pulse i:nth-child(2){background:color-mix(in srgb,var(--rose) 40%,transparent);animation:fxBeat 1.3s ease-in-out infinite;}
 .fxp-sunset{background:radial-gradient(60% 80% at 20% 30%,color-mix(in srgb,var(--rose) 45%,transparent),transparent 70%),radial-gradient(60% 80% at 80% 70%,color-mix(in srgb,var(--primary) 45%,transparent),transparent 70%),radial-gradient(50% 60% at 60% 20%,color-mix(in srgb,var(--accent) 35%,transparent),transparent 70%),var(--surface);
   background-size:200% 200%;animation:fxpLight 5s ease-in-out infinite;}
-.fxp-sunset i,.fxp-ember i{background:color-mix(in srgb,var(--ink) 8%,transparent);}
+.fxp-sunset i{background:color-mix(in srgb,var(--ink) 8%,transparent);}
 @keyframes fxpRise{0%{transform:translateY(0);opacity:0;}20%{opacity:1;}100%{transform:translateY(-44px);opacity:0;}}
-.fxp-ember{position:relative;}
-.fxp-ember::before,.fxp-ember::after{content:"";position:absolute;bottom:4px;width:4px;height:4px;border-radius:50%;box-shadow:0 0 6px 2px var(--rose);background:var(--rose);animation:fxpRise 2.4s ease-in infinite;}
-.fxp-ember::before{left:30%;} .fxp-ember::after{left:70%;background:var(--accent);box-shadow:0 0 6px 2px var(--accent);animation-delay:1.1s;}
+.fxp-bg{position:relative;}
+.fxp-bg i{background:color-mix(in srgb,var(--ink) 8%,transparent);}
+.fxp-bg:not(.fxp-none)::before,.fxp-bg:not(.fxp-none)::after{content:"";position:absolute;bottom:4px;width:4px;height:4px;border-radius:50%;animation:fxpRise 2.4s ease-in infinite;
+  background:var(--c1);box-shadow:0 0 6px 2px var(--c1);}
+.fxp-bg::before{left:30%;} .fxp-bg::after{left:70%;animation-delay:1.1s;background:var(--c2) !important;box-shadow:0 0 6px 2px var(--c2) !important;}
+.fxp-ember-warm{--c1:var(--rose);--c2:var(--accent);}
+.fxp-ember-cool{--c1:var(--primary);--c2:var(--teal);}
+.fxp-ember-mix{--c1:var(--rose);--c2:var(--teal);}
