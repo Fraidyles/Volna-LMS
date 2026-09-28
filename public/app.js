@@ -381,10 +381,16 @@ async function routeAfterLogin(){
     tabParam = new URLSearchParams(location.search).get("tab");
     if(tabParam) history.replaceState(null, "", location.pathname + location.hash);
   }catch(e){}
+  // Если сейчас переключимся на другую вкладку (по ссылке или из history.state),
+  // фоновая догрузка протоколов ниже не должна рендерить «главную» сама —
+  // studentState.tab к моменту её ответа ещё не сменился (смена — только ниже,
+  // после нескольких await), и такой промежуточный рендер мелькал бы главной
+  // перед тем, как чуть позже отрисуется нужная вкладка.
+  var willLeaveHome = !!tabParam || !!(savedState && savedState.view==="student" && savedState.studentTab && savedState.studentTab!=="course");
   if(me.role === "student"){
     view = "student";
     await loadCourse();
-    if(course && protocolsSectionAvailable()) loadProtocols().then(function(){ if(studentState.tab==="course") render(); });
+    if(course && protocolsSectionAvailable()) loadProtocols().then(function(){ if(studentState.tab==="course" && !willLeaveHome) render(); });
     await loadCalendarData();
     await loadStudentTools();
     await loadNotifications();
