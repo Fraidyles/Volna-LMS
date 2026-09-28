@@ -2191,3 +2191,106 @@ mark.hl.hl-flash{animation:hlFlash 1.6s ease;}
   .home-main,.home-rail{display:contents;}
   .ho-1{order:1;} .ho-2{order:2;} .ho-3{order:3;}
 }
+
+/* ===== Главная врача: стекло и подъём плиток (как было у .board-strip / .home-tile) ===== */
+.home-grid .board-tile,.home-grid .home-next{background:var(--glass-bg);border:var(--glass-border);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));box-shadow:none;
+  transition:transform .25s cubic-bezier(.16,1,.3,1);}
+@media (hover:hover){ .home-grid .board-tile:hover,.home-grid .home-next:hover{transform:translateY(-2px);} }
+
+/* ===== Вариант 1. Каскад: плитки собираются по очереди при входе на главную ===== */
+@keyframes fxUp{from{opacity:0;transform:translateY(18px) scale(.985);}to{opacity:1;transform:none;}}
+@keyframes fxSide{from{opacity:0;transform:translateX(26px);}to{opacity:1;transform:none;}}
+@keyframes fxRow{from{opacity:0;transform:translateX(-10px);}to{opacity:1;transform:none;}}
+@keyframes fxBar{from{transform:scaleX(0);}to{transform:scaleX(1);}}
+.fx-cascade .home-main > *,.fx-cascade .home-extras > *{animation:fxUp .7s cubic-bezier(.16,1,.3,1) both;}
+.fx-cascade .home-rail > *{animation:fxSide .7s cubic-bezier(.16,1,.3,1) both;}
+.fx-cascade .home-main > :nth-child(1){animation-delay:.02s;} .fx-cascade .home-main > :nth-child(2){animation-delay:.1s;}
+.fx-cascade .home-main > :nth-child(3){animation-delay:.18s;} .fx-cascade .home-main > :nth-child(4){animation-delay:.26s;}
+.fx-cascade .home-main > :nth-child(5){animation-delay:.34s;} .fx-cascade .home-main > :nth-child(6){animation-delay:.42s;}
+.fx-cascade .home-extras > :nth-child(2){animation-delay:.52s;}
+.fx-cascade .home-rail > :nth-child(1){animation-delay:.14s;} .fx-cascade .home-rail > :nth-child(2){animation-delay:.22s;}
+.fx-cascade .home-rail > :nth-child(3){animation-delay:.3s;} .fx-cascade .home-rail > :nth-child(4){animation-delay:.38s;}
+.fx-cascade .home-rail > :nth-child(5){animation-delay:.46s;} .fx-cascade .home-rail > :nth-child(6){animation-delay:.54s;}
+.fx-cascade .hn-row{animation:fxRow .5s cubic-bezier(.16,1,.3,1) both;animation-delay:calc(.45s + var(--k,0) * .07s);}
+.fx-cascade .home-pts i{transform-origin:left;animation:fxBar 1.1s cubic-bezier(.16,1,.3,1) .6s both;}
+@media (max-width:1099px){ .fx-cascade .home-rail > *{animation-name:fxUp;} }
+/* фоновое обновление той же страницы не проигрывает сборку заново */
+#app.rerender .fx-cascade .home-main > *,#app.rerender .fx-cascade .home-rail > *,#app.rerender .fx-cascade .home-extras > *,
+#app.rerender .fx-cascade .hn-row,#app.rerender .fx-cascade .home-pts i{animation:none;}
+
+/* ===== Вариант 2. Живой свет: пятна света за стеклом следуют за курсором ===== */
+@property --lx{syntax:"<percentage>";inherits:true;initial-value:30%;}
+@property --ly{syntax:"<percentage>";inherits:true;initial-value:20%;}
+@keyframes fxDrift{0%{--lx:20%;--ly:15%;}50%{--lx:75%;--ly:45%;}100%{--lx:35%;--ly:85%;}}
+.home-grid.fx-light{position:relative;isolation:isolate;transition:--lx 1.4s cubic-bezier(.16,1,.3,1),--ly 1.4s cubic-bezier(.16,1,.3,1);}
+.home-grid.fx-light::before{content:"";position:absolute;inset:-60px 0;z-index:-1;pointer-events:none;filter:blur(18px);
+  background:radial-gradient(460px circle at var(--lx) var(--ly),color-mix(in srgb,var(--primary) 62%,transparent),color-mix(in srgb,var(--primary) 18%,transparent) 38%,transparent 66%),
+             radial-gradient(420px circle at calc(100% - var(--lx)) calc(100% - var(--ly)),color-mix(in srgb,var(--teal) 50%,transparent),transparent 62%);}
+/* стекло плиток в этом варианте чуть прозрачнее — свет проступает сквозь них */
+.home-grid.fx-light .board-tile,.home-grid.fx-light .home-next{background:color-mix(in srgb,var(--surface) 55%,transparent);}
+/* плитки «ловят» свет: рамка и поверхность светятся со стороны курсора — у всех
+   ближайших плиток сразу (координаты раздаёт pointermove в app.js) */
+#app .home-grid.fx-light .board-tile::before,#app .home-grid.fx-light .home-next::before{opacity:1;
+  background:radial-gradient(380px circle at var(--mx,-999px) var(--my,-999px),color-mix(in srgb,var(--primary) 14%,transparent),transparent 65%);}
+#app .home-grid.fx-light .board-tile::after,#app .home-grid.fx-light .home-next::after{opacity:.75;
+  background:radial-gradient(340px circle at var(--mx,-999px) var(--my,-999px),color-mix(in srgb,var(--primary) 90%,transparent),color-mix(in srgb,var(--teal) 60%,transparent) 40%,transparent 72%);}
+@media (hover:none){ .home-grid.fx-light{animation:fxDrift 22s ease-in-out infinite alternate;} }
+@media (hover:hover){
+  .fx-light .board-tile,.fx-light .home-next{transition:transform .3s cubic-bezier(.16,1,.3,1);}
+  .fx-light .board-tile:hover,.fx-light .home-next:hover{transform:perspective(900px) rotateX(var(--tx,0deg)) rotateY(var(--ty,0deg)) translateY(-3px);}
+}
+
+/* ===== Вариант 3. Нить прогресса: путь по урокам светится и течёт к текущему ===== */
+@keyframes fxSpark{0%{top:calc(50% + 15px);opacity:0;}15%{opacity:1;}85%{opacity:1;}100%{top:calc(150% - 19px);opacity:0;}}
+@keyframes fxPulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--primary) 55%,transparent),0 0 14px -2px color-mix(in srgb,var(--primary) 60%,transparent);}
+  50%{box-shadow:0 0 0 7px color-mix(in srgb,var(--primary) 0%,transparent),0 0 20px 0 color-mix(in srgb,var(--primary) 70%,transparent);}}
+@keyframes fxShine{0%{background-position:-150% 0;}60%,100%{background-position:250% 0;}}
+@keyframes fxFlow{to{background-position:200% 0;}}
+.fx-thread .hn-row{position:relative;}
+.fx-thread .hn-row:not(:last-child)::before{content:"";position:absolute;left:24px;top:calc(50% + 15px);height:calc(100% - 30px);width:2px;border-radius:2px;
+  background:repeating-linear-gradient(180deg,var(--line-2) 0 4px,transparent 4px 8px);}
+.fx-thread .hn-row.done:not(:last-child)::before{background:var(--status-active);box-shadow:0 0 8px color-mix(in srgb,var(--status-active) 60%,transparent);}
+.fx-thread .hn-row.done:has(+ .hn-row.cur)::before{background:linear-gradient(180deg,var(--status-active),var(--primary));}
+.fx-thread .hn-row.done:not(:last-child)::after{content:"";position:absolute;left:21px;width:8px;height:8px;border-radius:50%;pointer-events:none;
+  background:#fff;box-shadow:0 0 10px 2px color-mix(in srgb,var(--status-active) 80%,transparent);
+  animation:fxSpark 1.8s cubic-bezier(.5,0,.5,1) infinite;animation-delay:calc(var(--k,0) * .5s);}
+.fx-thread .hn-row.done .hn-num{background:color-mix(in srgb,var(--status-active) 18%,var(--surface));border-color:var(--status-active);color:var(--status-active);}
+.fx-thread .hn-row.cur .hn-num{animation:fxPulse 2.2s ease-in-out infinite;}
+.fx-thread .status-track .slot.done{background-image:linear-gradient(90deg,transparent,rgba(255,255,255,.65),transparent);background-size:60% 100%;background-repeat:no-repeat;
+  animation:fxShine 3.6s ease-in-out infinite;}
+.fx-thread .status-track .slot:nth-child(2){animation-delay:.12s;} .fx-thread .status-track .slot:nth-child(3){animation-delay:.24s;}
+.fx-thread .status-track .slot:nth-child(4){animation-delay:.36s;} .fx-thread .status-track .slot:nth-child(5){animation-delay:.48s;}
+.fx-thread .status-track .slot:nth-child(6){animation-delay:.6s;} .fx-thread .status-track .slot:nth-child(7){animation-delay:.72s;}
+.fx-thread .status-track .slot:nth-child(8){animation-delay:.84s;} .fx-thread .status-track .slot:nth-child(9){animation-delay:.96s;}
+.fx-thread .status-track .slot.current{animation:fxPulse 2.2s ease-in-out infinite;}
+.fx-thread .home-pts i{background:linear-gradient(90deg,var(--primary),var(--status-active),var(--primary));background-size:200% 100%;animation:fxFlow 3s linear infinite;}
+
+/* «Уменьшить движение» в системе — все варианты спокойные */
+@media (prefers-reduced-motion:reduce){
+  .home-grid *,.home-grid *::before,.home-grid *::after{animation:none !important;}
+  .home-grid.fx-light{animation:none;} .home-grid.fx-light::before{display:none;}
+}
+
+/* ===== Настройки: выбор анимации главной (мини-превью) ===== */
+.fx-title{display:block;font-size:13px;font-weight:600;margin:18px 0 10px;}
+.fx-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+.fx-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;padding:10px;border-radius:14px;cursor:pointer;
+  border:1px solid var(--line-2);background:var(--surface-2);color:var(--ink);transition:border-color .15s,background .15s;}
+.fx-card:hover{border-color:color-mix(in srgb,var(--primary) 45%,transparent);}
+.fx-card.on{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 12%,transparent);box-shadow:0 0 0 1px var(--primary) inset;}
+.fx-card b{font-size:13px;font-weight:600;margin-top:4px;}
+.fx-card b em{font-style:normal;font-size:11px;font-weight:500;color:var(--primary);margin-left:4px;}
+.fx-card > span:last-child{font-size:11px;line-height:1.35;color:var(--muted);}
+.fx-prev{position:relative;display:grid;grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr;gap:4px;width:100%;height:56px;padding:6px;border-radius:10px;overflow:hidden;
+  background:var(--surface);border:1px solid var(--line-2);}
+.fx-prev i{border-radius:5px;background:color-mix(in srgb,var(--ink) 10%,transparent);}
+.fx-prev i:first-child{grid-row:span 2;}
+@keyframes fxpUp{0%,15%{opacity:0;transform:translateY(8px);}40%,100%{opacity:1;transform:none;}}
+.fxp-cascade i{animation:fxpUp 2.6s cubic-bezier(.16,1,.3,1) infinite;}
+.fxp-cascade i:nth-child(2){animation-delay:.15s;} .fxp-cascade i:nth-child(3){animation-delay:.3s;}
+@keyframes fxpLight{0%{background-position:0% 0%;}50%{background-position:100% 100%;}100%{background-position:0% 0%;}}
+.fxp-light{background:radial-gradient(60px circle,color-mix(in srgb,var(--primary) 45%,transparent),transparent 70%) no-repeat,var(--surface);background-size:200% 200%;animation:fxpLight 4s ease-in-out infinite;}
+.fxp-light i{backdrop-filter:blur(4px);background:color-mix(in srgb,var(--ink) 8%,transparent);}
+.fxp-thread i:first-child{background:linear-gradient(180deg,var(--status-active) 0 55%,color-mix(in srgb,var(--ink) 10%,transparent) 55%) 12px 0/2px 100% no-repeat,color-mix(in srgb,var(--ink) 10%,transparent);}
+.fxp-thread i:nth-child(3){background:linear-gradient(90deg,var(--primary),var(--status-active),var(--primary)) 0 100%/200% 4px no-repeat,color-mix(in srgb,var(--ink) 10%,transparent);animation:fxFlow 3s linear infinite;}
+.fxp-off i{opacity:.7;}
