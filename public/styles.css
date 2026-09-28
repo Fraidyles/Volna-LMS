@@ -2672,3 +2672,25 @@ mark.hl.hl-flash{animation:hlFlash 1.6s ease;}
 .gl-rowf select.input{flex:0 0 160px;}
 @media (max-width:640px){ .gl-stack{flex:1 1 100%;} }
 .ls-pill.gl-aliases{white-space:normal;min-width:0;max-width:100%;overflow-wrap:anywhere;}
+
+/* Предпросмотр «Так врач увидит» рядом с редакторами урока и протокола */
+.lp-grid.with-prev,.pr-layout.with-prev{grid-template-columns:minmax(0,1fr) minmax(0,1fr);}
+.doc-prev{position:sticky;top:16px;min-width:0;}
+.doc-prev-lab{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px;font-weight:600;color:var(--muted);margin:0 0 8px 4px;}
+.doc-prev-lab span{font-weight:400;color:var(--muted-2);}
+.doc-prev-lab span::before{content:"· ";}
+.doc-prev-body{border-radius:var(--radius-m);border:var(--border-hairline);background:var(--surface);max-height:calc(100vh - 60px);overflow:auto;box-shadow:var(--shadow-lift);}
+.doc-prev-body .lesson-body.doc-prev-lesson{padding:26px 28px;}
+.doc-prev-body .lesson-open{margin-top:18px;}
+.doc-prev-empty{margin:18px 0 0;padding:18px;border-radius:12px;border:1px dashed var(--line);color:var(--muted);font-size:14px;text-align:center;}
+.doc-prev-note{margin:12px 0 0;font-size:13px;color:var(--muted);}
+.doc-prev-body .qz{margin-top:14px;}
+.doc-prev-proto{padding:24px 26px;}
+.doc-prev-proto .gd-title{display:block;font-size:20px;margin:4px 0 6px;}
+.doc-prev-proto .gd-sum{margin:0 0 16px;}
+@media (max-width:1180px){
+  .lp-grid.with-prev,.pr-layout.with-prev{grid-template-columns:minmax(0,1fr);}
+  .doc-prev{position:static;}
+  .doc-prev-body{max-height:none;}
+}
+@media (max-width:640px){ .doc-prev-body .lesson-body.doc-prev-lesson,.doc-prev-proto{padding:18px 16px;} }

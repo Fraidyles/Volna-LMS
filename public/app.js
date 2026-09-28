@@ -1485,6 +1485,7 @@ function render(){
   runEntranceAnimations();
   if(view==="login" || view==="register") initAuroraFx();
   ensureEmbers();
+  if(view==="staff" && lpActive()) lpDecoratePreview();
   if(view==="student"){
     applyGlossaryTerms();
     applyLessonHighlights();
@@ -3434,6 +3435,7 @@ function renderQuizRunner(key, questions, o){
   return html;
 }
 function qzQuestionsFor(key){
+  if(/^preview:/.test(key)) return (previewQuizCache[key] && previewQuizCache[key].questions) || [];
   if(!course) return [];
   if(key==="final") return course.quiz || [];
   var m = key.match(/^(lesson|module):(.+)$/); if(!m) return [];
@@ -4958,7 +4960,9 @@ function lsLessons(){ return staffState.materials || []; }
 function lsLesson(id){ return lsLessons().find(function(l){ return l.id===id; }) || null; }
 function lsPill(kind, text, ic){ return '<span class="ls-pill'+(kind?' '+kind:'')+'">'+(ic?icon(ic,"ic-sm"):'')+escapeHtml(text)+'</span>'; }
 function lpQuizCount(l){ return (lessonQuizManager.open && lessonQuizManager.loaded && lessonQuizManager.lessonId===l.id) ? lessonQuizManager.questions.length : (l.quiz_count||0); }
-function lpHasVideo(l){ return (videoEditor.open && videoEditor.lessonId===l.id && videoEditor.videoUrl) ? true : !!l.has_video; }
+// Плашки урока — по сохранённому: ссылка, только введённая в форму, видео не делает
+// (для предпросмотра форма читается отдельно). Загруженный файл сохраняется сразу.
+function lpHasVideo(l){ return !!l.has_video || (videoEditor.lessonId===l.id && !!videoEditor._uploaded); }
 function lsDripLabel(l){ return (l.drip_days===null || l.drip_days===undefined || l.drip_days===0) ? "открыт сразу" : "через "+l.drip_days+" "+ruPluralClient(l.drip_days,"день","дня","дней")+" после старта"; }
 function lsHiddenLabel(n){ return "скрыт от "+n+" "+ruPluralClient(n,"врача","врачей","врачей"); }
 function lsChips(l){
@@ -5225,7 +5229,11 @@ function renderLessonPage(){
     return '<button type="button" class="tab'+(t[0]===tab?' active':'')+'" data-action="lesson-page-tab" data-tab="'+t[0]+'">'+t[1]+badge(t)+'</button>';
   }).join('') + '</div>';
 
-  var wrap = el('<div class="lp-page">'+head+tabsHtml+'<div class="lp-grid'+(admin && l ? '' : ' single')+'"><div class="card lp-panel"></div>'+(admin && l ? lpReadiness(l) : '')+'</div></div>');
+  // Материал, видео, тест и задание — рядом предпросмотр «так врач увидит»; на
+  // расписании и доступе — готовность урока (там предпросматривать нечего).
+  var withPrev = ["content","video","quiz","assign","questions"].indexOf(tab)!==-1 && (tab!=="content" || lessonEditor.loaded);
+  var side = withPrev ? docPreview(lpPreviewHtml(tab), tab==="quiz"||tab==="questions" ? "можно пройти — ответы не сохраняются" : "обновляется, пока вы правите") : (admin && l ? lpReadiness(l) : '');
+  var wrap = el('<div class="lp-page">'+head+tabsHtml+'<div class="lp-grid'+(withPrev ? ' with-prev' : (admin && l ? '' : ' single'))+'"><div class="card lp-panel"></div>'+side+'</div></div>');
   var panel = wrap.querySelector(".lp-panel");
   if(LP_HINTS[tab]) panel.appendChild(el('<p class="lp-hint">'+(isQuiz && tab==="access" ? 'Скройте итоговый тест от конкретных врачей или от всех сразу.' : LP_HINTS[tab])+'</p>'));
   if(tab==="questions"){
@@ -6077,6 +6085,163 @@ function renderGlossaryTermPage(){
   return el(html);
 }
 
+/* ============================= ПРЕДПРОСМОТР «ТАК ВРАЧ УВИДИТ» ============================= */
+// Колонка рядом с редактором урока (материал, видео, тест, задание) и протокола:
+// те же функции отрисовки, что у врача, на данных из формы — обновляется во время
+// правки. Внутри работают только «врачебные» действия, которые ничего не меняют на
+// сервере (ответить на вопрос теста, перемотать видео, переключить гайд), — всё
+// остальное (отправка, переходы) гасится перехватчиком кликов ниже.
+var PREVIEW_ALLOWED = ["qr-pick","qr-goto","qr-prev","qr-next","qr-move","qr-match","seek-lesson-video","select-protocol-guide","prev-toc"];
+var previewQuizCache = {};
+document.addEventListener("click", function(e){
+  var box = e.target.closest && e.target.closest(".doc-prev-body");
+  if(!box) return;
+  var t = e.target.closest("[data-action]");
+  if(!t || !box.contains(t)) return;
+  var a = t.getAttribute("data-action");
+  if(a==="qr-submit"){ e.preventDefault(); e.stopPropagation(); showToast("Это предпросмотр — ответы не отправляются и не засчитываются"); return; }
+  if(a==="prev-toc"){
+    e.preventDefault(); e.stopPropagation();
+    var h = box.querySelectorAll(".prose h4")[parseInt(t.getAttribute("data-i"),10)];
+    if(h) h.scrollIntoView({ behavior:"smooth", block:"start" });
+    return;
+  }
+  if(a==="select-protocol-guide"){
+    e.preventDefault(); e.stopPropagation();
+    protocolGuideTab[t.getAttribute("data-id")] = t.getAttribute("data-spec"); prRefreshPreview();
+    return;
+  }
+  if(PREVIEW_ALLOWED.indexOf(a)===-1){ e.preventDefault(); e.stopPropagation(); }
+}, true);
+
+function docPreview(inner, note){
+  return '<div class="doc-prev"><div class="doc-prev-lab">'+icon("eye","ic-sm")+'Так врач увидит'+(note?'<span>'+note+'</span>':'')+'</div>' +
+    '<div class="doc-prev-body" id="docPreview">'+inner+'</div></div>';
+}
+// Подсветка терминов глоссария в тексте (как у врача, впервые открывшего урок).
+function glHighlightIn(prose, terms, lessonId){
+  (terms||[]).forEach(function(term){
+    var ms = glMatchers(term);
+    var w = document.createTreeWalker(prose, NodeFilter.SHOW_TEXT, null), n;
+    while((n = w.nextNode())){
+      if(n.parentElement.closest(".gl-term, a, button")) continue;
+      var best = null;
+      ms.forEach(function(re){ var m = re.exec(n.nodeValue); if(m){ var at = m.index + m[1].length; if(!best || at < best.at) best = { at:at, len:m[2].length }; } });
+      if(!best) continue;
+      var mid = n.splitText(best.at); mid.splitText(best.len);
+      var sp = document.createElement("span"); sp.className = "gl-term"; sp.title = "Термин: «"+term.title+"»";
+      mid.parentNode.insertBefore(sp, mid); sp.appendChild(mid);
+      break;
+    }
+  });
+}
+// Вопрос в том виде, в каком его получает врач (как src/quiz.js publicQuestion):
+// порядок и правую колонку сопоставления — перемешанными, без верных ответов.
+function qzPublicFromAdmin(q){
+  var t = q.qtype || "single", p = q.payload || {}, n;
+  var rot = function(arr){ n = arr.length; return arr.map(function(_, i){ return (i+1) % n; }); };
+  if(t==="order") return { id:q.id, type:t, question:q.question, items: rot(q.options).map(function(i){ return { token:"o"+i, text:q.options[i] }; }) };
+  if(t==="number") return { id:q.id, type:t, question:q.question, unit:p.unit||"" };
+  if(t==="match") return { id:q.id, type:t, question:q.question, left:q.options, right: rot(p.right||[]).map(function(i){ return { token:"r"+i, text:p.right[i] }; }) };
+  if(t==="case") return { id:q.id, type:t, question:q.question, scenario:p.scenario||"", steps:(p.steps||[]).map(function(s){ return s.type==="number" ? { type:"number", question:s.question, unit:s.unit||"" } : { type:s.type, question:s.question, options:s.options }; }) };
+  return { id:q.id, type:t, question:q.question, options:q.options };
+}
+function previewQuizHtml(key, rows, emptyText){
+  if(!rows || !rows.length) return '<p class="doc-prev-empty">'+emptyText+'</p>';
+  var pub = rows.map(qzPublicFromAdmin);
+  var sig = pub.map(function(x){ return x.id; }).join(",");
+  if(previewQuizCache[key] && previewQuizCache[key].sig!==sig) delete quizRuns[key];
+  previewQuizCache[key] = { sig:sig, questions:pub };
+  return renderQuizRunner(key, pub, { hint:"предпросмотр: можно пройти, ответы не сохраняются", submitLabel:"Завершить тест" });
+}
+function lpStagesFor(l){
+  var st = ["intro"];
+  if(lpHasVideo(l) || (videoEditor.open && videoEditor.lessonId===l.id && videoEditor.videoUrl)) st.push("video");
+  if(lpQuizCount(l)) st.push("quiz");
+  if(l.assignment_prompt) st.push("task");
+  return st;
+}
+function lpPreviewHtml(tab){
+  var id = staffState.lessonPageId, list = lsLessons();
+  if(id==="quiz") return previewQuizHtml("preview:final", staffState.quizAdmin, "В итоговом тесте пока нет вопросов.");
+  var idx = list.findIndex(function(x){ return x.id===id; }), l = list[idx];
+  if(!l) return "";
+  var stages = lpStagesFor(l), labels = { intro:"Материал", video:"Видео", quiz:"Тест", task:"Задание" };
+  var stageKey = { content:"intro", video:"video", quiz:"quiz", assign:"task" }[tab];
+  var frm = document.getElementById("lessonEditorForm");
+  var title = frm && frm.title ? frm.title.value : (lessonEditor.title || l.title);
+  var duration = frm && frm.duration ? frm.duration.value : (lessonEditor.duration || l.duration || "");
+  var head = '<div class="lesson-head"><h3>'+escapeHtml(title)+'</h3></div><div class="meta">Урок '+(idx+1)+' из '+list.length+(duration?' · '+escapeHtml(duration):'')+'</div>';
+  if(stages.indexOf(stageKey)===-1) stages.push(stageKey);
+  head += '<div class="tabs" style="margin:14px 0 4px;">'+stages.map(function(k){ return '<button type="button" class="tab'+(k===stageKey?' active':'')+'">'+labels[k]+'</button>'; }).join('')+'</div>';
+  var body = "";
+  if(tab==="content"){
+    var op = lessonOpener({ html: lessonEditor.html || "", duration: duration }, idx, stages);
+    body = op.html.replace(/data-action="lesson-toc"/g, 'data-action="prev-toc"') + '<div class="prose" data-prev-prose="1">'+op.rest+'</div>';
+  } else if(tab==="video"){
+    var tcs = (videoEditor.timecodes||[]).filter(function(tc){ return typeof tc.time==="number" && isFinite(tc.time) && tc.title; })
+      .map(function(tc, i){ return { id: tc.id || ("prev"+i), time: tc.time, title: tc.title, summary: tc.summary||"" }; })
+      .sort(function(a, b){ return a.time - b.time; });
+    body = videoEditor.videoUrl ? renderLessonVideoStage({ videoUrl: videoEditor.videoUrl, videoTimecodes: tcs }, stages, false)
+      : '<p class="doc-prev-empty">Видео ещё не загружено — у врача не будет шага «Видео».</p>';
+  } else if(tab==="quiz"){
+    body = previewQuizHtml("preview:"+id, lessonQuizManager.lessonId===id ? lessonQuizManager.questions : [], "Вопросов пока нет — у врача не будет шага «Тест».");
+  } else if(tab==="assign"){
+    var ae = toolsState.assignEditor;
+    body = ae && ae.prompt && ae.prompt.trim()
+      ? '<div class="task-box"><div class="task-label">'+icon("task","ic-sm")+' Задание к уроку'+(ae.required?'<span class="task-req">обязательное</span>':'')+'</div><div class="task-prompt">'+renderPlainToProse(ae.prompt)+'</div>' +
+          '<textarea class="input task-input" disabled placeholder="Ваш ответ — куратор прочитает его и ответит"></textarea>' +
+          '<div class="task-send"><button class="btn btn-sm btn-primary" disabled>Отправить куратору</button></div></div>' +
+          (ae.required ? '<p class="doc-prev-note">Стоп-урок: урок засчитается врачу, когда куратор примет ответ.</p>' : '')
+      : '<p class="doc-prev-empty">Задания нет — у врача не будет шага «Задание».</p>';
+  }
+  return '<div class="lesson-body doc-prev-lesson">'+head+body+'</div>';
+}
+function lpRefreshPreview(){
+  var box = document.getElementById("docPreview");
+  if(!box || !lpActive()) return;
+  var tab = staffState.lessonPageTab;
+  if(["content","video","quiz","assign","questions"].indexOf(tab)===-1) return;
+  var sc = box.scrollTop;
+  box.innerHTML = lpPreviewHtml(tab);
+  lpDecoratePreview();
+  box.scrollTop = sc;
+}
+var lpPrevTimer = null;
+function lpRefreshPreviewSoon(){ clearTimeout(lpPrevTimer); lpPrevTimer = setTimeout(lpRefreshPreview, 180); }
+// Термины в тексте предпросмотра — по глоссарию курса (грузится один раз).
+function lpDecoratePreview(){
+  var prose = document.querySelector("#docPreview [data-prev-prose]");
+  if(!prose) return;
+  if(!glossaryAdmin.loaded || glossaryAdmin.courseId!==staffState.activeCourseId){ glAdminLoad().then(lpDecoratePreview); return; }
+  if(prose.querySelector(".gl-term")) return;
+  glHighlightIn(prose, glossaryAdmin.list, staffState.lessonPageId);
+}
+
+/* ---------- Протокол глазами врача ---------- */
+function prPreviewHtml(){
+  var p = protocolEditor, frm = document.getElementById("protocolEditorForm");
+  var title = frm && frm.title ? frm.title.value : p.title, summary = frm && frm.summary ? frm.summary.value : p.summary;
+  var guides = (p.guides||[]).map(function(g){
+    var ed = document.getElementById("guideEditText");
+    return p.editSpec===g.specializationId && ed ? Object.assign({}, g, { guideHtml: ed.value }) : g;
+  });
+  var nsel = document.getElementById("newGuideSpec"), ntx = document.getElementById("newGuideText");
+  if(nsel && ntx && ntx.value.trim()){
+    var sp = specializationsList.find(function(s){ return s.id===nsel.value; });
+    guides = guides.concat([{ specializationId: nsel.value, specializationName: (sp ? sp.name : "") + " (новый)", guideHtml: ntx.value, files: [] }]);
+  }
+  var pp = { id: p.id || "preview-new", title: title || "Без названия", summary: summary, guides: guides };
+  return '<div class="doc-prev-proto"><span class="profile-kicker">Протокол</span><b class="gd-title">'+escapeHtml(pp.title)+'</b>' +
+    (pp.summary ? '<p class="gd-sum">'+escapeHtml(stripHtml(renderPlainToProse(pp.summary)))+'</p>' : '') +
+    '<div class="doc-prev-proto-body">'+renderProtocolCard(pp, false, true)+'</div></div>';
+}
+function prRefreshPreview(){
+  var box = document.getElementById("docPreview");
+  if(!box || !(staffState.mainTab==="protocols" && protocolEditor.open)) return;
+  box.innerHTML = prPreviewHtml();
+}
+
 /* ============================= РЕНДЕР: ПРОТОКОЛЫ (АДМИН) ============================= */
 // Специализации — фиксированный справочник (см. schema.sql «Этап 11»): отсюда админ
 // им управляет, отсюда же их читают форма регистрации и профиль врача.
@@ -6170,10 +6335,8 @@ function renderProtocolPage(){
     if(admin) steps.push(["prSec2","Когда открывается", p.lessonIds.length ? String(p.lessonIds.length) : "—"]);
     steps.push(["prSec3","Гайды", String(p.guides.length)]);
   }
-  html += '<div class="pr-layout"><div class="card pr-steps">' + steps.map(function(s, i){
-    var done = s[0]==="prSec1" ? !isNew : (s[0]==="prSec2" ? bound : p.guides.length>0);
-    return '<button type="button" class="pr-step'+(done?' done':'')+'" data-action="pr-scroll" data-target="'+s[0]+'"><i>'+(done?'✓':(i+1))+'</i>'+s[1]+(s[2]?'<em>'+s[2]+'</em>':'')+'</button>';
-  }).join('') + '</div><div class="pr-secs">';
+  // Слева — шаги редактора, справа — протокол глазами врача (обновляется при правке).
+  html += '<div class="pr-layout with-prev"><div class="pr-secs">';
 
   // 1. Описание
   html += '<div class="card pr-sec" id="prSec1"><div class="pr-sec-h"><i>1</i><b>Описание</b></div><p class="pr-sec-s">Видно всем врачам, даже без гайда под их специализацию.</p>';
@@ -6238,7 +6401,7 @@ function renderProtocolPage(){
     }
     html += '</div>';
   }
-  return el(html + '</div></div></div>');
+  return el(html + '</div>' + docPreview(prPreviewHtml(), "обновляется, пока вы правите") + '</div></div>');
 }
 
 // Разовая анимация «разблокировали функцию» — центрированная модалка (не боковой
@@ -7452,7 +7615,7 @@ function renderStudentOrdersTab(s){
 function toolsBind(t){
   var k = t.getAttribute("data-tbind"), id = t.getAttribute("data-id");
   // «Есть несохранённое» — чтобы клик по фону не закрыл окно молча.
-  if(/^ae\./.test(k) && toolsState.assignEditor) toolsState.assignEditor._dirty = true;
+  if(/^ae\./.test(k) && toolsState.assignEditor){ toolsState.assignEditor._dirty = true; if(typeof lpRefreshPreviewSoon==="function") lpRefreshPreviewSoon(); }
   if(/^od\./.test(k) && toolsState.orders.draft) toolsState.orders.draft._dirty = true;
   if(/^pd\./.test(k) && toolsState.products.editing) toolsState.products.editing._dirty = true;
   if(/^s[vq]\./.test(k) && toolsState.surveys.editing) toolsState.surveys.editing._dirty = true;
@@ -8564,6 +8727,7 @@ function wireEvents(root){
       }
       else document.execCommand(cmd);
       if(wHidden) wHidden.value = wTarget.innerHTML;
+      if(wTarget.id==="lessonWysiwygEditor"){ lessonEditor.html = wTarget.innerHTML; lpRefreshPreviewSoon(); }
       return;
     }
     if(action==="delete-lesson"){
@@ -8693,7 +8857,7 @@ function wireEvents(root){
           var fill = document.getElementById("videoUploadProgressFill");
           if(fill) fill.style.transform = "scaleX("+(pct/100)+")";
         });
-        videoEditor.videoUrl = vur.videoUrl;
+        videoEditor.videoUrl = vur.videoUrl; videoEditor._uploaded = true;
         showToast("Видео загружено");
       }catch(err){ showToast(err.message); }
       videoEditor.uploadProgress = null;
@@ -9627,7 +9791,11 @@ function wireEvents(root){
       var hidden=document.getElementById("lessonHtmlHidden");
       if(hidden) hidden.value = e.target.innerHTML;
       lessonEditor.html = e.target.innerHTML;
+      lpRefreshPreviewSoon();
     }
+    if(e.target.closest && e.target.closest("#lessonEditorForm") && e.target.id!=="lessonWysiwygEditor") lpRefreshPreviewSoon();
+    if(e.target.closest && e.target.closest("#videoEditorForm")){ syncVideoEditorFromDom(); lpRefreshPreviewSoon(); }
+    if(e.target.closest && (e.target.closest("#protocolEditorForm") || e.target.id==="guideEditText" || e.target.id==="newGuideText" || e.target.id==="newGuideSpec")) prRefreshPreview();
   });
 }
 
