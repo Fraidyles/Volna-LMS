@@ -944,7 +944,7 @@ document.addEventListener("pointermove", function(e){
   c.style.setProperty("--mx", (e.clientX - r.left)+"px");
   c.style.setProperty("--my", (e.clientY - r.top)+"px");
   // «Живой свет» на главной: наклон плитки навстречу курсору (±2.5°)
-  if(c.closest(".home-grid.fx-light") && !c.classList.contains("course-hero")){
+  if(c.closest(".home-grid.fx-light, .staff-home.fx-light") && !c.classList.contains("course-hero")){
     c.style.setProperty("--tx", (((e.clientY - r.top)/r.height - .5) * -5).toFixed(2)+"deg");
     c.style.setProperty("--ty", (((e.clientX - r.left)/r.width - .5) * 5).toFixed(2)+"deg");
   }
@@ -955,13 +955,13 @@ document.addEventListener("pointermove", function(e){
   if(fxLightRaf) return;
   fxLightRaf = requestAnimationFrame(function(){
     fxLightRaf = 0;
-    var g = document.querySelector(".home-grid.fx-light"); if(!g) return;
+    var g = document.querySelector(".home-grid.fx-light, .staff-home.fx-light"); if(!g) return;
     var r = g.getBoundingClientRect();
     g.style.setProperty("--lx", Math.max(-10, Math.min(110, (e.clientX - r.left)/r.width*100)).toFixed(1)+"%");
     g.style.setProperty("--ly", Math.max(-10, Math.min(110, (e.clientY - r.top)/r.height*100)).toFixed(1)+"%");
     // Свет «фонариком» по стеклу: координаты курсора — в каждую плитку, а не
     // только в ту, что под ним, — рамки соседних плиток ловят край света.
-    g.querySelectorAll(".board-tile, .home-next").forEach(function(c){
+    g.querySelectorAll(".board-tile, .home-next, .staff-home .card").forEach(function(c){
       var cr = c.getBoundingClientRect();
       c.style.setProperty("--mx", (e.clientX - cr.left)+"px");
       c.style.setProperty("--my", (e.clientY - cr.top)+"px");
@@ -3937,6 +3937,8 @@ async function uploadAvatarFile(file){
 //             уроков курса и полоске очков проходит блик;
 //   off     — без анимаций (и всегда, если в системе включено «уменьшить движение»).
 var HOME_FX = [["cascade","Каскад","Плитки собираются по очереди при входе"],["light","Живой свет","Свет за стеклом следует за курсором"],["thread","Нить прогресса","Путь по урокам светится и течёт к текущему"],["off","Без анимации","Только сами данные"]];
+// У сотрудников на главной — потоки, задачи и лента, поэтому «нить» там своя.
+var HOME_FX_STAFF_TEXT = { thread:"Потоки связаны светящейся линией, кольца прогресса пульсируют" };
 function homeFx(){
   var v = null; try{ v = localStorage.getItem("lms-home-fx"); }catch(e){}
   var q = /[?&]fx=(cascade|light|thread|off)\b/.exec(location.search); if(q) v = q[1];
@@ -3955,10 +3957,10 @@ function renderSettingsPage(){
   }
   var left = '<div class="pp-col">' +
     '<div class="card co-card"><b class="co-card-title">Внешний вид</b><div class="theme-cards">'+themeCard("dark","Тёмная")+themeCard("light","Светлая")+'</div>' +
-      (me.role==="student" ? '<b class="fx-title">Анимация главной</b><div class="fx-cards">' + HOME_FX.map(function(x){
-        var on = homeFx()===x[0];
-        return '<button type="button" class="fx-card'+(on?' on':'')+'" data-action="set-home-fx" data-fx="'+x[0]+'"><span class="fx-prev fxp-'+x[0]+'"><i></i><i></i><i></i></span><b>'+x[1]+(on?' <em>выбрана</em>':'')+'</b><span>'+x[2]+'</span></button>';
-      }).join("") + '</div>' : '') + '</div>' +
+      '<b class="fx-title">Анимация главной</b><div class="fx-cards">' + HOME_FX.map(function(x){
+        var on = homeFx()===x[0], text = me.role!=="student" && HOME_FX_STAFF_TEXT[x[0]] ? HOME_FX_STAFF_TEXT[x[0]] : x[2];
+        return '<button type="button" class="fx-card'+(on?' on':'')+'" data-action="set-home-fx" data-fx="'+x[0]+'"><span class="fx-prev fxp-'+x[0]+'"><i></i><i></i><i></i></span><b>'+x[1]+(on?' <em>выбрана</em>':'')+'</b><span>'+text+'</span></button>';
+      }).join("") + '</div></div>' +
     '<div class="card co-card"><b class="co-card-title">Безопасность</b>' +
       '<div class="set-row"><div><b>Пароль</b><span>Меняйте пароль, если входили с чужого устройства.</span></div><button class="btn btn-sm btn-ghost" data-action="open-change-password">Сменить пароль</button></div>' +
       '<div class="set-row" style="border-bottom:none;"><div><b>Активные сеансы</b><span>С каких устройств входили в аккаунт.</span></div><button class="btn btn-sm btn-ghost" data-action="logout-everywhere">Выйти со всех устройств</button></div>' +
@@ -4042,7 +4044,10 @@ function renderStaffShell(){
     content.appendChild(renderRoster());
   } else {
     addSideFlow(main);
-    renderStaffHome(content);
+    // Главная сотрудника — в обёртке с выбранным вариантом анимации (как у врача).
+    var staffHomeBox = el('<div class="staff-home fx-'+homeFx()+'"></div>');
+    content.appendChild(staffHomeBox);
+    renderStaffHome(staffHomeBox);
   }
 
   if(staffState.selectedStudentId){

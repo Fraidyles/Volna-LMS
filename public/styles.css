@@ -2294,3 +2294,51 @@ mark.hl.hl-flash{animation:hlFlash 1.6s ease;}
 .fxp-thread i:first-child{background:linear-gradient(180deg,var(--status-active) 0 55%,color-mix(in srgb,var(--ink) 10%,transparent) 55%) 12px 0/2px 100% no-repeat,color-mix(in srgb,var(--ink) 10%,transparent);}
 .fxp-thread i:nth-child(3){background:linear-gradient(90deg,var(--primary),var(--status-active),var(--primary)) 0 100%/200% 4px no-repeat,color-mix(in srgb,var(--ink) 10%,transparent);animation:fxFlow 3s linear infinite;}
 .fxp-off i{opacity:.7;}
+
+/* ===== Главная сотрудника: те же три варианта анимации ===== */
+/* Каскад: блоки страницы и карточки потоков собираются по очереди */
+.staff-home.fx-cascade > *{animation:fxUp .7s cubic-bezier(.16,1,.3,1) both;}
+.staff-home.fx-cascade > :nth-child(2){animation-delay:.12s;} .staff-home.fx-cascade > :nth-child(3){animation-delay:.2s;}
+.staff-home.fx-cascade > :nth-child(4){animation-delay:.28s;} .staff-home.fx-cascade > :nth-child(5){animation-delay:.36s;}
+.staff-home.fx-cascade > :nth-child(n+6){animation-delay:.44s;}
+.staff-home.fx-cascade .board-strip > .card{animation:fxUp .6s cubic-bezier(.16,1,.3,1) both;}
+.staff-home.fx-cascade .board-strip > .card:nth-child(2){animation-delay:.08s;} .staff-home.fx-cascade .board-strip > .card:nth-child(3){animation-delay:.16s;}
+.staff-home.fx-cascade .board-strip > .card:nth-child(n+4){animation-delay:.24s;}
+.staff-home.fx-cascade .grid-2 > .card{animation:fxSide .7s cubic-bezier(.16,1,.3,1) both;animation-delay:.4s;}
+.staff-home.fx-cascade .grid-2 > .card:nth-child(2){animation-delay:.48s;}
+#app.rerender .staff-home.fx-cascade > *,#app.rerender .staff-home.fx-cascade .board-strip > .card,#app.rerender .staff-home.fx-cascade .grid-2 > .card{animation:none;}
+
+/* Живой свет */
+.staff-home.fx-light{position:relative;isolation:isolate;transition:--lx 1.4s cubic-bezier(.16,1,.3,1),--ly 1.4s cubic-bezier(.16,1,.3,1);}
+.staff-home.fx-light::before{content:"";position:absolute;inset:-60px 0;z-index:-1;pointer-events:none;filter:blur(18px);
+  background:radial-gradient(460px circle at var(--lx) var(--ly),color-mix(in srgb,var(--primary) 62%,transparent),color-mix(in srgb,var(--primary) 18%,transparent) 38%,transparent 66%),
+             radial-gradient(420px circle at calc(100% - var(--lx)) calc(100% - var(--ly)),color-mix(in srgb,var(--teal) 50%,transparent),transparent 62%);}
+@media (hover:none){ .staff-home.fx-light{animation:fxDrift 22s ease-in-out infinite alternate;} }
+.staff-home.fx-light .board-strip > .card,.staff-home.fx-light .home-tile{background:color-mix(in srgb,var(--surface) 55%,transparent);}
+#app .staff-home.fx-light .card::before{opacity:1;background:radial-gradient(380px circle at var(--mx,-999px) var(--my,-999px),color-mix(in srgb,var(--primary) 12%,transparent),transparent 65%);}
+#app .staff-home.fx-light .card::after{opacity:.7;background:radial-gradient(340px circle at var(--mx,-999px) var(--my,-999px),color-mix(in srgb,var(--primary) 90%,transparent),color-mix(in srgb,var(--teal) 60%,transparent) 40%,transparent 72%);}
+@media (hover:hover){
+  .staff-home.fx-light .board-strip > .card,.staff-home.fx-light .home-tile{transition:transform .3s cubic-bezier(.16,1,.3,1);}
+  .staff-home.fx-light .board-strip > .card:hover,.staff-home.fx-light .home-tile:hover{transform:perspective(900px) rotateX(var(--tx,0deg)) rotateY(var(--ty,0deg)) translateY(-3px);}
+}
+
+/* Нить прогресса: карточки потоков связаны текущей линией, кольца пульсируют,
+   по строкам задач проходит блик */
+.staff-home.fx-thread .board-strip{position:relative;}
+.staff-home.fx-thread .board-strip::before{content:"";position:absolute;left:24px;right:24px;top:41px;height:2px;border-radius:2px;z-index:0;pointer-events:none;
+  background:linear-gradient(90deg,var(--primary),var(--status-active),var(--primary));background-size:200% 100%;animation:fxFlow 3s linear infinite;
+  box-shadow:0 0 10px color-mix(in srgb,var(--primary) 60%,transparent);}
+.staff-home.fx-thread .board-strip > .card{position:relative;z-index:1;background:var(--surface);backdrop-filter:none;-webkit-backdrop-filter:none;}
+.staff-home.fx-thread .board-strip .progress-ring{animation:fxPulse 2.4s ease-in-out infinite;}
+.staff-home.fx-thread .board-strip > .card:nth-child(2) .progress-ring{animation-delay:.4s;}
+.staff-home.fx-thread .board-strip > .card:nth-child(3) .progress-ring{animation-delay:.8s;}
+.staff-home.fx-thread .att-row{background-image:linear-gradient(90deg,transparent,color-mix(in srgb,var(--primary) 12%,transparent),transparent);
+  background-size:40% 100%;background-repeat:no-repeat;animation:fxShine 4s ease-in-out infinite;}
+.staff-home.fx-thread .att-row:nth-child(2){animation-delay:.3s;} .staff-home.fx-thread .att-row:nth-child(3){animation-delay:.6s;}
+@media (max-width:800px){ .staff-home.fx-thread .board-strip::before{left:40px;right:auto;top:24px;bottom:24px;width:2px;height:auto;
+  background:linear-gradient(180deg,var(--primary),var(--status-active),var(--primary));background-size:100% 200%;} }
+
+@media (prefers-reduced-motion:reduce){
+  .staff-home *,.staff-home *::before,.staff-home *::after{animation:none !important;}
+  .staff-home.fx-light{animation:none;} .staff-home.fx-light::before{display:none;}
+}
