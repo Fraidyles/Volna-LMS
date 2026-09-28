@@ -719,8 +719,15 @@ router.get("/materials", authRequired, requireRole("curator", "admin", "super_ad
   if (!courseId) return res.json({ lessons: [] });
   const course = await pool.query("SELECT id, title, certificates_enabled FROM courses WHERE id=$1", [courseId]);
   if (!course.rowCount) return res.json({ lessons: [] });
+  // Модуль, видео и число вопросов теста — для плашек состояния в списке уроков
+  // («нет видео», «тест · 4 вопр.»), чтобы не открывать каждый урок отдельно.
   const lessons = await pool.query(
-    "SELECT id, idx, title, has_draft, drip_days, assignment_prompt, assignment_required FROM lessons WHERE course_id=$1 ORDER BY idx",
+    `SELECT l.id, l.idx, l.title, l.duration, l.has_draft, l.drip_days, l.assignment_prompt, l.assignment_required,
+            l.module_id, m.title AS module_title,
+            (COALESCE(l.video_url, '') <> '' OR l.video_filename IS NOT NULL) AS has_video,
+            (SELECT COUNT(*)::int FROM quiz_questions q WHERE q.lesson_id = l.id) AS quiz_count
+     FROM lessons l LEFT JOIN modules m ON m.id = l.module_id
+     WHERE l.course_id=$1 ORDER BY l.idx`,
     [course.rows[0].id]
   );
   res.json({ lessons: lessons.rows, certificatesEnabled: course.rows[0].certificates_enabled });
