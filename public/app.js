@@ -2100,7 +2100,7 @@ function renderSidebar(){
   } else {
     var isDark = getTheme()==="dark";
     footer = '<div class="sidebar-footer">' +
-      '<button type="button" class="sidebar-item" data-action="toggle-theme" title="Переключить тему">'+icon(isDark?"sun":"moon")+'<span class="sidebar-item-label">'+(isDark?"Светлая тема":"Тёмная тема")+'</span></button>' +
+      (getLook()==="classic" ? '<button type="button" class="sidebar-item" data-action="toggle-theme" title="Переключить тему">'+icon(isDark?"sun":"moon")+'<span class="sidebar-item-label">'+(isDark?"Светлая тема":"Тёмная тема")+'</span></button>' : '') +
       '<button type="button" class="sidebar-item" data-action="logout" title="Выйти">'+icon("logout")+'<span class="sidebar-item-label">Выйти</span></button>' +
     '</div>';
   }
@@ -2125,7 +2125,27 @@ function renderMobileNavBackdrop(){
 
 // Тёмная тема — дефолт продукта (не только системная), можно переключить вручную.
 function getTheme(){ return localStorage.getItem("lms-theme") || "dark"; }
-function applyTheme(){ document.documentElement.setAttribute("data-theme", getTheme()); }
+// Стиль интерфейса (Настройки → «Стиль интерфейса»): «Классический» — текущий
+// дизайн со светлой и тёмной темой; остальные — варианты на двух цветах
+// (фиолетовый + красный) и тёмном фоне, у каждого своя тёмная палитра, поэтому
+// при них тема всегда тёмная, а переключатель темы в меню скрыт.
+var LOOKS = [
+  ["classic","Классический","Текущий дизайн: фиолетовый и бирюзовый, светлая или тёмная тема"],
+  ["monitor","Монитор","Клинический монитор: плоские поверхности, тонкие линии, кардиограмма в шапке курса"],
+  ["depth","Глубина","Туманность фиолетового и красного за стеклом, градиентные кнопки и кольца"],
+  ["journal","Журнал","Спокойная редакционная подача: антиква в заголовках, красные линейки и цифры"],
+  ["lab","Лаборатория","Эксперимент: острые углы, плотные заголовки Inter Tight, жёсткие тени и точечная сетка"]
+];
+function getLook(){
+  var v = null; try{ v = localStorage.getItem("lms-look"); }catch(e){}
+  var q = /[?&]look=(classic|monitor|depth|journal|lab)\b/.exec(location.search); if(q) v = q[1];
+  return LOOKS.some(function(x){ return x[0]===v; }) ? v : "classic";
+}
+function applyTheme(){
+  var look = getLook();
+  document.documentElement.setAttribute("data-look", look);
+  document.documentElement.setAttribute("data-theme", look==="classic" ? getTheme() : "dark");
+}
 function toggleTheme(){
   localStorage.setItem("lms-theme", getTheme()==="dark" ? "light" : "dark");
   applyTheme();
@@ -2550,7 +2570,7 @@ function renderStudentHome(){
     var testBadge = quizDone ? magnet("done","Тест пройден · "+pr.quiz_score+"%")
       : (done===total ? magnet("attention","Итоговый тест доступен") : magnet("neutral","Итоговый тест впереди"));
     html += '<div class="card course-hero">' +
-      '<div class="hero-aurora aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
+      '<div class="hero-aurora aurora" aria-hidden="true">'+AURORA_BANDS+'</div><div class="look-ecg" aria-hidden="true"></div>' +
       '<div class="course-hero-top">' +
         '<div class="progress-ring" data-anim="ring" style="--ring-p:'+pct+'%;"><div class="progress-ring-inner"><span data-count="'+pct+'" data-suffix="%">'+pct+'%</span></div></div>' +
         '<div><h2 style="margin:0;">'+escapeHtml(course.course.title)+'</h2>' +
@@ -4020,7 +4040,16 @@ function renderSettingsPage(){
       '<span class="theme-label">'+icon(key==="dark"?"moon":"sun","ic-sm")+label+(on?'<em>выбрана</em>':'')+'</span></button>';
   }
   var left = '<div class="pp-col">' +
-    '<div class="card co-card"><b class="co-card-title">Внешний вид</b><div class="theme-cards">'+themeCard("dark","Тёмная")+themeCard("light","Светлая")+'</div>' +
+    '<div class="card co-card"><b class="co-card-title">Внешний вид</b>' +
+      '<b class="fx-title" style="margin-top:0;">Стиль интерфейса</b><div class="look-cards">' + LOOKS.map(function(x){
+        var on = getLook()===x[0];
+        return '<button type="button" class="look-card'+(on?' on':'')+'" data-action="set-look" data-look="'+x[0]+'">' +
+          '<span class="look-prev lp-'+x[0]+'"><i class="lp-side"></i><i class="lp-hero"><em></em></i><i class="lp-a"></i><i class="lp-b"></i></span>' +
+          '<b>'+x[1]+(on?' <em>выбран</em>':'')+'</b><span>'+x[2]+'</span></button>';
+      }).join("") + '</div>' +
+      (getLook()==="classic"
+        ? '<b class="fx-title">Тема</b><div class="theme-cards">'+themeCard("dark","Тёмная")+themeCard("light","Светлая")+'</div>'
+        : '<p class="set-muted" style="margin:12px 0 0;">У стиля «'+escapeHtml(LOOKS.find(function(x){ return x[0]===getLook(); })[1])+'» своя тёмная палитра — светлая тема доступна в «Классическом».</p>') +
       '<b class="fx-title">Анимация главной</b><div class="fx-cards">' + HOME_FX.map(function(x){
         var on = homeFx()===x[0], text = me.role!=="student" && HOME_FX_STAFF_TEXT[x[0]] ? HOME_FX_STAFF_TEXT[x[0]] : x[2];
         return '<button type="button" class="fx-card'+(on?' on':'')+'" data-action="set-home-fx" data-fx="'+x[0]+'"><span class="fx-prev fxp-'+x[0]+'"><i></i><i></i><i></i></span><b>'+x[1]+(on?' <em>выбрана</em>':'')+'</b><span>'+text+'</span></button>';
@@ -7108,6 +7137,11 @@ function wireEvents(root){
       Object.keys(mtVal).forEach(function(k){ if(k!==mtL && mtVal[k]===mtT){ if(mtPrev) mtVal[k]=mtPrev; else delete mtVal[k]; } });
       if(mtPrev===mtT) delete mtVal[mtL]; else mtVal[mtL]=mtT;
       mtRun.answers[mtPath]=mtVal; render(); return;
+    }
+    if(action==="set-look"){
+      try{ localStorage.setItem("lms-look", t.getAttribute("data-look")); }catch(err){}
+      applyTheme(); embers = []; render();
+      showToast("Стиль интерфейса: «"+t.querySelector("b").childNodes[0].textContent.trim()+"»"); return;
     }
     if(action==="set-home-bg"){
       try{ localStorage.setItem("lms-home-bg", t.getAttribute("data-bg")); }catch(err){}

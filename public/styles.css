@@ -36,6 +36,18 @@
 @font-face{font-family:'Manrope';font-style:normal;font-weight:700;font-display:swap;src:url('fonts/manrope-latin-800-normal.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
 @font-face{font-family:'Manrope';font-style:normal;font-weight:700;font-display:swap;src:url('fonts/manrope-cyrillic-800-normal.woff2') format('woff2');unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}
 
+
+/* Шрифты стилей интерфейса «Журнал» (Playfair Display) и «Лаборатория» (Inter Tight) —
+   тоже файлами с этого сервера, только латиница и кириллица, веса 600/700. OFL. */
+@font-face{font-family:'Playfair Display';font-style:normal;font-weight:600;font-display:swap;src:url('fonts/playfair-display-latin-600-normal.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
+@font-face{font-family:'Playfair Display';font-style:normal;font-weight:600;font-display:swap;src:url('fonts/playfair-display-cyrillic-600-normal.woff2') format('woff2');unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}
+@font-face{font-family:'Playfair Display';font-style:normal;font-weight:700;font-display:swap;src:url('fonts/playfair-display-latin-700-normal.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
+@font-face{font-family:'Playfair Display';font-style:normal;font-weight:700;font-display:swap;src:url('fonts/playfair-display-cyrillic-700-normal.woff2') format('woff2');unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}
+@font-face{font-family:'Inter Tight';font-style:normal;font-weight:600;font-display:swap;src:url('fonts/inter-tight-latin-600-normal.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
+@font-face{font-family:'Inter Tight';font-style:normal;font-weight:600;font-display:swap;src:url('fonts/inter-tight-cyrillic-600-normal.woff2') format('woff2');unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}
+@font-face{font-family:'Inter Tight';font-style:normal;font-weight:700;font-display:swap;src:url('fonts/inter-tight-latin-700-normal.woff2') format('woff2');unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD;}
+@font-face{font-family:'Inter Tight';font-style:normal;font-weight:700;font-display:swap;src:url('fonts/inter-tight-cyrillic-700-normal.woff2') format('woff2');unicode-range:U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116;}
+
 :root{
   /* Тёмная — база по умолчанию (не только через media-query) */
   --bg:#121214; --surface:#1B1B1F; --surface-2:#242429;
@@ -2362,3 +2374,207 @@ mark.hl.hl-flash{animation:hlFlash 1.6s ease;}
 .fxp-ember-warm{--c1:var(--rose);--c2:var(--accent);}
 .fxp-ember-cool{--c1:var(--primary);--c2:var(--teal);}
 .fxp-ember-mix{--c1:var(--rose);--c2:var(--teal);}
+
+/* ==========================================================================
+   СТИЛИ ИНТЕРФЕЙСА (Настройки → «Стиль интерфейса»), html[data-look=…]
+   Два основных цвета — фиолетовый (действие, навигация) и красный (живое,
+   текущее, прогресс, цифры) — плюс тёмный фон. Бирюза классического дизайна
+   в этих стилях заменена красным через --teal, зелёный «пройдено» — светло-
+   фиолетовым, янтарь — розовым: вся система остаётся двухцветной.
+   ========================================================================== */
+:root[data-look="monitor"],:root[data-look="depth"],:root[data-look="journal"],:root[data-look="lab"]{
+  --status-active:#B7A5FF; --status-active-tint:#221C3A;
+  --status-attention:#FF8FA3; --status-attention-tint:#35151D;
+  --status-done:#9C86FF; --status-done-tint:#211C38;
+  --accent:#FF8FA3; --accent-tint:#35151D;
+  --danger:#FF4D6D; --danger-tint:#35131B;
+  --status-blocked:#FF4D6D; --status-blocked-tint:#35131B;
+}
+
+/* ---------- 1. Монитор: клинический монитор ---------- */
+:root[data-look="monitor"]{
+  --bg:#07070B; --surface:#0E0E15; --surface-2:#15151E;
+  --ink:#ECECF3; --muted:#8B8B9B; --muted-2:#7A7A8A;
+  --line:#23232E; --line-2:#1A1A23;
+  --primary:#8B6BFF; --primary-dark:#7454F0; --primary-tint:#1D1836;
+  --teal:#FF3B5C; --teal-dark:#E62748; --teal-tint:#33121A; --rose:#FF3B5C; --rose-soft:#FF8FA3;
+  --status-live:#FF3B5C; --status-live-tint:#33121A;
+  --radius-s:8px; --radius-m:12px; --radius-l:16px;
+  --shadow:none; --shadow-lift:0 0 0 1px color-mix(in srgb,#8B6BFF 30%,transparent);
+  --border-hairline:1px solid #1F1F2A;
+  --glass-bg:#0E0E15; --glass-border:1px solid #1F1F2A; --glass-blur:0px;
+  --ambient-glow:radial-gradient(ellipse 50% 40% at 85% 0%,rgba(139,107,255,.18),transparent 70%);
+}
+/* сетка монитора на фоне */
+:root[data-look="monitor"] body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.5;
+  background-image:linear-gradient(rgba(139,107,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(139,107,255,.05) 1px,transparent 1px);background-size:32px 32px;}
+/* цифры — моноширинные, как показания прибора */
+[data-look="monitor"] .tile-num,[data-look="monitor"] .progress-ring-inner,[data-look="monitor"] .home-stats b,[data-look="monitor"] .hn-num,
+[data-look="monitor"] .tg-stats b,[data-look="monitor"] .qz-count b,[data-look="monitor"] .stat b{font-family:var(--mono);font-weight:600;letter-spacing:-.02em;}
+[data-look="monitor"] .progress-ring{background:conic-gradient(var(--teal) var(--ring-p,0%),var(--line) 0);box-shadow:0 0 18px -6px color-mix(in srgb,var(--teal) 70%,transparent);}
+[data-look="monitor"] .btn-primary{background:var(--primary);box-shadow:0 0 0 1px color-mix(in srgb,var(--primary) 50%,transparent),0 0 18px -6px var(--primary);}
+[data-look="monitor"] .course-hero .hero-aurora{opacity:.35;}
+[data-look="monitor"] .status-track .slot.done{background:var(--primary);}
+[data-look="monitor"] .status-track .slot.current{background:var(--teal);box-shadow:0 0 10px var(--teal);}
+[data-look="monitor"] .hn-row.cur .hn-num{background:var(--teal);border-color:var(--teal);animation:lookBeat 1.3s ease-in-out infinite;}
+[data-look="monitor"] .hn-row.cur .hn-st.cur{color:var(--teal);}
+@keyframes lookBeat{0%,60%,100%{transform:scale(1);}10%{transform:scale(1.14);box-shadow:0 0 0 5px color-mix(in srgb,var(--teal) 28%,transparent),0 0 18px color-mix(in srgb,var(--teal) 60%,transparent);}
+  20%{transform:scale(1);}30%{transform:scale(1.08);box-shadow:0 0 0 3px color-mix(in srgb,var(--teal) 20%,transparent);}}
+/* кардиограмма в шапке курса */
+.look-ecg{display:none;}
+[data-look="monitor"] .course-hero .look-ecg{display:block;position:absolute;left:36%;right:0;bottom:16px;height:40px;pointer-events:none;opacity:.85;z-index:0;
+  background:linear-gradient(90deg,var(--teal),#FF8FA3 30%,var(--primary) 55%,var(--teal) 80%);background-size:200% 100%;
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='40' viewBox='0 0 220 40'%3E%3Cpath d='M0 22 H70 L78 22 L84 10 L90 22 L100 22 L106 34 L114 2 L122 30 L128 22 L140 22 L150 16 L160 22 H220' fill='none' stroke='%23000' stroke-width='2.2' stroke-linejoin='round' stroke-linecap='round'/%3E%3C/svg%3E") 0 50%/220px 40px repeat-x,linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent);
+  -webkit-mask-composite:source-in;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='40' viewBox='0 0 220 40'%3E%3Cpath d='M0 22 H70 L78 22 L84 10 L90 22 L100 22 L106 34 L114 2 L122 30 L128 22 L140 22 L150 16 L160 22 H220' fill='none' stroke='%23000' stroke-width='2.2' stroke-linejoin='round' stroke-linecap='round'/%3E%3C/svg%3E") 0 50%/220px 40px repeat-x,linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent);
+  mask-composite:intersect;
+  animation:lookEcg 2.6s linear infinite,lookEcgGlow 5s linear infinite;filter:drop-shadow(0 0 6px color-mix(in srgb,var(--teal) 70%,transparent));}
+[data-look="monitor"] .course-hero > :not(.hero-aurora):not(.look-ecg){position:relative;z-index:1;}
+@keyframes lookEcg{to{-webkit-mask-position:-220px 50%,0 0;mask-position:-220px 50%,0 0;}}
+@keyframes lookEcgGlow{to{background-position:-200% 0;}}
+@media (max-width:640px){ [data-look="monitor"] .course-hero .look-ecg{left:0;top:8px;bottom:auto;opacity:.45;} }
+
+/* ---------- 2. Глубина: туманность за стеклом ---------- */
+:root[data-look="depth"]{
+  --bg:#0A0612; --surface:#130C20; --surface-2:#1C1330;
+  --ink:#F4F0FB; --muted:#A79CBC; --muted-2:#8F84A6;
+  --line:#2A2040; --line-2:#201834;
+  --primary:#9D7BFF; --primary-dark:#8663F5; --primary-tint:#231A40;
+  --teal:#FF4D6D; --teal-dark:#EE3657; --teal-tint:#34131E; --rose:#FF4D6D; --rose-soft:#FF95A8;
+  --status-live:#FF4D6D; --status-live-tint:#34131E;
+  --radius-s:14px; --radius-m:24px; --radius-l:32px;
+  --glass-bg:rgba(255,255,255,.045); --glass-border:1px solid rgba(255,255,255,.1); --glass-blur:28px;
+  --border-hairline:1px solid rgba(255,255,255,.08);
+  --ambient-glow:radial-gradient(ellipse 55% 45% at 82% 6%,rgba(157,123,255,.55),transparent 68%),
+                 radial-gradient(ellipse 50% 42% at 10% 90%,rgba(255,77,109,.38),transparent 68%),
+                 radial-gradient(ellipse 36% 30% at 45% 45%,rgba(157,123,255,.18),transparent 70%);
+  --ambient-blur:90px;
+}
+[data-look="depth"] .card{background:color-mix(in srgb,var(--surface) 70%,transparent);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));}
+[data-look="depth"] .btn-primary{background:linear-gradient(120deg,var(--primary),var(--teal));border-color:transparent;
+  box-shadow:0 1px 0 rgba(255,255,255,.3) inset,0 10px 26px -10px color-mix(in srgb,var(--teal) 70%,transparent);}
+[data-look="depth"] .btn-primary:hover{background:linear-gradient(120deg,var(--primary-dark),var(--teal-dark));}
+[data-look="depth"] .progress-ring{background:conic-gradient(from -90deg,var(--primary),var(--teal) var(--ring-p,0%),var(--line) 0);
+  box-shadow:0 0 26px -6px color-mix(in srgb,var(--teal) 60%,transparent);}
+[data-look="depth"] .status-track .slot.done{background:linear-gradient(90deg,var(--primary),var(--teal));}
+[data-look="depth"] .status-track .slot.current{background:color-mix(in srgb,var(--teal) 55%,var(--line));}
+[data-look="depth"] .sidebar-item.active{background:linear-gradient(90deg,color-mix(in srgb,var(--primary) 30%,transparent),color-mix(in srgb,var(--teal) 14%,transparent));}
+[data-look="depth"] .hn-row.cur .hn-num{background:linear-gradient(135deg,var(--primary),var(--teal));border-color:transparent;}
+[data-look="depth"] h1,[data-look="depth"] .section-title{background:linear-gradient(90deg,#fff,color-mix(in srgb,var(--primary) 40%,#fff));-webkit-background-clip:text;background-clip:text;color:transparent;}
+
+/* ---------- 3. Журнал: спокойная редакционная подача ---------- */
+:root[data-look="journal"]{
+  --bg:#111113; --surface:#18181B; --surface-2:#202024;
+  --ink:#F3F2EE; --muted:#9C9BA3; --muted-2:#85848C;
+  --line:#2B2B30; --line-2:#222226;
+  --primary:#8E72FF; --primary-dark:#795CF0; --primary-tint:#1E1A33;
+  --teal:#E5484D; --teal-dark:#D13A3F; --teal-tint:#301516; --rose:#E5484D; --rose-soft:#F08A8D;
+  --status-live:#E5484D; --status-live-tint:#301516;
+  --radius-s:10px; --radius-m:14px; --radius-l:18px;
+  --shadow:none; --shadow-lift:none;
+  --border-hairline:1px solid #2A2A2F;
+  --glass-bg:#18181B; --glass-border:1px solid #2A2A2F; --glass-blur:0px;
+  --ambient-glow:none;
+  --serif:'Playfair Display', Georgia, 'Times New Roman', serif;
+}
+[data-look="journal"] body::before{display:none;}
+[data-look="journal"] .aurora,[data-look="journal"] .side-flow{display:none;}
+[data-look="journal"] h1,[data-look="journal"] h2,[data-look="journal"] .section-title,[data-look="journal"] .course-hero h2,
+[data-look="journal"] .gd-title,[data-look="journal"] .qz-q,[data-look="journal"] .qz-res-title,[data-look="journal"] .proto-hero-main h1,[data-look="journal"] .tg-hero-main h1{
+  font-family:var(--serif);font-weight:600;letter-spacing:0;}
+[data-look="journal"] .course-hero h2{font-size:30px;}
+/* заголовки карточек — гротеском: антиква хороша крупно, мелко читается неловко */
+/* красный — тонкими линейками и ключевыми цифрами */
+[data-look="journal"] .course-hero{border-top:2px solid var(--teal);}
+[data-look="journal"] .board-tile,[data-look="journal"] .home-next{border-top:1px solid color-mix(in srgb,var(--teal) 55%,var(--line));}
+[data-look="journal"] .tile-num,[data-look="journal"] .home-stats b,[data-look="journal"] .progress-ring-inner{color:var(--teal);font-family:var(--serif);}
+[data-look="journal"] .progress-ring{background:conic-gradient(var(--teal) var(--ring-p,0%),var(--line) 0);box-shadow:none;}
+[data-look="journal"] .btn-primary{background:var(--primary);box-shadow:none;}
+[data-look="journal"] .status-track .slot.done{background:var(--ink);opacity:.85;}
+[data-look="journal"] .status-track .slot.current{background:var(--teal);}
+[data-look="journal"] .hn-row.cur .hn-num{background:var(--teal);border-color:var(--teal);box-shadow:none;}
+[data-look="journal"] .hn-row.cur .hn-st.cur{color:var(--teal);}
+[data-look="journal"] .card::before,[data-look="journal"] .card::after{display:none;}
+[data-look="journal"] .home-grid .board-tile:hover,[data-look="journal"] .home-grid .home-next:hover{transform:none;}
+
+/* ---------- 4. Лаборатория: экспериментальный ---------- */
+:root[data-look="lab"]{
+  --bg:#050506; --surface:#0C0C0F; --surface-2:#141418;
+  --ink:#F6F6F8; --muted:#8F8F99; --muted-2:#7B7B85;
+  --line:#2C2C34; --line-2:#1E1E24;
+  --primary:#7C5CFF; --primary-dark:#6846F2; --primary-tint:#19143A;
+  --teal:#FF2E4D; --teal-dark:#E61D3C; --teal-tint:#35101A; --rose:#FF2E4D; --rose-soft:#FF8196;
+  --status-live:#FF2E4D; --status-live-tint:#35101A;
+  --radius-s:4px; --radius-m:6px; --radius-l:8px;
+  --shadow:none; --shadow-lift:none;
+  --border-hairline:1px solid #2C2C34;
+  --glass-bg:#0C0C0F; --glass-border:1px solid #2C2C34; --glass-blur:0px;
+  --ambient-glow:none;
+  --display:'Inter Tight', 'Manrope', sans-serif;
+}
+[data-look="lab"] body::before{display:none;}
+[data-look="lab"] body{background-image:radial-gradient(rgba(255,255,255,.06) 1px,transparent 1px);background-size:22px 22px;}
+[data-look="lab"] .aurora,[data-look="lab"] .side-flow{display:none;}
+[data-look="lab"] h1,[data-look="lab"] h2,[data-look="lab"] .section-title,[data-look="lab"] .course-hero h2,[data-look="lab"] .qz-q,[data-look="lab"] .qz-res-title,
+[data-look="lab"] .proto-hero-main h1,[data-look="lab"] .tg-hero-main h1,[data-look="lab"] .gd-title{font-family:var(--display);font-weight:700;letter-spacing:-.035em;}
+[data-look="lab"] .card-title,[data-look="lab"] .co-card-title{font-family:var(--display);font-size:15px;font-weight:700;letter-spacing:-.005em;}
+/* моноширинным — только короткие служебные подписи, не абзацы */
+[data-look="lab"] .hn-body span,[data-look="lab"] .profile-kicker,[data-look="lab"] .progress-label > span:first-child,[data-look="lab"] .courses-count,
+[data-look="lab"] .home-stats span,[data-look="lab"] .hn-st,[data-look="lab"] .qz-count,[data-look="lab"] .qz-kind{font-family:var(--mono);font-size:12px;}
+[data-look="lab"] .card{border:1px solid var(--line);}
+/* жёсткая смещённая тень: фиолетовая у карточек, красная — у главных кнопок */
+@media (hover:hover){
+  [data-look="lab"] .home-grid .board-tile:hover,[data-look="lab"] .home-grid .home-next:hover,[data-look="lab"] .staff-home .board-strip > .card:hover{
+    transform:translate(-3px,-3px);box-shadow:5px 5px 0 var(--primary);}
+}
+[data-look="lab"] .card::before,[data-look="lab"] .card::after{display:none;}
+[data-look="lab"] .btn{border-radius:4px;}
+[data-look="lab"] .btn-primary{background:var(--primary);border-color:var(--primary);box-shadow:4px 4px 0 var(--teal);}
+[data-look="lab"] .btn-primary:hover{transform:translate(-1px,-1px);box-shadow:5px 5px 0 var(--teal);}
+[data-look="lab"] .btn-primary:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--teal);}
+[data-look="lab"] .course-hero{border-left:4px solid var(--teal);}
+[data-look="lab"] .progress-ring{border-radius:6px;background:conic-gradient(var(--teal) var(--ring-p,0%),var(--line) 0);box-shadow:none;}
+[data-look="lab"] .progress-ring-inner{border-radius:4px;font-family:var(--mono);}
+[data-look="lab"] .status-track .slot{border-radius:0;height:8px;}
+[data-look="lab"] .status-track .slot.done{background:var(--primary);}
+[data-look="lab"] .status-track .slot.current{background:repeating-linear-gradient(45deg,var(--teal) 0 4px,transparent 4px 8px);}
+[data-look="lab"] .hn-num{border-radius:4px;font-family:var(--mono);}
+[data-look="lab"] .hn-row.cur .hn-num{background:var(--teal);border-color:var(--teal);box-shadow:3px 3px 0 var(--primary);}
+[data-look="lab"] .hn-row.cur .hn-st.cur{color:var(--teal);}
+[data-look="lab"] .sidebar-item.active{background:transparent;box-shadow:inset 3px 0 0 var(--teal);border-radius:0;}
+[data-look="lab"] .tile-num,[data-look="lab"] .home-stats b{font-family:var(--display);font-weight:700;letter-spacing:-.04em;}
+
+@media (prefers-reduced-motion:reduce){ [data-look] .look-ecg,[data-look] .hn-num{animation:none !important;} }
+
+/* ---------- Настройки: выбор стиля (мини-схема экрана в цветах стиля) ---------- */
+.look-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;}
+.look-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;padding:10px;border-radius:14px;cursor:pointer;
+  border:1px solid var(--line-2);background:var(--surface-2);color:var(--ink);transition:border-color .15s,background .15s;}
+.look-card:hover{border-color:color-mix(in srgb,var(--primary) 45%,transparent);}
+.look-card.on{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 12%,transparent);box-shadow:0 0 0 1px var(--primary) inset;}
+.look-card b{font-size:13px;font-weight:600;margin-top:4px;}
+.look-card b em{font-style:normal;font-size:11px;font-weight:500;color:var(--primary);margin-left:4px;}
+.look-card > span:last-child{font-size:11px;line-height:1.35;color:var(--muted);}
+.look-prev{position:relative;display:grid;grid-template-columns:14px 1fr 1fr;grid-template-rows:30px 18px;gap:4px;width:100%;height:68px;padding:6px;border-radius:10px;overflow:hidden;}
+.look-prev i{display:block;border-radius:4px;}
+.look-prev .lp-side{grid-row:span 2;}
+.look-prev .lp-hero{grid-column:span 2;position:relative;}
+.look-prev .lp-hero em{position:absolute;left:6px;bottom:5px;width:40%;height:3px;border-radius:2px;}
+/* классический */
+.lp-classic{background:#121214;} .lp-classic i{background:#1F1F24;}
+.lp-classic .lp-hero{background:linear-gradient(120deg,#241F3F,#15302E);} .lp-classic .lp-hero em{background:linear-gradient(90deg,#8B6BFF,#3FD0C9);}
+/* монитор */
+.lp-monitor{background:#07070B;background-image:linear-gradient(rgba(139,107,255,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(139,107,255,.12) 1px,transparent 1px);background-size:8px 8px;}
+.lp-monitor i{background:#0E0E15;border:1px solid #23232E;border-radius:3px;} .lp-monitor .lp-hero em{background:#FF3B5C;box-shadow:0 0 6px #FF3B5C;}
+.lp-monitor .lp-a{border-color:#8B6BFF;}
+/* глубина */
+.lp-depth{background:radial-gradient(80% 90% at 90% 0%,rgba(157,123,255,.6),transparent 70%),radial-gradient(70% 80% at 0% 100%,rgba(255,77,109,.5),transparent 70%),#0A0612;}
+.lp-depth i{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);border-radius:7px;} .lp-depth .lp-hero em{background:linear-gradient(90deg,#9D7BFF,#FF4D6D);}
+/* журнал */
+.lp-journal{background:#111113;} .lp-journal i{background:#18181B;border:1px solid #2A2A2F;border-radius:4px;}
+.lp-journal .lp-hero{border-top:2px solid #E5484D;} .lp-journal .lp-hero em{background:#F3F2EE;width:55%;height:4px;opacity:.8;}
+.lp-journal .lp-a{border-top:1px solid #E5484D;}
+/* лаборатория */
+.lp-lab{background:#050506;background-image:radial-gradient(rgba(255,255,255,.14) 1px,transparent 1px);background-size:6px 6px;}
+.lp-lab i{background:#0C0C0F;border:1px solid #2C2C34;border-radius:1px;} .lp-lab .lp-hero{border-left:3px solid #FF2E4D;}
+.lp-lab .lp-hero em{background:#7C5CFF;box-shadow:2px 2px 0 #FF2E4D;border-radius:0;} .lp-lab .lp-a{box-shadow:3px 3px 0 #7C5CFF;}
