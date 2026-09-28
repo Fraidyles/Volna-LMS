@@ -23,6 +23,7 @@ const calendarRoutes = require("./routes/calendar");
 const assignmentRoutes = require("./routes/assignments");
 const orderRoutes = require("./routes/orders");
 const surveyRoutes = require("./routes/surveys");
+const glossaryRoutes = require("./routes/glossary");
 
 const app = express();
 
@@ -128,6 +129,7 @@ mounted.use("/api/protocols", protocolRoutes);
 mounted.use("/api/assignments", assignmentRoutes);
 mounted.use("/api/orders", orderRoutes);
 mounted.use("/api/surveys", surveyRoutes);
+mounted.use("/api/glossary", glossaryRoutes);
 mounted.use("/api", calendarRoutes);
 
 // Интерактивная документация API — удобно, когда фронтенд и бэкенд начнут жить отдельно

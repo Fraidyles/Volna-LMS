@@ -2597,3 +2597,49 @@ mark.hl.hl-flash{animation:hlFlash 1.6s ease;}
 .lesson-body .prose > h4:first-child{margin-top:0;}
 @media (max-width:640px){ .lesson-open{padding:16px;margin:18px 0 24px;} .lo-steps{display:none;} }
 .lesson-body .prose .card > h4:first-child{margin-top:0;}
+
+/* ==========================================================================
+   ГЛОССАРИЙ: термин в тексте урока и статья в боковой панели (renderGlossaryPanel).
+   Блоки статьи чётко разделены: цветной «главное» по центру со шкалой, карточка
+   «Что это означает?» с крупными цифрами, карточки-действия, связи с уроками.
+   ========================================================================== */
+.gl-term{background:linear-gradient(transparent 62%, color-mix(in srgb,var(--primary) 24%,transparent) 0);border-bottom:1px dashed color-mix(in srgb,var(--primary) 70%,transparent);
+  cursor:pointer;border-radius:2px;padding:0 1px;transition:background .15s;}
+.gl-term:hover,.gl-term:focus-visible{background:color-mix(in srgb,var(--primary) 26%,transparent);outline:none;}
+.gl-overlay{z-index:60;}
+.gl-panel{position:relative;width:min(520px,100%);height:100%;padding:24px 24px 40px;}
+.gl-x{position:absolute;right:18px;top:16px;width:34px;height:34px;border-radius:10px;border:var(--border-hairline);background:var(--surface);color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.gl-x:hover{color:var(--ink);}
+.gl-cat{display:block;font-size:12px;font-weight:600;color:var(--primary);padding-right:44px;}
+.gl-title{font-size:24px;font-weight:700;margin:6px 0 6px;letter-spacing:-.01em;line-height:1.25;padding-right:36px;}
+.gl-lead{font-size:14px;line-height:1.55;color:var(--muted);margin:0 0 16px;}
+.gl-tabs{display:inline-flex;gap:4px;padding:4px;border-radius:12px;background:var(--surface-2);margin-bottom:16px;max-width:100%;overflow-x:auto;}
+.gl-tabs button{padding:7px 14px;border-radius:9px;border:none;background:none;font:500 13px var(--sans);color:var(--muted);cursor:pointer;white-space:nowrap;}
+.gl-tabs button.on{background:var(--surface);color:var(--ink);box-shadow:0 4px 12px -6px rgba(0,0,0,.35);}
+.gl-hero{border-radius:18px;padding:20px;text-align:center;margin-bottom:14px;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--primary) 20%,var(--surface)),color-mix(in srgb,var(--teal) 12%,var(--surface)));border:1px solid color-mix(in srgb,var(--primary) 30%,transparent);}
+.gl-badge{display:inline-block;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;background:var(--surface);color:var(--primary);margin-bottom:10px;}
+.gl-hero > b{display:block;font-size:18px;line-height:1.4;}
+.gl-scale{display:grid;gap:6px;margin-top:16px;text-align:left;}
+.gl-scale div{border-radius:12px;padding:9px 10px;font-size:12px;line-height:1.35;background:var(--surface);color:var(--muted);min-width:0;}
+.gl-scale div i{display:block;height:5px;border-radius:3px;margin-bottom:7px;}
+.gl-scale div b{font-size:14px;display:block;margin-bottom:2px;color:var(--ink);}
+.gl-card{border-radius:16px;padding:18px;background:var(--surface);border:var(--border-hairline);margin-bottom:14px;}
+.gl-card h5{margin:0 0 8px;font-size:15px;font-weight:700;}
+.gl-card p{margin:0;font-size:14px;line-height:1.6;}
+.gl-stat{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;}
+.gl-stat div{flex:1 1 140px;border-radius:12px;background:var(--surface-2);padding:10px 12px;}
+.gl-stat b{display:block;font-size:20px;font-weight:700;color:var(--primary);}
+.gl-stat span{font-size:12px;color:var(--muted);line-height:1.35;display:block;}
+.gl-h{font-size:15px;font-weight:700;margin:20px 0 10px;}
+.gl-act{display:flex;align-items:center;gap:12px;border-radius:14px;padding:12px 14px;background:var(--surface);border:var(--border-hairline);margin-bottom:8px;}
+.gl-ic{width:40px;height:40px;border-radius:12px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--primary-tint);color:var(--primary);}
+.gl-act b{display:block;font-size:14px;font-weight:600;line-height:1.35;}
+.gl-act > div > span{display:block;font-size:12.5px;color:var(--rose);margin-top:2px;line-height:1.4;}
+.gl-link{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line-2);font-size:14px;cursor:pointer;}
+.gl-card h5 + .gl-link{border-top:none;}
+.gl-link.locked{opacity:.55;cursor:default;}
+.gl-link i{font-style:normal;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--muted);flex-shrink:0;}
+.gl-link span{flex:1;min-width:0;}
+.gl-link em{font-style:normal;color:var(--primary);font-size:12px;font-weight:600;white-space:nowrap;}
+@media (max-width:640px){ .gl-panel{padding:20px 16px 32px;} .gl-title{font-size:21px;} }

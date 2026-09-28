@@ -680,3 +680,27 @@ ALTER TABLE quiz_questions ADD COLUMN IF NOT EXISTS payload JSONB NOT NULL DEFAU
 -- Балл итогового теста по каждому вопросу (0..1) — для повопросной аналитики:
 -- у новых типов верность не сравнить простым «ответ === correct».
 ALTER TABLE progress ADD COLUMN IF NOT EXISTS quiz_results JSONB;
+
+-- ---------- Глоссарий курса: термины в тексте уроков → статья в боковой панели ----------
+-- lesson_id — урок, где термин вводится (там подсвечен всегда); aliases — написания
+-- для поиска в тексте; body — блоки статьи (key / meaning / actions / more, см.
+-- src/content-glossary.js). glossary_seen — какие статьи врач уже открывал: в
+-- следующих уроках такие термины больше не подсвечиваются.
+CREATE TABLE IF NOT EXISTS glossary_terms (
+  id          TEXT PRIMARY KEY,
+  course_id   TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  lesson_id   TEXT REFERENCES lessons(id) ON DELETE SET NULL,
+  idx         INTEGER NOT NULL DEFAULT 0,
+  title       TEXT NOT NULL,
+  category    TEXT NOT NULL DEFAULT '',
+  aliases     JSONB NOT NULL DEFAULT '[]',
+  lead        TEXT NOT NULL DEFAULT '',
+  body        JSONB NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_glossary_terms_course ON glossary_terms(course_id, idx);
+CREATE TABLE IF NOT EXISTS glossary_seen (
+  user_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  term_id  TEXT NOT NULL REFERENCES glossary_terms(id) ON DELETE CASCADE,
+  seen_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, term_id)
+);

@@ -873,6 +873,126 @@ function hlWrap(root, h){
   });
   return true;
 }
+
+/* ============================= ГЛОССАРИЙ: термины в тексте урока ============================= */
+// Термины курса (src/content-glossary.js) подсвечиваются в тексте урока; по клику —
+// статья в боковой панели. В «своём» уроке термина (lessonId) подсветка есть всегда,
+// в остальных — пока врач ещё не открывал эту статью (glossary.seen). Термин,
+// подсвеченный при открытии урока, остаётся подсвеченным до ухода из урока, даже
+// если врач по нему кликнул (glossary.keep) — чтобы текст не «мигал».
+var glossary = { courseId:null, loading:false, terms:[], seen:{}, open:null, tab:"brief", keep:{}, keepLesson:null };
+function glossaryCourseId(){ return previewMode ? staffState.activeCourseId : activeCourseId; }
+function ensureGlossary(){
+  var cid = glossaryCourseId();
+  if(!cid || glossary.courseId===cid || glossary.loading) return;
+  glossary.loading = true;
+  api("/glossary?courseId="+encodeURIComponent(cid)).then(function(d){
+    glossary.courseId = cid; glossary.terms = d.terms || []; glossary.seen = {};
+    (d.seen||[]).forEach(function(id){ glossary.seen[id] = true; });
+    glossary.loading = false;
+    if(document.getElementById("lessonProse")) applyGlossaryTerms();
+  }).catch(function(){ glossary.loading = false; glossary.courseId = cid; });
+}
+function glEscape(x){ return x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+// Поиск по всем написаниям термина: целым словом; аббревиатуры (ПСА, МГТ) — с учётом регистра.
+function glMatchers(term){
+  return (term.aliases||[]).slice().sort(function(a,b){ return b.length - a.length; }).map(function(a){
+    var caps = a.length<=5 && a===a.toUpperCase() && /[A-ZА-ЯЁ]/.test(a);
+    return new RegExp("(^|[^A-Za-zА-Яа-яЁё0-9])("+glEscape(a)+")(?![A-Za-zА-Яа-яЁё0-9])", caps ? "" : "i");
+  });
+}
+function glossaryTermsForLesson(lesson){
+  if(glossary.keepLesson!==lesson.id){ glossary.keep = {}; glossary.keepLesson = lesson.id; }
+  return glossary.terms.filter(function(t){
+    return t.lessonId===lesson.id || !glossary.seen[t.id] || glossary.keep[t.id];
+  });
+}
+function applyGlossaryTerms(){
+  var prose = document.getElementById("lessonProse");
+  if(!prose || !course || !course.lessons) return;
+  ensureGlossary();
+  var lesson = course.lessons.find(function(l){ return l.id===prose.getAttribute("data-lesson-id"); });
+  if(!lesson || !glossary.terms.length || prose.querySelector(".gl-term")) return;
+  glossaryTermsForLesson(lesson).forEach(function(term){
+    var ms = glMatchers(term);
+    var w = document.createTreeWalker(prose, NodeFilter.SHOW_TEXT, null), n;
+    while((n = w.nextNode())){
+      if(n.parentElement.closest(".gl-term, a, button")) continue;
+      var best = null;
+      ms.forEach(function(re){
+        var m = re.exec(n.nodeValue);
+        if(m){ var at = m.index + m[1].length; if(!best || at < best.at) best = { at:at, len:m[2].length }; }
+      });
+      if(!best) continue;
+      var mid = n.splitText(best.at); mid.splitText(best.len);
+      var sp = document.createElement("span");
+      sp.className = "gl-term"; sp.setAttribute("data-action", "open-term"); sp.setAttribute("data-id", term.id);
+      sp.setAttribute("role", "button"); sp.setAttribute("tabindex", "0"); sp.title = "Что это: «"+term.title+"»";
+      mid.parentNode.insertBefore(sp, mid); sp.appendChild(mid);
+      glossary.keep[term.id] = true;
+      break; // только первое упоминание в уроке
+    }
+  });
+}
+function openGlossaryTerm(id){
+  var term = glossary.terms.find(function(t){ return t.id===id; });
+  if(!term) return;
+  glossary.open = id; glossary.tab = "brief";
+  if(view==="student" && !previewMode && !glossary.seen[id]){
+    glossary.seen[id] = true;
+    api("/glossary/"+encodeURIComponent(id)+"/seen", { method:"POST" }).catch(function(){});
+  }
+  render();
+}
+function glossaryLessonsWith(term){
+  var ms = glMatchers(term);
+  return (course && course.lessons || []).map(function(l, i){
+    var text = (l.html||"").replace(/<[^>]+>/g, " ");
+    return ms.some(function(re){ return re.test(text); }) ? { l:l, i:i } : null;
+  }).filter(Boolean);
+}
+var GL_TONES = { ok:"#9C86FF", warn:"#FF8FA3", bad:"#FF4D6D" };
+function renderGlossaryPanel(){
+  var term = glossary.terms.find(function(t){ return t.id===glossary.open; });
+  if(!term) return el('<div></div>');
+  var b = term.body || {}, more = b.more || [], tab = glossary.tab;
+  var tabs = [["brief","Кратко"]].concat(more.length ? [["more","Подробнее"]] : [], [["course","В курсе"]]);
+  var html = '<button type="button" class="gl-x" data-action="close-term" aria-label="Закрыть">'+icon("close","ic-sm")+'</button>' +
+    '<span class="gl-cat">Термин курса'+(term.category ? ' · '+escapeHtml(term.category) : '')+'</span>' +
+    '<h2 class="gl-title">'+escapeHtml(term.title)+'</h2>' +
+    (term.lead ? '<p class="gl-lead">'+escapeHtml(term.lead)+'</p>' : '') +
+    '<div class="gl-tabs" role="tablist">'+tabs.map(function(t){ return '<button type="button" role="tab" class="'+(t[0]===tab?'on':'')+'" data-action="term-tab" data-tab="'+t[0]+'">'+t[1]+'</button>'; }).join('')+'</div>';
+  if(tab==="brief"){
+    if(b.key){
+      html += '<div class="gl-hero">'+(b.key.label ? '<span class="gl-badge">'+escapeHtml(b.key.label)+'</span>' : '')+'<b>'+escapeHtml(b.key.text)+'</b>' +
+        ((b.key.scale||[]).length ? '<div class="gl-scale" style="grid-template-columns:repeat('+b.key.scale.length+',minmax(0,1fr));">'+b.key.scale.map(function(s){
+          return '<div><i style="background:'+(GL_TONES[s[2]]||GL_TONES.ok)+'"></i><b>'+escapeHtml(s[0])+'</b>'+escapeHtml(s[1])+'</div>';
+        }).join('')+'</div>' : '') + '</div>';
+    }
+    if(b.meaning){
+      html += '<div class="gl-card"><h5>Что это означает?</h5><p>'+escapeHtml(b.meaning.text||"")+'</p>' +
+        ((b.meaning.stats||[]).length ? '<div class="gl-stat">'+b.meaning.stats.map(function(s){ return '<div><b>'+escapeHtml(s[0])+'</b><span>'+escapeHtml(s[1])+'</span></div>'; }).join('')+'</div>' : '') + '</div>';
+    }
+    if((b.actions||[]).length){
+      html += '<div class="gl-h">Что делать врачу?</div>' + b.actions.map(function(a){
+        return '<div class="gl-act"><span class="gl-ic">'+icon(a[0]||"check")+'</span><div><b>'+escapeHtml(a[1])+'</b>'+(a[2]?'<span>'+escapeHtml(a[2])+'</span>':'')+'</div></div>';
+      }).join('');
+    }
+  } else if(tab==="more"){
+    html += more.map(function(m){ return '<div class="gl-card"><h5>'+escapeHtml(m[0])+'</h5><p>'+escapeHtml(m[1])+'</p></div>'; }).join('');
+  } else {
+    var here = course && course.lessons[studentState.lessonIndex];
+    var rows = glossaryLessonsWith(term);
+    html += '<div class="gl-card"><h5>Где встречается в курсе</h5>' + (rows.length ? rows.map(function(r){
+      var locked = r.l.hiddenForMe || r.l.dripLockedForMe, isHere = here && here.id===r.l.id;
+      return '<div class="gl-link'+(locked?' locked':'')+'"'+(locked||isHere ? '' : ' data-action="term-goto-lesson" data-idx="'+r.i+'"')+'>' +
+        '<i>Урок '+(r.i+1)+'</i><span>'+escapeHtml(r.l.title)+'</span>' +
+        '<em>'+(isHere ? 'вы здесь' : (locked ? icon("lock","ic-sm") : 'Открыть →'))+'</em></div>';
+    }).join('') : '<p>Пока только в этом уроке.</p>') + '</div>';
+  }
+  return el('<div class="overlay gl-overlay" data-action="overlay-close-term"><aside class="drawer gl-panel" data-stop="1" role="dialog" aria-label="'+escapeHtml(term.title)+'">'+html+'</aside></div>');
+}
+
 function applyLessonHighlights(){
   var prose = document.getElementById("lessonProse");
   if(!prose || !course || !course.progress) return;
@@ -1306,6 +1426,9 @@ function render(){
   if(protocolReader.id && view==="student" && studentState.tab==="protocols"){
     app.appendChild(renderProtocolReaderModal());
   }
+  if(glossary.open && view==="student"){
+    app.appendChild(renderGlossaryPanel());
+  }
   if(unlockCelebration.open && view==="student"){
     app.appendChild(renderUnlockCelebrationModal());
   }
@@ -1345,6 +1468,7 @@ function render(){
   if(view==="login" || view==="register") initAuroraFx();
   ensureEmbers();
   if(view==="student"){
+    applyGlossaryTerms();
     applyLessonHighlights();
     if(studentState.scrollToHl){
       var hlEl = document.querySelector('#lessonProse mark.hl[data-hid="'+studentState.scrollToHl+'"]');
@@ -7698,6 +7822,14 @@ function wireEvents(root){
       if(goLesson.dripLockedForMe){ showToast("Этот урок откроется "+fmtDate(goLesson.availableAt)); return; }
       studentState.lessonIndex=goIdx; studentState.quizMode=false; resetLessonStageState(); render(); return;
     }
+    if(action==="open-term"){ openGlossaryTerm(t.getAttribute("data-id")); return; }
+    if(action==="close-term" || (action==="overlay-close-term" && !e.target.closest("[data-stop]"))){ glossary.open=null; render(); return; }
+    if(action==="term-tab"){ glossary.tab=t.getAttribute("data-tab"); render(); var glp=document.querySelector(".gl-panel"); if(glp) glp.scrollTop=0; return; }
+    if(action==="term-goto-lesson"){
+      glossary.open=null;
+      studentState.tab="lesson"; studentState.lessonIndex=parseInt(t.getAttribute("data-idx"),10); studentState.quizMode=false; resetLessonStageState();
+      render(); window.scrollTo(0,0); return;
+    }
     if(action==="lesson-toc"){
       var tocH = document.querySelectorAll("#lessonProse h4")[parseInt(t.getAttribute("data-i"),10)];
       if(tocH) tocH.scrollIntoView({ behavior:"smooth", block:"start" });
@@ -9266,8 +9398,10 @@ function wireEvents(root){
 // Порядок проверки — от заведомо самого верхнего слоя (confirmState монтируется
 // последним) к самому нижнему, чтобы Esc закрывал именно то, что видно сверху.
 document.addEventListener("keydown", function(e){
+  if(e.key==="Enter" && document.activeElement && document.activeElement.classList && document.activeElement.classList.contains("gl-term")){ document.activeElement.click(); return; }
   if(e.key !== "Escape") return;
   if(confirmState){ confirmState=null; render(); return; }
+  if(glossary.open){ glossary.open=null; render(); return; }
   if(quizEditor.open){ quizEditor.open=false; render(); return; }
   if(unlockCelebration.open){ unlockCelebration.open=false; render(); return; }
   if(specializationEditor.open){ specializationEditor.open=false; render(); return; }

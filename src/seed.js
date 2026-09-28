@@ -4,6 +4,7 @@ const bcrypt = require("bcryptjs");
 const pool = require("./db");
 const { COURSE, MODULES, LESSONS, QUIZ, PROTOCOLS, LESSON_PROTOCOLS, PROTOCOL_GUIDES } = require("./content");
 const { validateQuestion } = require("./quiz");
+const { GLOSSARY } = require("./content-glossary");
 
 (async () => {
   await pool.query(
@@ -72,6 +73,20 @@ const { validateQuestion } = require("./quiz");
     );
   }
   console.log("Вопросы теста загружены:", QUIZ.length);
+
+  // Глоссарий курса — как и вопросы, целиком из файла: лишние термины удаляются.
+  await pool.query("DELETE FROM glossary_terms WHERE course_id=$1 AND id <> ALL($2::text[])", [COURSE.id, GLOSSARY.map((g) => g.id)]);
+  for (let i = 0; i < GLOSSARY.length; i++) {
+    const g = GLOSSARY[i];
+    const body = { key: g.key || null, meaning: g.meaning || null, actions: g.actions || [], more: g.more || [] };
+    await pool.query(
+      `INSERT INTO glossary_terms (id, course_id, lesson_id, idx, title, category, aliases, lead, body)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (id) DO UPDATE SET course_id=$2, lesson_id=$3, idx=$4, title=$5, category=$6, aliases=$7, lead=$8, body=$9`,
+      [g.id, COURSE.id, g.lessonId, i, g.title, g.category || "", JSON.stringify(g.aliases), g.lead || "", JSON.stringify(body)]
+    );
+  }
+  console.log("Термины глоссария загружены:", GLOSSARY.length);
 
   for (const p of PROTOCOLS) {
     await pool.query(
