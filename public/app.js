@@ -3084,7 +3084,8 @@ function renderCoursePlayer(){
 
   if(stage==="intro"){
     var noteVal = (course.progress && course.progress.lesson_notes && course.progress.lesson_notes[lesson.id]) || "";
-    body += '<div class="prose" id="lessonProse" data-lesson-id="'+lesson.id+'">'+lesson.html+'</div>' +
+    var opener = lessonOpener(lesson, idx, stages);
+    body += opener.html + '<div class="prose" id="lessonProse" data-lesson-id="'+lesson.id+'">'+opener.rest+'</div>' +
       (previewMode ? '' : '<p class="sel-hint">'+icon("star","ic-sm")+' Выделите фрагмент текста — его можно отметить маркером, добавить в заметку или задать по нему вопрос куратору.</p>') +
       '<div class="lesson-note">' +
         '<label>Ваша заметка к уроку <span style="font-weight:400;color:var(--muted-2);">(видна только вам)</span></label>' +
@@ -3110,6 +3111,32 @@ function renderCoursePlayer(){
 
   body += '</div>';
   return el('<div class="player" style="margin-top:6px;">'+nav+body+'</div>');
+}
+
+// «Вход» в материал урока: без него вкладки сразу переходили в сплошной текст и
+// было непонятно, что урок начался. Лектор выносится из первого абзаца («Урок
+// ведёт <b>Имя</b> — …»), разделы урока (заголовки h4) — оглавлением со ссылками,
+// шпаргалка в конце — отдельной ссылкой. Если в тексте нет ни лектора, ни
+// заголовков, карточка всё равно показывает номер урока, время и шаги.
+function lessonOpener(lesson, idx, stages){
+  var html = lesson.html || "", rest = html, lecturer = null;
+  var m = /^\s*<p>\s*Урок ведёт\s*<b>([^<]+)<\/b>\s*[—–-]\s*([\s\S]*?)<\/p>/.exec(html);
+  if(m){ lecturer = { name:m[1].trim(), about:m[2].replace(/<[^>]+>/g,"").trim() }; rest = html.slice(m[0].length); }
+  var toc = [], re = /<h4[^>]*>([\s\S]*?)<\/h4>/g, h;
+  while((h = re.exec(rest))){ toc.push(h[1].replace(/<[^>]+>/g,"").trim()); }
+  var stageLabels = { intro:"Материал", video:"Видео", quiz:"Тест", task:"Задание" };
+  var initials = lecturer ? lecturer.name.split(/\s+/).map(function(w){ return w.charAt(0); }).slice(0,2).join("") : "";
+  var out = '<div class="lesson-open">' +
+    '<div class="lo-top"><span class="lo-kicker">Урок '+(idx+1)+(lesson.duration ? ' · ≈ '+escapeHtml(lesson.duration)+' чтения' : '')+'</span>' +
+      (stages.length>1 ? '<span class="lo-steps">'+stages.map(function(k, i){ return '<i class="'+(i===0?'on':'')+'">'+stageLabels[k]+'</i>'; }).join('<b>→</b>')+'</span>' : '') + '</div>' +
+    (lecturer ? '<div class="lo-lect"><span class="lo-av">'+escapeHtml(initials)+'</span><div><span class="lo-lab">Ведёт урок</span><b>'+escapeHtml(lecturer.name)+'</b><p>'+escapeHtml(lecturer.about)+'</p></div></div>' : '');
+  var sections = toc.filter(function(t){ return t!=="Шпаргалка"; });
+  if(sections.length){
+    out += '<div class="lo-toc"><span class="lo-lab">В этом уроке</span><ol>' + toc.map(function(t, i){
+      return t==="Шпаргалка" ? '' : '<li><button type="button" data-action="lesson-toc" data-i="'+i+'">'+escapeHtml(t)+'</button></li>';
+    }).join('') + '</ol>' + (toc.indexOf("Шпаргалка")!==-1 ? '<button type="button" class="lo-cheat" data-action="lesson-toc" data-i="'+toc.indexOf("Шпаргалка")+'">'+icon("check","ic-sm")+'Шпаргалка в конце урока</button>' : '') + '</div>';
+  }
+  return { html: out + '</div>', rest: rest };
 }
 
 function renderLessonVideoStage(lesson, stages, isDoneAlready){
@@ -7670,6 +7697,11 @@ function wireEvents(root){
       if(goLesson.hiddenForMe){ showToast("Этот урок временно недоступен"); return; }
       if(goLesson.dripLockedForMe){ showToast("Этот урок откроется "+fmtDate(goLesson.availableAt)); return; }
       studentState.lessonIndex=goIdx; studentState.quizMode=false; resetLessonStageState(); render(); return;
+    }
+    if(action==="lesson-toc"){
+      var tocH = document.querySelectorAll("#lessonProse h4")[parseInt(t.getAttribute("data-i"),10)];
+      if(tocH) tocH.scrollIntoView({ behavior:"smooth", block:"start" });
+      return;
     }
     if(action==="lesson-stage"){
       studentState.lessonStage = t.getAttribute("data-stage"); render(); return;
