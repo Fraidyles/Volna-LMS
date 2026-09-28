@@ -72,7 +72,10 @@ function numberRange(b) {
   const tol = b.tolerance === "" || b.tolerance == null ? 0 : parseNum(b.tolerance);
   if (tol === null || tol < 0) return { error: "допуск должен быть числом не меньше 0" };
   const unit = String(b.unit || "").trim().slice(0, 30);
-  return { value: { answer, tolerance: tol, min: answer - tol, max: answer + tol, unit } };
+  // Округление убирает хвосты двоичной арифметики (66,7 − 0,1 = 66,6000000000001),
+  // которые иначе видны врачу в разборе: «засчитывается 66,6–66,8».
+  const r9 = (x) => Math.round(x * 1e9) / 1e9;
+  return { value: { answer, tolerance: tol, min: r9(answer - tol), max: r9(answer + tol), unit } };
 }
 
 // Возвращает поля для INSERT/UPDATE: { qtype, question, options, correct, payload }.

@@ -2042,7 +2042,10 @@ mark.hl.hl-flash{animation:hlFlash 1.6s ease;}
 .qz-ord-grip{color:var(--muted);letter-spacing:-3px;font-size:14px;}
 .qz-ord-n{flex:0 0 28px;height:28px;border-radius:9px;display:grid;place-items:center;font-size:13px;font-weight:700;color:#fff;background:var(--primary);}
 .qz-ord-text{flex:1;min-width:0;font-size:15px;line-height:1.4;}
-.qz-ord-btns{display:flex;gap:4px;}
+.qz-ord-btns{display:flex;gap:4px;flex-shrink:0;}
+/* На телефоне стрелки — столбиком, а ⋮⋮ не нужна (там переставляют стрелками):
+   иначе блок кнопок сжимался и наезжал на текст шага. */
+@media (max-width:640px){ .qz-ord-item{gap:10px;padding:10px;} .qz-ord-grip{display:none;} .qz-ord-btns{flex-direction:column;} .qz-ord-text{font-size:14px;} }
 .qz-ord-btn{width:32px;height:32px;border-radius:9px;border:1px solid var(--line-2);background:var(--surface);color:var(--ink);cursor:pointer;font-size:14px;}
 .qz-ord-btn:hover:not(:disabled){border-color:var(--primary);color:var(--primary);}
 .qz-ord-btn:disabled{opacity:.3;cursor:default;}

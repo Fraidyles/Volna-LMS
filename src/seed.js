@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const pool = require("./db");
 const { COURSE, MODULES, LESSONS, QUIZ, PROTOCOLS, LESSON_PROTOCOLS, PROTOCOL_GUIDES } = require("./content");
+const { validateQuestion } = require("./quiz");
 
 (async () => {
   await pool.query(
@@ -58,11 +59,16 @@ const { COURSE, MODULES, LESSONS, QUIZ, PROTOCOLS, LESSON_PROTOCOLS, PROTOCOL_GU
     const groupKey = q.lessonId || "__final__";
     const idx = quizIdxByGroup.get(groupKey) || 0;
     quizIdxByGroup.set(groupKey, idx + 1);
+    // Тот же разбор, что у вопроса, созданного куратором в интерфейсе: тип, варианты
+    // и payload (верные ответы для multi, допуск для number, пары для match, шаги
+    // для case). Ошибка в content-lesson-quiz.js останавливает сид.
+    const v = validateQuestion(Object.assign({ type: "single" }, q));
+    if (v.error) throw new Error("Вопрос " + q.id + ": " + v.error);
     await pool.query(
-      `INSERT INTO quiz_questions (id, course_id, lesson_id, idx, question, options, correct)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
-       ON CONFLICT (id) DO UPDATE SET lesson_id=$3, idx=$4, question=$5, options=$6, correct=$7`,
-      [q.id, COURSE.id, q.lessonId, idx, q.question, JSON.stringify(q.options), q.correct]
+      `INSERT INTO quiz_questions (id, course_id, lesson_id, idx, question, options, correct, qtype, payload)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (id) DO UPDATE SET lesson_id=$3, idx=$4, question=$5, options=$6, correct=$7, qtype=$8, payload=$9`,
+      [q.id, COURSE.id, q.lessonId, idx, v.question, JSON.stringify(v.options), v.correct, v.qtype, JSON.stringify(v.payload)]
     );
   }
   console.log("Вопросы теста загружены:", QUIZ.length);

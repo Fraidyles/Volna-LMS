@@ -490,4 +490,8 @@ const PROTOCOL_GUIDES = [
   },
 ];
 
-module.exports = { COURSE, MODULES, LESSONS, QUIZ, PROTOCOLS, LESSON_PROTOCOLS, PROTOCOL_GUIDES };
+// Вопросы поурочных тестов других типов (несколько верных, порядок, число,
+// сопоставление, клинический случай) — в отдельном файле, до 10 на урок.
+const { LESSON_QUIZ_EXTRA, mergeLessonQuiz } = require("./content-lesson-quiz");
+
+module.exports = { COURSE, MODULES, LESSONS, QUIZ: mergeLessonQuiz(QUIZ, LESSON_QUIZ_EXTRA), PROTOCOLS, LESSON_PROTOCOLS, PROTOCOL_GUIDES };
