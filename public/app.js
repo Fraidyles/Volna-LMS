@@ -2550,7 +2550,7 @@ function renderStudentHome(){
     var testBadge = quizDone ? magnet("done","Тест пройден · "+pr.quiz_score+"%")
       : (done===total ? magnet("attention","Итоговый тест доступен") : magnet("neutral","Итоговый тест впереди"));
     html += '<div class="card course-hero">' +
-      '<div class="hero-aurora aurora" aria-hidden="true">'+AURORA_BANDS+'</div><div class="fx-ecg" aria-hidden="true"></div>' +
+      '<div class="hero-aurora aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
       '<div class="course-hero-top">' +
         '<div class="progress-ring" data-anim="ring" style="--ring-p:'+pct+'%;"><div class="progress-ring-inner"><span data-count="'+pct+'" data-suffix="%">'+pct+'%</span></div></div>' +
         '<div><h2 style="margin:0;">'+escapeHtml(course.course.title)+'</h2>' +
@@ -3985,12 +3985,11 @@ async function uploadAvatarFile(file){
 //             к текущему уроку бегут искры, текущий урок пульсирует, по полоске
 //             уроков курса и полоске очков проходит блик;
 //   off     — без анимаций (и всегда, если в системе включено «уменьшить движение»).
-// Новые варианты с красным (пульс, закат, искры) — «на пробу», помечены в настройках.
+// Неизвестное сохранённое значение (например, снятые варианты) → «Каскад».
 var HOME_FX = [["cascade","Каскад","Плитки собираются по очереди при входе"],["light","Живой свет","Свет за стеклом следует за курсором"],["thread","Нить прогресса","Путь по урокам светится и течёт к текущему"],
-  ["pulse","Пульс","Кардиограмма бежит по курсу, текущий урок бьётся, как сердце",1],["sunset","Закат","Тёплое красно-фиолетовое сияние медленно дрейфует за стеклом",1],
   ["off","Без анимации","Только сами данные"]];
-// У сотрудников на главной — потоки, задачи и лента, поэтому «нить» и «пульс» там свои.
-var HOME_FX_STAFF_TEXT = { thread:"Потоки связаны светящейся линией, кольца прогресса пульсируют", pulse:"Кардиограмма над потоками, кольца прогресса бьются в ритм" };
+// У сотрудников на главной — потоки, задачи и лента, поэтому «нить» там своя.
+var HOME_FX_STAFF_TEXT = { thread:"Потоки связаны светящейся линией, кольца прогресса пульсируют" };
 // Фон главной — отдельная настройка, сочетается с любой анимацией: огоньки-искры
 // в одной из палитр или без фона.
 var HOME_BG = [["none","Без фона","Только стекло и цвета темы"],["ember-warm","Искры · тёплые","Красные и янтарные огоньки"],["ember-cool","Искры · холодные","Фиолетовые и бирюзовые — в цветах платформы"],["ember-mix","Искры · смешанные","Все четыре цвета вместе"]];
@@ -4006,7 +4005,7 @@ function homeBgLayer(){ return homeBg()!=="none" ? '<canvas class="fx-ember-cv" 
 function homeBgClass(){ return homeBg()!=="none" ? ' bg-ember' : ''; }
 function homeFx(){
   var v = null; try{ v = localStorage.getItem("lms-home-fx"); }catch(e){}
-  var q = /[?&]fx=(cascade|light|thread|pulse|sunset|off)\b/.exec(location.search); if(q) v = q[1];
+  var q = /[?&]fx=(cascade|light|thread|off)\b/.exec(location.search); if(q) v = q[1];
   return HOME_FX.some(function(x){ return x[0]===v; }) ? v : "cascade";
 }
 function renderSettingsPage(){
@@ -4024,7 +4023,7 @@ function renderSettingsPage(){
     '<div class="card co-card"><b class="co-card-title">Внешний вид</b><div class="theme-cards">'+themeCard("dark","Тёмная")+themeCard("light","Светлая")+'</div>' +
       '<b class="fx-title">Анимация главной</b><div class="fx-cards">' + HOME_FX.map(function(x){
         var on = homeFx()===x[0], text = me.role!=="student" && HOME_FX_STAFF_TEXT[x[0]] ? HOME_FX_STAFF_TEXT[x[0]] : x[2];
-        return '<button type="button" class="fx-card'+(on?' on':'')+'" data-action="set-home-fx" data-fx="'+x[0]+'"><span class="fx-prev fxp-'+x[0]+'"><i></i><i></i><i></i></span><b>'+x[1]+(on?' <em>выбрана</em>':(x[3]?' <em class="fx-new">новое</em>':''))+'</b><span>'+text+'</span></button>';
+        return '<button type="button" class="fx-card'+(on?' on':'')+'" data-action="set-home-fx" data-fx="'+x[0]+'"><span class="fx-prev fxp-'+x[0]+'"><i></i><i></i><i></i></span><b>'+x[1]+(on?' <em>выбрана</em>':'')+'</b><span>'+text+'</span></button>';
       }).join("") + '</div>' +
       '<b class="fx-title">Фон главной</b><div class="fx-cards">' + HOME_BG.map(function(x){
         var on = homeBg()===x[0];
@@ -4209,7 +4208,7 @@ function renderStaffHome(container){
   });
   var streamKeys = Object.keys(byStream);
 
-  var streamsHtml = '<div class="fx-ecg-row"><b style="font-size:15px;display:block;margin-bottom:10px;">Ваши потоки</b><div class="fx-ecg" aria-hidden="true"></div></div>';
+  var streamsHtml = '<b style="font-size:15px;display:block;margin-bottom:10px;">Ваши потоки</b>';
   if(!streamKeys.length){
     streamsHtml += '<div class="card empty-state" style="padding:32px 20px;">' +
       '<div class="tile-icon" style="background:var(--primary-tint);color:var(--primary);margin:0 auto 12px;">'+icon("users")+'</div>' +
