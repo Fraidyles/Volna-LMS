@@ -369,6 +369,18 @@ async function routeAfterLogin(){
   // переживает reload — просто раньше сюда не заглядывали.
   var savedState = null;
   try{ var hs = history.state; if(hs && (hs.view==="student"||hs.view==="staff")) savedState = hs; }catch(e){}
+  // Ссылка вида "?tab=…" (см. sidebarItem) — так открывается пункт меню в новой
+  // вкладке по ПКМ/Ctrl+клику: сама SPA такой URL никогда не пишет (обычный клик
+  // гасится через preventDefault), так что раз он тут — это осознанное открытие
+  // по ссылке, а не потерянное состояние. Приоритетнее history.state (он тут
+  // всё равно пуст — вкладка свежая), и сразу же убираем его из адресной строки,
+  // чтобы дальше приложение продолжало работать без URL, как и везде в SPA:
+  // дальше положение в истории ведёт syncNavHistory сам через history.state.
+  var tabParam = null;
+  try{
+    tabParam = new URLSearchParams(location.search).get("tab");
+    if(tabParam) history.replaceState(null, "", location.pathname + location.hash);
+  }catch(e){}
   if(me.role === "student"){
     view = "student";
     await loadCourse();
@@ -378,7 +390,8 @@ async function routeAfterLogin(){
     await loadNotifications();
     startNotificationPolling();
     if(!me.impersonator) startHeartbeat();
-    if(savedState && savedState.view==="student") applyNavState(savedState);
+    if(tabParam) await navigateToTab(tabParam);
+    else if(savedState && savedState.view==="student") applyNavState(savedState);
   } else {
     view = "staff";
     await loadStaffData();
@@ -388,7 +401,8 @@ async function routeAfterLogin(){
     // Вернулись из кабинета врача — сразу открываем его карточку, откуда пришли.
     var impBack = null; try{ impBack = sessionStorage.getItem("lms-imp-return"); sessionStorage.removeItem("lms-imp-return"); }catch(e){}
     if(impBack){ staffState.mainTab = "students"; staffState.navKey = "students"; render(); openStudentPage(impBack); return; }
-    if(savedState && savedState.view==="staff") applyNavState(savedState);
+    if(tabParam) await navigateToTab(tabParam);
+    else if(savedState && savedState.view==="staff") applyNavState(savedState);
   }
   render();
 }
@@ -2075,11 +2089,18 @@ function sidebarGroup(id, iconName, label, activeKey, children){
   return h + '</div></div>';
 }
 function sidebarItem(key, iconName, label, active, badge){
-  return '<button type="button" class="sidebar-item'+(active?' active':'')+'" data-action="sidebar-nav" data-key="'+key+'" title="'+escapeHtml(label)+'">' +
+  // Настоящая ссылка (не <button>), чтобы браузер сам предлагал «Открыть в новой
+  // вкладке» по ПКМ и открывал в новой вкладке по Ctrl/⌘+клику или клику средней
+  // кнопкой — это не меняет URL при обычном клике (см. navigateToTab: клик
+  // гасится через preventDefault), а только даёт данные о разделе для тех
+  // способов открытия, которые браузер обрабатывает сам, в обход наших обработчиков.
+  // ?tab=… читается при загрузке в routeAfterLogin — так открытая в новой вкладке
+  // ссылка попадает сразу в нужный раздел, а не на главную.
+  return '<a href="?tab='+encodeURIComponent(key)+'" class="sidebar-item'+(active?' active':'')+'" data-action="sidebar-nav" data-key="'+key+'" title="'+escapeHtml(label)+'">' +
     (key==="profile" && me && me.avatar_url ? '<img class="sidebar-av" src="'+escapeHtml(me.avatar_url)+'" alt="">' : icon(iconName)) +
     '<span class="sidebar-item-label">'+escapeHtml(label)+'</span>' +
     (badge>0 ? '<span class="sidebar-item-badge">'+(badge>9?"9+":badge)+'</span><span class="sidebar-item-dot"></span>' : '') +
-  '</button>';
+  '</a>';
 }
 
 function renderSidebar(){
@@ -5854,6 +5875,44 @@ async function applyStudentTab(tab, navKey){
   }
 }
 
+// Общее для клика по пункту сайдбара и для открытия ссылки вида "?tab=…" в новой
+// вкладке (см. sidebarItem — там теперь настоящий href) — раньше это было только
+// внутри обработчика клика, поэтому переиспользовать при загрузке было нельзя.
+async function navigateToTab(navKey){
+  mobileNavOpen = false;
+  if(navKey==="profile"){
+    if(view==="student"){ studentState.tab="profile"; studentState.navKey="profile"; }
+    else { staffState.mainTab="profile"; staffState.navKey="profile"; }
+    profileEditor.name=me.name||""; profileEditor.phone=me.phone||""; profileEditor.workplace=me.workplace||"";
+    profileEditor.specializationIds=(me.specializationIds||[]).slice();
+    profileEditor.interestIds=(me.interestIds||[]).slice();
+    specPickerOpen=null;
+    if(view==="staff"){ staffState.selectedStudentId=null; staffState.selectedStudent=null; }
+    render();
+    // Сеансы и заказы — одним обновлением экрана, а не двумя подряд.
+    window.scrollTo(0,0);
+    await Promise.all([loadMySessions(), view==="student" ? loadMyOrders() : null]);
+    render();
+    return;
+  }
+  if(view==="student"){
+    // Новый раздел всегда открывается с начала, а не на прокрутке прошлого.
+    if(navKey==="materials"){ studentState.materialsAutoFocus=false; await applyStudentTab("materials","materials"); window.scrollTo(0,0); return; }
+    await applyStudentTab(navKey, navKey);
+    window.scrollTo(0,0);
+    return;
+  }
+  staffState.navKey = navKey;
+  staffState.mainTab = navKey;
+  // Открытая страница врача заменяет содержимое раздела — без сброса клик по
+  // меню переключал бы пункт, а на экране оставался бы врач.
+  staffState.selectedStudentId = null; staffState.selectedStudent = null;
+  render();
+  window.scrollTo(0,0);
+  if(["assignments","feed","orders","products","surveys"].indexOf(navKey)!==-1){ await loadToolsSection(navKey); render(); }
+  if(navKey==="notifications" && notifState.unreadCount){ api("/notifications/read-all", { method:"POST" }).then(loadNotifications).then(render).catch(function(){}); }
+}
+
 /* ============================= СОБЫТИЯ ============================= */
 /* ============================= ЗАДАНИЯ, ЛЕНТА ОТВЕТОВ, ЗАКАЗЫ, АНКЕТЫ ============================= */
 // Разделы «как в GetCourse»: проверка заданий к урокам, лента всех ответов
@@ -6815,8 +6874,10 @@ function wireEvents(root){
     if(e.target.closest('[data-action="wysiwyg-cmd"]')) e.preventDefault();
     // Клик мышью по меню не оставляет в нём фокус: сайдбар не пересоздаётся при
     // перерисовке, и :focus-within держал бы его раскрытым после ухода курсора.
-    // С клавиатуры (Tab) фокус и раскрытие работают как раньше.
-    if(e.target.closest(".sidebar button")) e.preventDefault();
+    // С клавиатуры (Tab) фокус и раскрытие работают как раньше. Пункты меню теперь
+    // ссылки (<a>), не только <button> (группы) — гасим оба, иначе тот же самый
+    // сдвиг клавиатурного фокуса случался бы только для части пунктов.
+    if(e.target.closest(".sidebar .sidebar-item")) e.preventDefault();
   });
   root.addEventListener("click", async function(e){
     // Клик вне открытого поповера дашборд-фильтра закрывает его — не return,
@@ -6977,38 +7038,12 @@ function wireEvents(root){
     if(action==="toggle-mobile-nav"){ mobileNavOpen = !mobileNavOpen; render(); return; }
     if(action==="close-mobile-nav"){ mobileNavOpen = false; render(); return; }
     if(action==="sidebar-nav"){
-      mobileNavOpen = false;
-      var navKey = t.getAttribute("data-key");
-      if(navKey==="profile"){
-        if(view==="student"){ studentState.tab="profile"; studentState.navKey="profile"; }
-        else { staffState.mainTab="profile"; staffState.navKey="profile"; }
-        profileEditor.name=me.name||""; profileEditor.phone=me.phone||""; profileEditor.workplace=me.workplace||"";
-        profileEditor.specializationIds=(me.specializationIds||[]).slice();
-        profileEditor.interestIds=(me.interestIds||[]).slice();
-        specPickerOpen=null;
-        if(view==="staff"){ staffState.selectedStudentId=null; staffState.selectedStudent=null; }
-        render();
-        // Сеансы и заказы — одним обновлением экрана, а не двумя подряд.
-        window.scrollTo(0,0);
-        Promise.all([loadMySessions(), view==="student" ? loadMyOrders() : null]).then(render);
-        return;
-      }
-      if(view==="student"){
-        // Новый раздел всегда открывается с начала, а не на прокрутке прошлого.
-        if(navKey==="materials"){ studentState.materialsAutoFocus=false; await applyStudentTab("materials","materials"); window.scrollTo(0,0); return; }
-        await applyStudentTab(navKey, navKey);
-        window.scrollTo(0,0);
-        return;
-      }
-      staffState.navKey = navKey;
-      staffState.mainTab = navKey;
-      // Открытая страница врача заменяет содержимое раздела — без сброса клик по
-      // меню переключал бы пункт, а на экране оставался бы врач.
-      staffState.selectedStudentId = null; staffState.selectedStudent = null;
-      render();
-      window.scrollTo(0,0);
-      if(["assignments","feed","orders","products","surveys"].indexOf(navKey)!==-1){ await loadToolsSection(navKey); render(); }
-      if(navKey==="notifications" && notifState.unreadCount){ api("/notifications/read-all", { method:"POST" }).then(loadNotifications).then(render).catch(function(){}); }
+      // Пункты меню — теперь настоящие <a href="?tab=..."> (см. sidebarItem), чтобы
+      // по ним работало ПКМ → «Открыть в новой вкладке» и Ctrl/⌘+клик — в этих
+      // случаях отдаём браузеру его обычное поведение, а не гасим клик как обычно.
+      if(e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      await navigateToTab(t.getAttribute("data-key"));
       return;
     }
     if(action==="open-course"){
