@@ -3396,8 +3396,15 @@ function renderCoursePlayer(){
     var lsub = (course.assignments||{})[l.id];
     var taskNote = lsub ? (lsub.status==="pending" ? ' · задание на проверке' : (lsub.status==="returned" ? ' · задание вернули' : '')) : '';
     var lockLabel = l.hiddenForMe ? 'Временно недоступен' : (l.dripLockedForMe ? 'Откроется '+fmtDate(l.availableAt) : escapeHtml(l.duration||"")+taskNote);
+    var sub = "";
+    if(i===idx && !studentState.quizMode && !isLocked){
+      var ltoc = lessonToc(l.html);
+      if(ltoc.length) sub = '<div class="lesson-sub">' + ltoc.map(function(x, k){
+        return '<button type="button" class="'+(x.cheat?'mut':'')+(k===0?' on':'')+'" data-action="lesson-toc" data-i="'+x.i+'">'+escapeHtml(x.title)+'</button>';
+      }).join('') + '</div>';
+    }
     nav += '<div class="lesson-item'+(i===idx?' active':'')+(isDone?' done':'')+'" data-action="goto-lesson" data-idx="'+i+'"'+(isLocked?' style="opacity:.45;cursor:not-allowed;"':'')+'>' +
-      '<span class="lesson-num">'+(isLocked?icon("lock","ic-sm"):(isDone?icon("check","ic-sm"):(i+1)))+'</span><div><b>'+escapeHtml(l.title)+'</b><span>'+lockLabel+'</span></div></div>';
+      '<span class="lesson-num">'+(isLocked?icon("lock","ic-sm"):(isDone?icon("check","ic-sm"):(i+1)))+'</span><div><b>'+escapeHtml(l.title)+'</b><span>'+lockLabel+'</span>'+sub+'</div></div>';
   });
   nav += '<div class="lesson-item'+(studentState.quizMode?' active':'')+'" data-action="goto-quiz"'+(course.quizHiddenForMe?' style="opacity:.45;cursor:not-allowed;"':'')+'>' +
     '<span class="lesson-num">'+(course.quizHiddenForMe?icon("lock","ic-sm"):(course.progress && course.progress.completed?icon("check","ic-sm"):icon("star","ic-sm")))+'</span><div><b>Итоговый тест</b><span>'+(course.quizHiddenForMe?'Временно недоступен':course.quiz.length+' вопросов')+'</span></div></div>';
@@ -3423,19 +3430,24 @@ function renderCoursePlayer(){
     '</div>' +
     '<div class="meta">Урок '+(idx+1)+' из '+course.lessons.length+' · '+escapeHtml(lesson.duration||"")+'</div>';
 
-  if(stages.length>1){
+  var tocMenu = stage==="intro" ? lessonTocMenu(lessonToc(lesson.html)) : "";
+  if(stages.length>1 || tocMenu){
     var stageLabels = { intro:"Материал", video:"Видео", quiz:"Тест", task:"Задание" };
-    body += '<div class="tabs" style="margin:14px 0 4px;">';
-    stages.forEach(function(sKey){
-      body += '<button type="button" class="tab'+(stage===sKey?' active':'')+'" data-action="lesson-stage" data-stage="'+sKey+'">'+stageLabels[sKey]+'</button>';
-    });
-    body += '</div>';
+    body += '<div class="lesson-tabs-row">';
+    if(stages.length>1){
+      body += '<div class="tabs" style="margin:14px 0 4px;">';
+      stages.forEach(function(sKey){
+        body += '<button type="button" class="tab'+(stage===sKey?' active':'')+'" data-action="lesson-stage" data-stage="'+sKey+'">'+stageLabels[sKey]+'</button>';
+      });
+      body += '</div>';
+    }
+    body += tocMenu + '</div>';
   }
 
   if(stage==="intro"){
     var noteVal = (course.progress && course.progress.lesson_notes && course.progress.lesson_notes[lesson.id]) || "";
-    var opener = lessonOpener(lesson, idx, stages);
-    body += opener.html + '<div class="prose" id="lessonProse" data-lesson-id="'+lesson.id+'">'+opener.rest+'</div>' +
+    var opener = lessonOpener(lesson);
+    body += '<div class="prose lesson-text" id="lessonProse" data-lesson-id="'+lesson.id+'">'+opener.rest+'</div>' +
       (previewMode ? '' : '<p class="sel-hint">'+icon("star","ic-sm")+' Выделите фрагмент текста — его можно отметить маркером, добавить в заметку или задать по нему вопрос куратору.</p>') +
       '<div class="lesson-note">' +
         '<label>Ваша заметка к уроку <span style="font-weight:400;color:var(--muted-2);">(видна только вам)</span></label>' +
@@ -3468,28 +3480,52 @@ function renderCoursePlayer(){
 // ведёт <b>Имя</b> — …»), разделы урока (заголовки h4) — оглавлением со ссылками,
 // шпаргалка в конце — отдельной ссылкой. Если в тексте нет ни лектора, ни
 // заголовков, карточка всё равно показывает номер урока, время и шаги.
-// Начало урока — тихая шапка без рамки: кто ведёт и оглавление простым списком. Шаги урока (Материал → Тест) здесь не повторяем —
-// они уже есть во вкладках над текстом.
-function lessonOpener(lesson, idx, stages){
-  var html = lesson.html || "", rest = html, lecturer = null;
-  var m = /^\s*<p>\s*Урок ведёт\s*<b>([^<]+)<\/b>\s*[—–-]\s*([\s\S]*?)<\/p>/.exec(html);
-  if(m){ lecturer = { name:m[1].trim(), about:m[2].replace(/<[^>]+>/g,"").trim() }; rest = html.slice(m[0].length); }
-  var toc = [], re = /<h4[^>]*>([\s\S]*?)<\/h4>/g, h;
-  while((h = re.exec(rest))){ toc.push(h[1].replace(/<[^>]+>/g,"").trim()); }
-  var initials = lecturer ? lecturer.name.split(/\s+/).map(function(w){ return w.charAt(0); }).slice(0,2).join("") : "";
-  // Номер урока и время уже в подзаголовке над вкладками — здесь не повторяем.
-  var out = '<div class="lesson-open">' +
-    (lecturer ? '<div class="lo-lect"><span class="lo-av">'+escapeHtml(initials)+'</span><div><b>'+escapeHtml(lecturer.name)+'</b><p>'+escapeHtml(lecturer.about)+'</p></div></div>' : '');
-  var cheatI = toc.indexOf("Шпаргалка")!==-1 ? String(toc.indexOf("Шпаргалка")) : (/class="lb lb-cheat"/.test(rest) ? "cheat" : null);
-  var items = toc.map(function(t, i){
-    return t==="Шпаргалка" ? '' : '<li><button type="button" data-action="lesson-toc" data-i="'+i+'">'+escapeHtml(t)+'</button></li>';
-  }).join('');
-  if(items){
-    out += '<div class="lo-toc"><span class="lo-lab">В этом уроке</span><ul>' + items +
-      (cheatI!==null ? '<li><button type="button" class="lo-cheat" data-action="lesson-toc" data-i="'+cheatI+'">Шпаргалка в конце</button></li>' : '') + '</ul></div>';
+// Оглавление урока: разделы (заголовки h4) и шпаргалка. В самом тексте урока над
+// ним ничего не выводится: на компьютере разделы стоят под текущим уроком в списке
+// слева, на телефоне — в меню «Содержание» справа от вкладок. Строка «Урок ведёт …»
+// остаётся первым абзацем текста, только приглушённым.
+function lessonToc(html){
+  var toc = [], re = /<h4[^>]*>([\s\S]*?)<\/h4>/g, h, i = 0;
+  while((h = re.exec(html||""))){
+    var t = h[1].replace(/<[^>]+>/g,"").trim();
+    toc.push({ title: t==="Шпаргалка" ? "Шпаргалка" : t, i: String(i), cheat: t==="Шпаргалка" }); i++;
   }
-  return { html: out + '</div>', rest: rest };
+  if(!toc.some(function(x){ return x.cheat; }) && /class="lb lb-cheat"/.test(html||"")) toc.push({ title:"Шпаргалка", i:"cheat", cheat:true });
+  return toc;
 }
+function lessonOpener(lesson){
+  var rest = (lesson.html || "").replace(/^\s*<p>(\s*Урок ведёт\s*<b>)/, '<p class="lo-lect">$1');
+  return { html: "", rest: rest };
+}
+function lessonTocMenu(toc){
+  if(!toc.length) return "";
+  return '<div class="lo-toc-wrap"><button type="button" class="lo-toc-btn" data-action="lesson-toc-menu">'+icon("list","ic-sm")+'Содержание</button></div>' +
+    '<div class="lo-dd" id="lessonTocMenu" hidden>' + toc.map(function(x){
+      return '<button type="button" class="'+(x.cheat?'mut':'')+'" data-action="lesson-toc" data-i="'+x.i+'">'+escapeHtml(x.title)+'</button>';
+    }).join('') + '</div>';
+}
+// Подсветка раздела, который сейчас читают (список слева и меню «Содержание»).
+function lessonTocSpy(){
+  var prose = document.getElementById("lessonProse");
+  if(!prose) return;
+  var marks = [].slice.call(prose.querySelectorAll("h4")).map(function(h, i){ return { el:h, i:String(i) }; });
+  var ch = prose.querySelector(".lb-cheat");
+  if(ch && !marks.some(function(m){ return /Шпаргалка/.test(m.el.textContent); })) marks.push({ el:ch, i:"cheat" });
+  var cur = marks.length ? marks[0].i : null;
+  marks.forEach(function(m){ if(m.el.getBoundingClientRect().top < 140) cur = m.i; });
+  document.querySelectorAll('.lesson-sub [data-action="lesson-toc"], #lessonTocMenu [data-action="lesson-toc"]').forEach(function(x){
+    x.classList.toggle("on", x.getAttribute("data-i")===cur);
+  });
+}
+var lessonTocSpyQueued = false;
+window.addEventListener("scroll", function(){
+  if(lessonTocSpyQueued) return; lessonTocSpyQueued = true;
+  requestAnimationFrame(function(){ lessonTocSpyQueued = false; lessonTocSpy(); });
+}, { passive:true });
+document.addEventListener("click", function(e){
+  var m = document.getElementById("lessonTocMenu");
+  if(m && !m.hidden && !e.target.closest(".lo-toc-wrap, #lessonTocMenu")) m.hidden = true;
+});
 
 function renderLessonVideoStage(lesson, stages, isDoneAlready){
   var tcs = lesson.videoTimecodes||[];
@@ -6385,8 +6421,8 @@ function lpPreviewHtml(tab){
   head += '<div class="tabs" style="margin:14px 0 4px;">'+stages.map(function(k){ return '<button type="button" class="tab'+(k===stageKey?' active':'')+'">'+labels[k]+'</button>'; }).join('')+'</div>';
   var body = "";
   if(tab==="content"){
-    var op = lessonOpener({ html: lessonEditor.html || "", duration: duration }, idx, stages);
-    body = op.html.replace(/data-action="lesson-toc"/g, 'data-action="prev-toc"') + '<div class="prose" data-prev-prose="1">'+op.rest+'</div>';
+    var op = lessonOpener({ html: lessonEditor.html || "" });
+    body = '<div class="prose lesson-text" data-prev-prose="1">'+op.rest+'</div>';
   } else if(tab==="video"){
     var tcs = (videoEditor.timecodes||[]).filter(function(tc){ return typeof tc.time==="number" && isFinite(tc.time) && tc.title; })
       .map(function(tc, i){ return { id: tc.id || ("prev"+i), time: tc.time, title: tc.title, summary: tc.summary||"" }; })
@@ -8377,9 +8413,17 @@ function wireEvents(root){
       studentState.tab="lesson"; studentState.lessonIndex=parseInt(t.getAttribute("data-idx"),10); studentState.quizMode=false; resetLessonStageState();
       render(); window.scrollTo(0,0); return;
     }
+    if(action==="lesson-toc-menu"){ var ltm = document.getElementById("lessonTocMenu"); if(ltm){ ltm.hidden = !ltm.hidden; lessonTocSpy(); } return; }
     if(action==="lesson-toc"){
-      var tocH = t.getAttribute("data-i")==="cheat" ? document.querySelector("#lessonProse .lb-cheat") : document.querySelectorAll("#lessonProse h4")[parseInt(t.getAttribute("data-i"),10)];
-      if(tocH) tocH.scrollIntoView({ behavior:"smooth", block:"start" });
+      var tocI = t.getAttribute("data-i");
+      var tocGo = function(){
+        var tocH = tocI==="cheat" ? document.querySelector("#lessonProse .lb-cheat") : document.querySelectorAll("#lessonProse h4")[parseInt(tocI,10)];
+        if(tocH) tocH.scrollIntoView({ behavior:"smooth", block:"start" });
+      };
+      var ltm2 = document.getElementById("lessonTocMenu"); if(ltm2) ltm2.hidden = true;
+      // Раздел выбран с вкладки «Тест»/«Видео» — сначала возвращаемся к тексту урока.
+      if(!document.getElementById("lessonProse")){ studentState.lessonStage = "intro"; render(); setTimeout(tocGo, 60); }
+      else tocGo();
       return;
     }
     if(action==="lesson-stage"){

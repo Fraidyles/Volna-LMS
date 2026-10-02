@@ -2570,22 +2570,36 @@ mark.hl.hl-flash{animation:hlFlash 1.6s ease;}
 
 /* «Вход» в материал урока (lessonOpener): карточка с лектором и оглавлением
    отделяет вкладки от текста — видно, что урок начался и из чего он состоит. */
-.lesson-open{margin:18px 0 28px;padding:0 0 22px;border-bottom:1px solid var(--line-2);max-width:66ch;}
-.lo-lect{display:flex;gap:12px;align-items:center;}
-.lo-lect + .lo-toc{margin-top:18px;}
-.lo-av{width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;color:var(--muted);background:var(--surface-2);border:var(--border-hairline);}
-.lo-lect b{display:block;font-size:14px;font-weight:600;line-height:1.35;}
-.lo-lect p{margin:2px 0 0;font-size:13px;line-height:1.45;color:var(--muted);}
-.lo-lab{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;}
-.lo-toc{margin-top:0;}
-.lo-toc ul{margin:0;padding:0 0 0 14px;list-style:none;border-left:2px solid var(--line-2);display:flex;flex-direction:column;gap:2px;}
-.lo-toc li button{display:block;width:100%;text-align:left;border:none;background:none;padding:3px 0;color:var(--ink);font:400 14px/1.45 var(--sans);cursor:pointer;opacity:.85;}
-.lo-toc li button:hover{opacity:1;color:var(--primary);}
-.lo-toc li .lo-cheat{color:var(--muted);}
+/* Оглавление урока: на компьютере — разделы под текущим уроком в списке слева,
+   на телефоне — меню «Содержание» справа от вкладок. Над текстом урока ничего нет. */
+.lesson-body .lesson-text{margin-top:22px;}
+.prose .lo-lect{color:var(--muted);}
+.lesson-sub{display:flex;flex-direction:column;margin:8px 0 2px;border-left:1px solid var(--line-2);}
+.lesson-sub button{display:block;width:100%;text-align:left;border:none;background:none;padding:4px 10px;margin-left:-1px;border-left:1px solid transparent;
+  font:400 12.5px/1.35 var(--sans);color:var(--muted);cursor:pointer;}
+.lesson-sub button:hover{color:var(--ink);}
+.lesson-sub button.on{color:var(--ink);border-left-color:var(--primary);}
+.lesson-sub button.mut:not(.on){color:var(--muted-2,var(--muted));}
+.lesson-tabs-row{position:relative;}
+/* «Содержание» поверх правого края строки вкладок; вкладки под ним не заезжают (отступ справа) */
+.lo-toc-wrap{display:none;position:absolute;right:0;top:14px;bottom:9px;align-items:center;}
+.lesson-tabs-row:not(:has(> .tabs)){min-height:52px;}
+.lo-toc-btn{display:flex;align-items:center;gap:6px;border:none;background:none;padding:8px 0;color:var(--muted);font:500 13px var(--sans);cursor:pointer;white-space:nowrap;}
+.lo-toc-btn:hover{color:var(--ink);}
+.lo-dd{position:absolute;right:0;top:calc(100% + 4px);z-index:30;width:min(320px,100%);padding:6px;border-radius:12px;background:var(--surface);border:var(--border-hairline);box-shadow:0 20px 40px -14px rgba(0,0,0,.5);}
+.lo-dd[hidden]{display:none;}
+.lo-dd button{display:block;width:100%;text-align:left;border:none;background:none;padding:9px 10px;border-radius:8px;color:var(--ink);font:400 14px/1.4 var(--sans);cursor:pointer;}
+.lo-dd button:hover,.lo-dd button.on{background:var(--surface-2);}
+.lo-dd button.mut{color:var(--muted);}
+@media (min-width:801px){
+  /* список уроков остаётся на экране, пока читают текст — по нему видно, где ты в уроке */
+  .player{overflow:clip;}
+  .player > .lesson-nav{position:sticky;top:0;align-self:start;max-height:100vh;overflow-y:auto;}
+}
+@media (max-width:800px){ .lesson-sub{display:none;} .lo-toc-wrap{display:flex;} .lesson-tabs-row > .tabs{padding-right:118px;} .lesson-tabs-row > .tabs .tab:last-child{margin-right:0;} }
 /* разделы текста — заметнее, чтобы оглавление и текст совпадали по структуре */
 .lesson-body .prose h4{font-size:17px;font-weight:700;margin:32px 0 10px;scroll-margin-top:20px;}
 .lesson-body .prose > h4:first-child{margin-top:0;}
-@media (max-width:640px){ .lesson-open{margin:14px 0 22px;padding-bottom:18px;} }
 .lesson-body .prose .card > h4:first-child{margin-top:0;}
 
 /* ==========================================================================
