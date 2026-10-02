@@ -3004,7 +3004,7 @@ function renderWelcomeHome(){
   var L = course.lessons, first = L[0] || {}, q = first.quiz ? first.quiz.length : 0;
   var name = (me.name||"").trim().split(/\s+/)[0] || "";
   var step = function(n, ic, title, text){ return '<div class="wl-step"><em>'+n+'</em><span class="wl-si">'+icon(ic)+'</span><b>'+title+'</b><span>'+text+'</span></div>'; };
-  return '<div class="home-grid wl-mode fx-'+homeFx()+homeBgClass()+'" style="margin-top:10px;">'+homeBgLayer() +
+  return '<div class="home-grid wl-mode '+homeFxClass()+homeBgClass()+'" style="margin-top:10px;">'+homeBgLayer() +
     '<div class="wl" id="welcomeHome">' +
       '<div class="card course-hero wl-hello"><div class="hero-aurora aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
         '<span class="wl-kick">Демо-курс «'+escapeHtml(course.course.title)+'»</span>' +
@@ -3034,7 +3034,7 @@ function renderStudentHome(){
   // куратор, эфир и прочее «сбоку». На узком всё идёт одной колонкой.
   var enter = homeEnterAnim; homeEnterAnim = false;
   // Следующий шаг — первым; анкета и чеклист «Первые шаги» идут после «Потом».
-  var html = '<div class="home-grid fx-'+homeFx()+homeBgClass()+(enter?' home-enter':'')+'" style="margin-top:10px;">'+homeBgLayer()+'<div class="home-main">';
+  var html = '<div class="home-grid '+homeFxClass()+homeBgClass()+(enter?' home-enter':'')+'" style="margin-top:10px;">'+homeBgLayer()+'<div class="home-main">';
   var curIdx = -1;
   course.lessons.forEach(function(l,i){ if(curIdx<0 && doneIds.indexOf(l.id)===-1) curIdx = i; });
   if(lock.locked){
@@ -4501,30 +4501,27 @@ async function uploadAvatarFile(file){
   render();
 }
 
-// Анимация главной врача — три варианта на выбор (Настройки → Внешний вид):
-//   cascade — плитки собираются каскадом: левая колонка сверху вниз, правая
-//             выезжает справа, уроки «Дальше по курсу» по одному, полоска очков
-//             заполняется; только при заходе на главную, не при фоновых обновлениях;
-//   light   — живой свет: за стеклянными плитками два мягких пятна света следуют
-//             за курсором (без курсора — медленно дрейфуют), плитка под курсором
-//             слегка наклоняется навстречу;
-//   thread  — нить прогресса: пройденные уроки соединены светящейся линией, по ней
-//             к текущему уроку бегут искры, текущий урок пульсирует, по полоске
-//             уроков курса и полоске очков проходит блик;
-//   off     — без анимаций (и всегда, если в системе включено «уменьшить движение»).
-// Неизвестное сохранённое значение (например, снятые варианты) → «Каскад».
-var HOME_FX = [["cascade","Каскад","Плитки собираются по очереди при входе"],["light","Живой свет","Свет за стеклом следует за курсором"],["thread","Нить прогресса","Путь по урокам светится и течёт к текущему"],
+// Анимация главной (Настройки → Внешний вид), два варианта:
+//   live — «Каскад и живой свет»: при заходе на главную плитки собираются каскадом
+//          (классы fx-cascade), а за стеклянными плитками мягкий свет следует за
+//          курсором и плитка под курсором слегка наклоняется (fx-light);
+//   off  — без анимаций (и всегда, если в системе включено «уменьшить движение»).
+// Сохранённые прежние значения (cascade, light, thread) переводятся в live.
+var HOME_FX = [["live","Каскад и живой свет","Плитки собираются по очереди при входе, свет за стеклом следует за курсором"],
   ["off","Без анимации","Только сами данные"]];
-// У сотрудников на главной — потоки, задачи и лента, поэтому «нить» там своя.
-var HOME_FX_STAFF_TEXT = { thread:"Потоки связаны светящейся линией, кольца прогресса пульсируют" };
+// Бывшие отдельные варианты («Каскад», «Живой свет») и снятая «Нить прогресса» → объединённый.
+var HOME_FX_OLD = { cascade:"live", light:"live", thread:"live" };
+var HOME_FX_STAFF_TEXT = {};
 // Фон главной — отдельная настройка, сочетается с любой анимацией: огоньки-искры
-// в одной из палитр или без фона.
-var HOME_BG = [["none","Без фона","Только стекло и цвета темы"],["ember-warm","Искры · тёплые","Красные и янтарные огоньки"],["ember-cool","Искры · холодные","Фиолетовые и бирюзовые — в цветах платформы"],["ember-mix","Искры · смешанные","Все четыре цвета вместе"]];
+// в цветах платформы или без фона.
+var HOME_BG = [["none","Без фона","Только стекло и цвета темы"],["ember-mix","Искры","Огоньки всех цветов платформы"]];
+var HOME_BG_OLD = { "ember-warm":"ember-mix", "ember-cool":"ember-mix" };
 var HOME_BG_COLORS = { "ember-warm":[["--rose",.55],["--accent",1]], "ember-cool":[["--primary",.6],["--teal",1]], "ember-mix":[["--rose",.3],["--accent",.5],["--primary",.78],["--teal",1]] };
 function homeBg(){
   var v = null; try{ v = localStorage.getItem("lms-home-bg"); }catch(e){}
   // Раньше «Искры» были одной из анимаций — переносим выбор в фон.
-  try{ if(!v && localStorage.getItem("lms-home-fx")==="ember"){ v = "ember-warm"; localStorage.setItem("lms-home-bg", v); localStorage.setItem("lms-home-fx", "cascade"); } }catch(e){}
+  try{ if(!v && localStorage.getItem("lms-home-fx")==="ember"){ v = "ember-mix"; localStorage.setItem("lms-home-bg", v); localStorage.setItem("lms-home-fx", "live"); } }catch(e){}
+  if(HOME_BG_OLD[v]) v = HOME_BG_OLD[v];
   var q = /[?&]bg=(none|ember-warm|ember-cool|ember-mix)\b/.exec(location.search); if(q) v = q[1];
   return HOME_BG.some(function(x){ return x[0]===v; }) ? v : "none";
 }
@@ -4532,9 +4529,12 @@ function homeBgLayer(){ return homeBg()!=="none" ? '<canvas class="fx-ember-cv" 
 function homeBgClass(){ return homeBg()!=="none" ? ' bg-ember' : ''; }
 function homeFx(){
   var v = null; try{ v = localStorage.getItem("lms-home-fx"); }catch(e){}
-  var q = /[?&]fx=(cascade|light|thread|off)\b/.exec(location.search); if(q) v = q[1];
-  return HOME_FX.some(function(x){ return x[0]===v; }) ? v : "cascade";
+  var q = /[?&]fx=(live|cascade|light|thread|off)\b/.exec(location.search); if(q) v = q[1];
+  if(HOME_FX_OLD[v]) v = HOME_FX_OLD[v];
+  return HOME_FX.some(function(x){ return x[0]===v; }) ? v : "live";
 }
+// Классы анимации на сетке главной: объединённый вариант = каскад + живой свет.
+function homeFxClass(){ return homeFx()==="live" ? "fx-cascade fx-light" : "fx-off"; }
 function renderSettingsPage(){
   // Слева — внешний вид (превью тем) и безопасность (пароль, сеансы с устройствами),
   // справа — карточка аккаунта. Сеансы подгружаются лениво при первом открытии.
@@ -4550,7 +4550,7 @@ function renderSettingsPage(){
       '<b class="fx-title" style="margin-top:0;">Тема</b><div class="theme-cards">'+themeCard("dark","Тёмная","moon")+themeCard("light","Светлая","sun")+themeCard("depth","Глубина","sparkle")+'</div>' +
       '<b class="fx-title">Анимация главной</b><div class="fx-cards">' + HOME_FX.map(function(x){
         var on = homeFx()===x[0], text = me.role!=="student" && HOME_FX_STAFF_TEXT[x[0]] ? HOME_FX_STAFF_TEXT[x[0]] : x[2];
-        return '<button type="button" class="fx-card'+(on?' on':'')+'" data-action="set-home-fx" data-fx="'+x[0]+'"><span class="fx-prev fxp-'+x[0]+'"><i></i><i></i><i></i></span><b>'+x[1]+(on?' <em>выбрана</em>':'')+'</b><span>'+text+'</span></button>';
+        return '<button type="button" class="fx-card'+(on?' on':'')+'" data-action="set-home-fx" data-fx="'+x[0]+'"><span class="fx-prev '+(x[0]==="live"?"fxp-cascade fxp-light":"fxp-"+x[0])+'"><i></i><i></i><i></i></span><b>'+x[1]+(on?' <em>выбрана</em>':'')+'</b><span>'+text+'</span></button>';
       }).join("") + '</div>' +
       '<b class="fx-title">Фон главной</b><div class="fx-cards">' + HOME_BG.map(function(x){
         var on = homeBg()===x[0];
@@ -4659,7 +4659,7 @@ function renderStaffShell(){
   } else {
     addSideFlow(main);
     // Главная сотрудника — в обёртке с выбранным вариантом анимации (как у врача).
-    var staffHomeBox = el('<div class="staff-home fx-'+homeFx()+homeBgClass()+'">'+homeBgLayer()+'</div>');
+    var staffHomeBox = el('<div class="staff-home '+homeFxClass()+homeBgClass()+'">'+homeBgLayer()+'</div>');
     content.appendChild(staffHomeBox);
     renderStaffHome(staffHomeBox);
   }
