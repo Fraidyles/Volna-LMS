@@ -3468,24 +3468,25 @@ function renderCoursePlayer(){
 // ведёт <b>Имя</b> — …»), разделы урока (заголовки h4) — оглавлением со ссылками,
 // шпаргалка в конце — отдельной ссылкой. Если в тексте нет ни лектора, ни
 // заголовков, карточка всё равно показывает номер урока, время и шаги.
+// Начало урока — тихая шапка без рамки: кто ведёт и оглавление простым списком. Шаги урока (Материал → Тест) здесь не повторяем —
+// они уже есть во вкладках над текстом.
 function lessonOpener(lesson, idx, stages){
   var html = lesson.html || "", rest = html, lecturer = null;
   var m = /^\s*<p>\s*Урок ведёт\s*<b>([^<]+)<\/b>\s*[—–-]\s*([\s\S]*?)<\/p>/.exec(html);
   if(m){ lecturer = { name:m[1].trim(), about:m[2].replace(/<[^>]+>/g,"").trim() }; rest = html.slice(m[0].length); }
   var toc = [], re = /<h4[^>]*>([\s\S]*?)<\/h4>/g, h;
   while((h = re.exec(rest))){ toc.push(h[1].replace(/<[^>]+>/g,"").trim()); }
-  var stageLabels = { intro:"Материал", video:"Видео", quiz:"Тест", task:"Задание" };
   var initials = lecturer ? lecturer.name.split(/\s+/).map(function(w){ return w.charAt(0); }).slice(0,2).join("") : "";
+  // Номер урока и время уже в подзаголовке над вкладками — здесь не повторяем.
   var out = '<div class="lesson-open">' +
-    '<div class="lo-top"><span class="lo-kicker">Урок '+(idx+1)+(lesson.duration ? ' · ≈ '+escapeHtml(lesson.duration)+' чтения' : '')+'</span>' +
-      (stages.length>1 ? '<span class="lo-steps">'+stages.map(function(k, i){ return '<i class="'+(i===0?'on':'')+'">'+stageLabels[k]+'</i>'; }).join('<b>→</b>')+'</span>' : '') + '</div>' +
-    (lecturer ? '<div class="lo-lect"><span class="lo-av">'+escapeHtml(initials)+'</span><div><span class="lo-lab">Ведёт урок</span><b>'+escapeHtml(lecturer.name)+'</b><p>'+escapeHtml(lecturer.about)+'</p></div></div>' : '');
-  var sections = toc.filter(function(t){ return t!=="Шпаргалка"; });
-  if(sections.length){
-    out += '<div class="lo-toc"><span class="lo-lab">В этом уроке</span><ol>' + toc.map(function(t, i){
-      return t==="Шпаргалка" ? '' : '<li><button type="button" data-action="lesson-toc" data-i="'+i+'">'+escapeHtml(t)+'</button></li>';
-    }).join('') + '</ol>' + (toc.indexOf("Шпаргалка")!==-1 ? '<button type="button" class="lo-cheat" data-action="lesson-toc" data-i="'+toc.indexOf("Шпаргалка")+'">'+icon("check","ic-sm")+'Шпаргалка в конце урока</button>'
-      : /class="lb lb-cheat"/.test(rest) ? '<button type="button" class="lo-cheat" data-action="lesson-toc" data-i="cheat">'+icon("check","ic-sm")+'Шпаргалка в конце урока</button>' : '') + '</div>';
+    (lecturer ? '<div class="lo-lect"><span class="lo-av">'+escapeHtml(initials)+'</span><div><b>'+escapeHtml(lecturer.name)+'</b><p>'+escapeHtml(lecturer.about)+'</p></div></div>' : '');
+  var cheatI = toc.indexOf("Шпаргалка")!==-1 ? String(toc.indexOf("Шпаргалка")) : (/class="lb lb-cheat"/.test(rest) ? "cheat" : null);
+  var items = toc.map(function(t, i){
+    return t==="Шпаргалка" ? '' : '<li><button type="button" data-action="lesson-toc" data-i="'+i+'">'+escapeHtml(t)+'</button></li>';
+  }).join('');
+  if(items){
+    out += '<div class="lo-toc"><span class="lo-lab">В этом уроке</span><ul>' + items +
+      (cheatI!==null ? '<li><button type="button" class="lo-cheat" data-action="lesson-toc" data-i="'+cheatI+'">Шпаргалка в конце</button></li>' : '') + '</ul></div>';
   }
   return { html: out + '</div>', rest: rest };
 }
