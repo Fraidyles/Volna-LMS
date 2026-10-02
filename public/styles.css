@@ -884,6 +884,10 @@ a.stream-tg:hover span{text-decoration:underline;}
   -webkit-mask-image:linear-gradient(180deg,transparent,#000 35%);mask-image:linear-gradient(180deg,transparent,#000 35%);}
 .dna-decor canvas{width:100%;height:100%;display:block;}
 .dna-decor ~ .shell{position:relative;z-index:1;}
+/* спираль центрируется по области контента: когда меню раскрыто (наведение),
+   контент сдвигается на 236px — спираль сдвигается вместе с ним */
+.dna-decor{transition:left .18s cubic-bezier(.16,1,.3,1);}
+@media (min-width:641px){ .sidebar:hover~.app-main .dna-decor,.sidebar:focus-within~.app-main .dna-decor{left:236px;} }
 @media (max-width:640px){.dna-decor{left:52px;}}
 
 /* Материалы обучения: плитки в две колонки, вся плитка кликабельна. */
