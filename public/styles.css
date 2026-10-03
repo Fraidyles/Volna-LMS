@@ -2808,3 +2808,33 @@ mark.hl.hl-flash{animation:hlFlash 1.6s ease;}
   .wl-steps{grid-template-columns:minmax(0,1fr);margin-top:22px;}
   .wl-foot .btn-primary{width:100%;justify-content:center;}
 }
+
+/* ==========================================================================
+   ТЕМЫ «СОЗВЕЗДИЕ» И «КЛЕТКИ» (data-sky): живой фон на весь экран (WebGL,
+   skyStart в app.js) + единое плотное стекло, лёгкое зерно плёнки, световые
+   грани. Строятся поверх «Глубины» (data-look="depth").
+   ========================================================================== */
+#skyCanvas{position:fixed;inset:0;width:100vw;height:100vh;z-index:-2;pointer-events:none;display:block;}
+#skyGrain{position:fixed;inset:0;z-index:-1;pointer-events:none;opacity:.06;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
+[data-sky] body{background:#05030A;}
+[data-sky] body::before,[data-sky] .side-flow,[data-sky] .hero-aurora{display:none!important;}
+[data-sky] .card,[data-sky] .home-grid .board-tile,[data-sky] .home-grid .home-next,[data-sky] .course-hero,[data-sky] .player{
+  background:linear-gradient(160deg,rgba(255,255,255,.065),rgba(255,255,255,.018) 42%,rgba(255,255,255,.01)),rgba(13,8,22,.62)!important;
+  border:1px solid rgba(255,255,255,.085)!important;backdrop-filter:blur(28px) saturate(1.3);-webkit-backdrop-filter:blur(28px) saturate(1.3);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.13),0 30px 60px -32px rgba(0,0,0,.85)!important;}
+[data-sky] .player .lesson-body{background:rgba(9,5,16,.55);}
+[data-sky] .sidebar{background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.015)),rgba(8,5,14,.6);backdrop-filter:blur(30px) saturate(1.3);border-right:1px solid rgba(255,255,255,.07);}
+[data-sky] .sidebar-item.active{background:linear-gradient(90deg,rgba(157,123,255,.22),rgba(255,77,109,.06))!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),inset 2px 0 0 #B9A8FF;}
+[data-sky] .btn-primary{background:linear-gradient(120deg,#A88BFF,#FF5C7A);border-color:transparent;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 10px 26px -10px rgba(255,92,122,.65);}
+[data-sky] .btn-ghost{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.12);}
+[data-sky] .hs-track i,[data-sky] .home-pts i{box-shadow:0 0 14px rgba(255,77,109,.5);}
+[data-sky] .lb-card,[data-sky] .lb-note{background:rgba(255,255,255,.03);border-color:rgba(255,255,255,.08);}
+[data-sky] .lb-step,[data-sky] .lb-stat,[data-sky] .lb-seg{background:rgba(255,255,255,.045);}
+[data-sky] .tile-num{background:linear-gradient(180deg,#fff,#C9BCFF);-webkit-background-clip:text;background-clip:text;color:transparent;}
+[data-sky] .progress-ring{filter:drop-shadow(0 0 12px rgba(157,123,255,.45));}
+[data-sky] .overlay > div,[data-sky] .modal,[data-sky] .drawer{background-color:rgba(14,9,24,.92);}
+.theme-prev.stars{background:radial-gradient(1px 1px at 20% 30%,#fff,transparent),radial-gradient(1px 1px at 70% 20%,#fff,transparent),radial-gradient(1.5px 1.5px at 85% 70%,#fff,transparent),radial-gradient(1px 1px at 40% 80%,#fff,transparent),radial-gradient(1px 1px at 60% 55%,#E9DFFF,transparent),linear-gradient(130deg,transparent 30%,rgba(157,123,255,.35) 50%,rgba(255,77,109,.2) 60%,transparent 75%),#06030D;}
+.theme-prev.cells{background:radial-gradient(14px 12px at 25% 35%,transparent 70%,rgba(255,77,109,.55) 80%,transparent 92%),radial-gradient(16px 14px at 62% 30%,transparent 70%,rgba(157,123,255,.6) 80%,transparent 92%),radial-gradient(15px 13px at 45% 75%,transparent 70%,rgba(63,208,201,.5) 80%,transparent 92%),radial-gradient(12px 12px at 85% 72%,transparent 70%,rgba(255,184,107,.5) 80%,transparent 92%),radial-gradient(4px 4px at 25% 35%,rgba(255,77,109,.7),transparent),radial-gradient(4px 4px at 62% 30%,rgba(157,123,255,.8),transparent),#07040D;}
+.theme-prev.stars i,.theme-prev.cells i{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(2px);}
+.theme-prev.stars i:nth-child(2),.theme-prev.cells i:nth-child(2){background:linear-gradient(90deg,#A88BFF,#FF5C7A);opacity:.85;border:none;}

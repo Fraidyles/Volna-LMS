@@ -2555,21 +2555,26 @@ function renderMobileNavBackdrop(){
   return mobileNavOpen ? el('<div class="sidebar-backdrop" data-action="close-mobile-nav"></div>') : null;
 }
 
-// Тема: «Тёмная» — дефолт продукта, «Светлая» и «Глубина» — тёмная тема на двух
-// цветах (фиолетовый + красный) с туманностью за стеклом. «Глубина» строится
-// поверх тёмной (data-theme="dark" + data-look="depth"), поэтому всё, что
-// рассчитано на тёмную тему, в ней работает без отдельных правил.
-var THEMES = ["dark","light","depth"];
+// Темы: «Тёмная» — дефолт продукта, «Светлая», «Глубина» — тёмная тема на двух
+// цветах (фиолетовый + красный) с туманностью за стеклом, и две темы с живым фоном
+// на весь экран — «Созвездие» (ночное небо с Млечным Путём) и «Клетки» (живая
+// ткань под микроскопом). Все тёмные строятся поверх тёмной (data-theme="dark"),
+// три последние — ещё и поверх «Глубины» (data-look="depth"), поэтому всё, что
+// рассчитано на тёмную тему, в них работает без отдельных правил; живой фон и
+// плотное стекло добавляет data-sky.
+var THEMES = ["dark","light","depth","stars","cells"];
+var SKY_THEMES = { stars:1, cells:1 };
 function getTheme(){
   var v = null; try{ v = localStorage.getItem("lms-theme"); }catch(e){}
-  var q = /[?&]theme=(dark|light|depth)\b/.exec(location.search); if(q) v = q[1];
+  var q = /[?&]theme=(dark|light|depth|stars|cells)/.exec(location.search); if(q) v = q[1];
   return THEMES.indexOf(v)>=0 ? v : "dark";
 }
 function applyTheme(){
-  var t = getTheme();
-  document.documentElement.setAttribute("data-theme", t==="light" ? "light" : "dark");
-  if(t==="depth") document.documentElement.setAttribute("data-look", "depth");
-  else document.documentElement.removeAttribute("data-look");
+  var t = getTheme(), root = document.documentElement;
+  root.setAttribute("data-theme", t==="light" ? "light" : "dark");
+  if(t==="depth" || SKY_THEMES[t]) root.setAttribute("data-look", "depth"); else root.removeAttribute("data-look");
+  if(SKY_THEMES[t]) root.setAttribute("data-sky", t); else root.removeAttribute("data-sky");
+  skyStart(SKY_THEMES[t] ? t : null);
 }
 function setTheme(t){
   try{
@@ -2578,10 +2583,65 @@ function setTheme(t){
   }catch(e){}
   applyTheme();
 }
-// Переключатель в меню: светлая ↔ последняя из тёмных («Тёмная» или «Глубина»).
+
+/* ---------- Живой фон тем «Созвездие» и «Клетки» (WebGL) ---------- */
+// Один холст на всё окно под приложением (вне #app — перерисовка его не трогает).
+// Кадры не чаще 30 в секунду и только пока вкладка видна; при «уменьшить движение»
+// рисуется один неподвижный кадр; без WebGL остаётся туманность «Глубины».
+var SKY_VS = "attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}";
+var SKY_FS = {
+  stars: "precision highp float;uniform vec2 R;uniform float T;uniform vec2 M;float h1(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}vec2 h2(vec2 p){p=vec2(dot(p,vec2(127.1,311.7)),dot(p,vec2(269.5,183.3)));return fract(sin(p)*43758.5453);}float n2(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h1(i),h1(i+vec2(1,0)),f.x),mix(h1(i+vec2(0,1)),h1(i+vec2(1,1)),f.x),f.y);}float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<5;i++){v+=a*n2(p);p=p*2.03+vec2(1.7,9.2);a*=.5;}return v;}vec3 pal(float x){vec3 a=vec3(.616,.482,1.),b=vec3(1.,.302,.427),c=vec3(1.,.72,.42),d=vec3(.247,.816,.788);x=fract(x)*4.;return x<1.?mix(a,b,x):x<2.?mix(b,c,x-1.):x<3.?mix(c,d,x-2.):mix(d,a,x-3.);}vec3 finish(vec3 c,vec2 uv){c*=1.-.55*pow(length((uv-.5)*vec2(1.1,1.25)),2.2);c=1.-exp(-c*1.35);return pow(c,vec3(.95));}vec3 temp(float k){return k<.33?mix(vec3(.62,.72,1.),vec3(1.),k*3.):k<.75?mix(vec3(1.),vec3(1.,.9,.72),(k-.33)*2.4):mix(vec3(1.,.9,.72),vec3(1.,.66,.5),(k-.75)*4.);}vec3 layer(vec2 p,float sc,float th,float sz){vec2 g=p*sc;vec2 ip=floor(g),fp=fract(g);vec3 acc=vec3(0.); for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec2 o=vec2(float(x),float(y));vec2 id=ip+o;float r=h1(id);if(r<th)continue;  vec2 pos=o+h2(id)*.8+.1-fp;float win=smoothstep(1.35,.6,length(pos));float d=length(pos)/sc;float b=pow((r-th)/(1.-th),3.);  float tw=.7+.3*sin(T*(1.+h1(id+3.)*3.)+r*40.);vec3 c=temp(h1(id+7.));  float core=exp(-d*d/(sz*sz*(.6+b*2.)));float halo=exp(-d*d/(sz*sz*(9.+b*60.)))*.18*b;  vec2 q=abs(pos/sc);float spike=b>.8?(exp(-q.x*2600.)*exp(-q.y*160.)+exp(-q.y*2600.)*exp(-q.x*160.))*(b-.8)*3.:0.;  acc+=c*(core*b*1.6+halo+spike)*tw*win;}return acc;}void main(){vec2 uv=gl_FragCoord.xy/R;float a=R.x/R.y;vec2 p=vec2(uv.x*a,uv.y);vec2 m=step(0.,M.x)*(M/R-.5);float t=T*.01;vec3 col=mix(vec3(.010,.006,.022),vec3(.022,.012,.045),uv.y);vec2 bp=p-vec2(a*.5,.5)-m*.02;float bd=bp.x*.55+bp.y*.84;float band=exp(-bd*bd*9.);float neb=fbm(p*1.6+vec2(t,t*.6));float neb2=fbm(p*4.+neb*1.5);vec3 nc=mix(vec3(.38,.25,.75),vec3(.85,.30,.45),smoothstep(.35,.75,neb));nc=mix(nc,vec3(.95,.70,.48),smoothstep(.6,.85,neb2)*.35);float dust=smoothstep(.45,.75,fbm(p*3.2+vec2(5.,t*2.)));col+=nc*band*neb*.5*(1.-dust*.8);col+=vec3(.6,.55,.85)*band*.05;col+=layer(p-m*.010,110.,.90,0.00080)*(.25+band*1.2);col+=layer(p-m*.025,40.,.93,0.00110)*(.6+band*.6);col+=layer(p-m*.050,13.,.95,0.00150);gl_FragColor=vec4(finish(col,uv),1.);}",
+  cells: "precision highp float;uniform vec2 R;uniform float T;uniform vec2 M;float h1(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}vec2 h2(vec2 p){p=vec2(dot(p,vec2(127.1,311.7)),dot(p,vec2(269.5,183.3)));return fract(sin(p)*43758.5453);}float n2(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h1(i),h1(i+vec2(1,0)),f.x),mix(h1(i+vec2(0,1)),h1(i+vec2(1,1)),f.x),f.y);}float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<5;i++){v+=a*n2(p);p=p*2.03+vec2(1.7,9.2);a*=.5;}return v;}vec3 pal(float x){vec3 a=vec3(.616,.482,1.),b=vec3(1.,.302,.427),c=vec3(1.,.72,.42),d=vec3(.247,.816,.788);x=fract(x)*4.;return x<1.?mix(a,b,x):x<2.?mix(b,c,x-1.):x<3.?mix(c,d,x-2.):mix(d,a,x-3.);}vec3 finish(vec3 c,vec2 uv){c*=1.-.55*pow(length((uv-.5)*vec2(1.1,1.25)),2.2);c=1.-exp(-c*1.35);return pow(c,vec3(.95));}void main(){vec2 uv=gl_FragCoord.xy/R;vec2 p=gl_FragCoord.xy/R.y*2.2;float t=T*.25;vec2 mm=M/R.y*2.2;vec2 dm=p-mm;float push=step(0.,M.x)*.35*exp(-dot(dm,dm)*1.6);p+=normalize(dm+1e-4)*push;p+=.18*vec2(fbm(p*.6+t*.3),fbm(p*.6-t*.25+4.))-.09;vec2 ip=floor(p),fp=fract(p);float d1=8.,d2=8.;vec2 cid=vec2(0.);for(int y=-1;y<=1;y++)for(int x=-1;x<=1;x++){vec2 g=vec2(float(x),float(y));vec2 o=h2(ip+g);o=.5+.34*sin(t*.8+6.2831*o); vec2 r=g+o-fp;float d=dot(r,r);if(d<d1){d2=d1;d1=d;cid=ip+g;}else if(d<d2)d2=d;}float e=sqrt(d2)-sqrt(d1);float k=h1(cid);vec3 c=pal(k*.9+.05);float alive=smoothstep(.25,.5,k);float mem=exp(-e*e*260.)*.9+exp(-e*e*28.)*.18;float inside=smoothstep(0.,.35,e);float breath=.8+.2*sin(T*.9+k*20.);float nuc=exp(-d1*(22.+8.*k))*breath;float nuc2=exp(-d1*90.)*breath;float org=smoothstep(.62,.9,fbm(p*5.+cid*3.+t))*inside*.35;vec3 col=vec3(.016,.010,.032);col+=c*inside*.03*alive+c*org*.08*alive;col+=mix(c,vec3(1.),.1)*mem*.22*(.45+.55*alive);col+=c*nuc*.28*alive+vec3(1.,.95,1.)*nuc2*.14*alive;float dof=smoothstep(.15,.75,fbm(uv*1.4+vec2(t*.05,0.)));col*=mix(.55,1.05,dof);gl_FragColor=vec4(finish(col*.85,uv),1.);}"
+};
+var sky = { kind:null, cv:null, gl:null, raf:0, t0:0, last:0, mouse:[-1,-1], target:[-1,-1] };
+function skyStart(kind){
+  if(sky.kind===kind) return;
+  skyStop();
+  if(!kind || !document.body) return;
+  var cv = document.createElement("canvas"); cv.id = "skyCanvas"; cv.setAttribute("aria-hidden", "true");
+  var grain = document.createElement("div"); grain.id = "skyGrain"; grain.setAttribute("aria-hidden", "true");
+  document.body.insertBefore(grain, document.body.firstChild); document.body.insertBefore(cv, document.body.firstChild);
+  var gl = null; try{ gl = cv.getContext("webgl", { antialias:false, alpha:false }); }catch(e){}
+  if(!gl){ cv.remove(); grain.remove(); document.documentElement.removeAttribute("data-sky"); return; }
+  function sh(type, src){ var x = gl.createShader(type); gl.shaderSource(x, src); gl.compileShader(x); return x; }
+  var pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, SKY_VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, SKY_FS[kind])); gl.linkProgram(pr);
+  if(!gl.getProgramParameter(pr, gl.LINK_STATUS)){ cv.remove(); grain.remove(); document.documentElement.removeAttribute("data-sky"); return; }
+  gl.useProgram(pr);
+  var b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
+  var lp = gl.getAttribLocation(pr, "p"); gl.enableVertexAttribArray(lp); gl.vertexAttribPointer(lp, 2, gl.FLOAT, false, 0, 0);
+  sky.u = { R:gl.getUniformLocation(pr, "R"), T:gl.getUniformLocation(pr, "T"), M:gl.getUniformLocation(pr, "M") };
+  sky.kind = kind; sky.cv = cv; sky.grain = grain; sky.gl = gl; sky.t0 = performance.now();
+  sky.raf = requestAnimationFrame(skyFrame);
+}
+function skyStop(){
+  if(sky.raf) cancelAnimationFrame(sky.raf);
+  if(sky.cv) sky.cv.remove(); if(sky.grain) sky.grain.remove();
+  if(sky.gl){ var ext = sky.gl.getExtension("WEBGL_lose_context"); if(ext) ext.loseContext(); }
+  sky.kind = null; sky.cv = null; sky.grain = null; sky.gl = null; sky.raf = 0;
+}
+function skyFrame(now){
+  sky.raf = 0;
+  if(!sky.gl) return;
+  var still = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(!document.hidden && (now - sky.last >= 33 || !sky.last)){
+    sky.last = now;
+    var gl = sky.gl, d = Math.min(1.5, window.devicePixelRatio||1), W = Math.round(innerWidth*d), H = Math.round(innerHeight*d);
+    if(sky.cv.width!==W || sky.cv.height!==H){ sky.cv.width = W; sky.cv.height = H; gl.viewport(0, 0, W, H); }
+    var tg = sky.target; sky.mouse = tg[0]<0 ? [-1,-1] : (sky.mouse[0]<0 ? tg.slice() : [sky.mouse[0]+(tg[0]-sky.mouse[0])*.08, sky.mouse[1]+(tg[1]-sky.mouse[1])*.08]);
+    gl.uniform2f(sky.u.R, W, H); gl.uniform1f(sky.u.T, still ? 20 : 20 + (now - sky.t0)/1000);
+    gl.uniform2f(sky.u.M, sky.mouse[0]*d, sky.mouse[1]*d);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    if(still) return;
+  }
+  sky.raf = requestAnimationFrame(skyFrame);
+}
+document.addEventListener("pointermove", function(e){ if(sky.kind) sky.target = [e.clientX, innerHeight - e.clientY]; }, { passive:true });
+document.addEventListener("visibilitychange", function(){ if(sky.gl && !sky.raf && !document.hidden) sky.raf = requestAnimationFrame(skyFrame); });
+
+// Переключатель в меню: светлая ↔ последняя из тёмных.
 function toggleTheme(){
   var back = null; try{ back = localStorage.getItem("lms-theme-dark"); }catch(e){}
-  setTheme(getTheme()==="light" ? (back==="depth" ? "depth" : "dark") : "light");
+  setTheme(getTheme()==="light" ? (THEMES.indexOf(back)>0 && back!=="light" ? back : "dark") : "light");
 }
 
 /* ============================= РЕНДЕР: СТУДЕНТ ============================= */
@@ -4547,7 +4607,7 @@ function renderSettingsPage(){
   }
   var left = '<div class="pp-col">' +
     '<div class="card co-card"><b class="co-card-title">Внешний вид</b>' +
-      '<b class="fx-title" style="margin-top:0;">Тема</b><div class="theme-cards">'+themeCard("dark","Тёмная","moon")+themeCard("light","Светлая","sun")+themeCard("depth","Глубина","sparkle")+'</div>' +
+      '<b class="fx-title" style="margin-top:0;">Тема</b><div class="theme-cards">'+themeCard("dark","Тёмная","moon")+themeCard("light","Светлая","sun")+themeCard("depth","Глубина","sparkle")+themeCard("stars","Созвездие","star")+themeCard("cells","Клетки","eye")+'</div>' +
       '<b class="fx-title">Анимация главной</b><div class="fx-cards">' + HOME_FX.map(function(x){
         var on = homeFx()===x[0], text = me.role!=="student" && HOME_FX_STAFF_TEXT[x[0]] ? HOME_FX_STAFF_TEXT[x[0]] : x[2];
         return '<button type="button" class="fx-card'+(on?' on':'')+'" data-action="set-home-fx" data-fx="'+x[0]+'"><span class="fx-prev '+(x[0]==="live"?"fxp-cascade fxp-light":"fxp-"+x[0])+'"><i></i><i></i><i></i></span><b>'+x[1]+(on?' <em>выбрана</em>':'')+'</b><span>'+text+'</span></button>';
