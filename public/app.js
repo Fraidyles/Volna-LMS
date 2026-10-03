@@ -2078,7 +2078,7 @@ function qeNumber(base, obj){
   var pre = base ? base+"." : "";
   return '<div class="qe-num">' + qeField('Верный ответ', pre+'answer', obj.answer, { num:true, ph:'40' }) + qeField('Допуск ±', pre+'tolerance', obj.tolerance, { num:true, ph:'0' }) +
     qeField('Единица', pre+'unit', obj.unit, { ph:'лет, мг, нмоль/л…' }) + '</div>' +
-    '<p class="hint">Засчитывается всё, что попадает в «ответ ± допуск». Можно писать через запятую: 8,5.</p>';
+    '<p class="hint">Засчитывается всё, что попадает в «ответ ± допуск»; дробный ответ можно округлить до целого (66,7 → 66 или 67). Для оценок и статистики ставьте допуск около 5%. Можно писать через запятую: 8,5.</p>';
 }
 function renderQuizEditorModal(){
   var e = quizEditor, t = e.type || "single";
