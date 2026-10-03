@@ -2006,37 +2006,48 @@ body.qz-ord-dragging{cursor:grabbing;user-select:none;-webkit-user-select:none;}
 .qz-ord-hint-g svg{width:.75rem;height:.75rem;}
 @media (max-width:640px){ .qz-ord-item{gap:.5rem;padding:.5rem .625rem .5rem .375rem;} .qz-ord-text{font-size:.875rem;} .qz-ord-grip{flex-basis:2rem;height:2.75rem;} .qz-ord-n{flex-basis:1.5rem;height:1.5rem;font-size:.75rem;} }
 /* сопоставление */
-.qz-mhead{display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap;margin:0 0 1rem;}
+.qz-mhead{display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin:0 0 1.125rem;}
 .qz-mhint{font-size:.9375rem;color:var(--muted);transition:color .2s;}
-.qz-mhint.act{color:var(--ink);font-weight:600;}
-.qz-mcount{font-size:.75rem;font-weight:700;letter-spacing:.02em;color:var(--muted);padding:.25rem .625rem;border-radius:1rem;background:color-mix(in srgb,var(--ink) 6%,transparent);}
-.qz-mx{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 3.5rem;}
+.qz-mhint.act{color:var(--ink);}
+.qz-mcount{flex-shrink:0;font-size:.8125rem;color:var(--muted);font-variant-numeric:tabular-nums;}
+.qz-mcount b{color:var(--ink);font-weight:700;}
+.qz-mx{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 4.5rem;}
 .qz-mcol{display:flex;flex-direction:column;gap:.625rem;position:relative;z-index:1;}
-.qz-mwires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:visible;}
-.qz-mwires path{fill:none;stroke:color-mix(in srgb,var(--primary) 55%,transparent);stroke-width:1.5;stroke-linecap:round;}
-.qz-mwires circle{fill:var(--primary);}
-.qz-mc{display:flex;align-items:center;gap:.75rem;width:100%;min-height:3.5rem;padding:.75rem 1rem;border-radius:1rem;text-align:left;cursor:pointer;
-  font:500 .9375rem/1.35 var(--sans);color:var(--ink);border:1px solid var(--line-2);background:color-mix(in srgb,var(--surface-2) 75%,transparent);
-  transition:border-color .2s,background .2s,box-shadow .2s,transform .15s;}
-.qz-mc:hover{border-color:color-mix(in srgb,var(--primary) 50%,transparent);}
-.qz-mc:active{transform:scale(.985);}
-.qz-mc:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 35%,transparent);}
+.qz-mwires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2;overflow:visible;}
+.qz-mwires path{fill:none;stroke:url(#qzmg);stroke-width:1.75;stroke-linecap:round;}
+/* карточка: стекло без рамки, у внутреннего края — «разъём» */
+.qz-mc{position:relative;display:flex;align-items:center;gap:.875rem;width:100%;min-height:3.5rem;padding:.875rem 1.25rem;border-radius:1rem;text-align:left;cursor:pointer;
+  font:500 .9375rem/1.4 var(--sans);color:var(--ink);border:1px solid transparent;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--ink) 6%,transparent),color-mix(in srgb,var(--ink) 3%,transparent));
+  box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 7%,transparent);transition:border-color .2s,background .2s,box-shadow .2s;}
+.qz-mc:hover{border-color:color-mix(in srgb,var(--ink) 14%,transparent);}
+.qz-mc:focus-visible{outline:none;border-color:color-mix(in srgb,var(--primary) 60%,transparent);}
 .qz-mt{flex:1;min-width:0;overflow-wrap:break-word;}
-.qz-mb{flex:0 0 1.625rem;height:1.625rem;border-radius:50%;display:grid;place-items:center;font-size:.75rem;font-weight:800;color:var(--muted);border:1.5px solid var(--line);transition:background .2s,border-color .2s,color .2s;}
-.qz-mb-empty{border-style:dashed;}
-.qz-mc.paired{border-color:color-mix(in srgb,var(--primary) 35%,var(--line-2));}
-.qz-mc.paired .qz-mb{background:var(--primary);border-color:var(--primary);color:#fff;}
-.qz-mc.sel{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 16%,var(--surface));box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 28%,transparent);}
-.qz-mc.sel .qz-mb{border-color:var(--primary);color:var(--primary);}
-/* телефон: две колонки слишком узкие — пункты списком, пары под ними плитками; связь — цвет и номер */
+.qz-mb{flex:0 0 auto;min-width:1rem;font-size:.75rem;font-weight:600;color:var(--muted-2);font-variant-numeric:tabular-nums;text-align:center;}
+.qz-mport{position:absolute;top:50%;width:.75rem;height:.75rem;margin-top:-.375rem;border-radius:50%;background:var(--surface);
+  border:1.5px solid color-mix(in srgb,var(--ink) 22%,transparent);transition:background .2s,border-color .2s,box-shadow .2s;}
+.qz-ml .qz-mport{right:-.375rem;}
+.qz-mr .qz-mport{left:-.375rem;}
+.qz-mc:hover .qz-mport{border-color:color-mix(in srgb,var(--primary) 70%,transparent);}
+/* в паре */
+.qz-mc.paired{background:linear-gradient(180deg,color-mix(in srgb,var(--primary) 10%,transparent),color-mix(in srgb,var(--primary) 4%,transparent));border-color:color-mix(in srgb,var(--primary) 22%,transparent);}
+.qz-mc.paired .qz-mport{background:var(--primary);border-color:var(--primary);}
+.qz-mc.paired .qz-mb{color:color-mix(in srgb,var(--primary) 70%,var(--ink));}
+/* выбрана — ждёт пару */
+.qz-mc.sel{border-color:color-mix(in srgb,var(--primary) 70%,transparent);background:linear-gradient(180deg,color-mix(in srgb,var(--primary) 16%,transparent),color-mix(in srgb,var(--primary) 7%,transparent));}
+.qz-mc.sel .qz-mport{background:var(--primary);border-color:var(--primary);box-shadow:0 0 0 4px color-mix(in srgb,var(--primary) 22%,transparent),0 0 .875rem var(--primary);}
+:root[data-theme="light"] .qz-mc{background:var(--surface);border-color:var(--line-2);box-shadow:0 1px 2px rgba(20,10,40,.05);}
+:root[data-theme="light"] .qz-mc.paired,:root[data-theme="light"] .qz-mc.sel{background:color-mix(in srgb,var(--primary) 7%,var(--surface));}
+/* телефон: пункты списком, ответы под ними; связь — номер */
 @media (max-width:640px){
   .qz-mx{grid-template-columns:minmax(0,1fr);gap:1.125rem;}
-  .qz-mwires{display:none;}
+  .qz-mwires,.qz-mport{display:none;}
   .qz-mcol:last-of-type{flex-direction:row;flex-wrap:wrap;gap:.5rem;padding-top:1rem;border-top:1px dashed var(--line);}
   .qz-mcol:last-of-type::before{content:"Пары";flex-basis:100%;font-size:.6875rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2);}
-  .qz-mr{width:auto;flex:1 1 auto;min-height:2.875rem;padding:.5rem .75rem;}
-  .qz-mc{gap:.625rem;font-size:.875rem;}
-  .qz-mb{flex-basis:1.5rem;height:1.5rem;font-size:.6875rem;}
+  .qz-mr{width:auto;flex:1 1 auto;min-height:2.875rem;padding:.5rem .875rem;}
+  .qz-mc{gap:.625rem;font-size:.875rem;padding:.75rem 1rem;}
+  .qz-mc .qz-mb{min-width:1.375rem;height:1.375rem;border-radius:50%;display:grid;place-items:center;font-size:.6875rem;}
+  .qz-mc.paired .qz-mb{background:var(--primary);color:#fff;}
 }
 /* клинический случай */
 .qz-card.is-case .qz-q{font-size:1.0625rem;margin-bottom:1rem;}

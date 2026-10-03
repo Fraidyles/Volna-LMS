@@ -3924,7 +3924,7 @@ function qzOrder(key, q, val){
   }).join("") + '</div>';
 }
 // «Сопоставление»: две колонки. Нажимаешь пункт слева, затем его пару справа (или
-// наоборот) — обе карточки получают номер пункта (один цвет платформы), между ними
+// наоборот) — карточки соединяет линия между «разъёмами» на их краях, между ними
 // линия (рисует qzMatchWires после render). Нажатие на связанную карточку
 // разъединяет пару и выбирает её заново.
 var qzMatchSel = null; // { key, path, side:"l"|"r", v }
@@ -3935,20 +3935,20 @@ function qzMatch(key, q, val){
   var total = (q.left||[]).length, done = Object.keys(val).length;
   var attr = ' data-key="'+key+'" data-path="'+q.id+'"';
   var hint = sel ? (sel.side==="l" ? 'Теперь выберите пару для «'+escapeHtml((q.left||[])[sel.v]||"")+'»' : 'Теперь выберите, к чему относится «'+escapeHtml(((q.right||[]).find(function(r){ return r.token===sel.v; })||{}).text||"")+'»')
-    : (done===total ? 'Все пары собраны — нажмите на карточку, чтобы перевыбрать' : 'Нажмите пункт, затем его пару — они окрасятся одним цветом');
+    : (done===total ? 'Все пары собраны — нажмите на карточку, чтобы перевыбрать' : 'Нажмите пункт, затем его пару');
   var left = (q.left||[]).map(function(l, li){
     var on = val[li]!=null;
     var isSel = sel && sel.side==="l" && sel.v===li;
     return '<button type="button" class="qz-mc qz-ml'+(on?' paired':'')+(isSel?' sel':'')+'"'+' data-action="qm-l" data-l="'+li+'" data-m="l'+li+'"'+attr+' aria-pressed="'+(isSel?'true':'false')+'">' +
-      '<span class="qz-mb">'+(li+1)+'</span><span class="qz-mt">'+escapeHtml(l)+'</span></button>';
+      '<span class="qz-mb">'+(li+1)+'</span><span class="qz-mt">'+escapeHtml(l)+'</span><span class="qz-mport"></span></button>';
   }).join("");
   var right = (q.right||[]).map(function(r){
     var li = owner[r.token], on = li!=null;
     var isSel = sel && sel.side==="r" && sel.v===r.token;
     return '<button type="button" class="qz-mc qz-mr'+(on?' paired':'')+(isSel?' sel':'')+'"'+' data-action="qm-r" data-t="'+r.token+'" data-m="'+(on?'r'+li:'')+'"'+attr+' aria-pressed="'+(isSel?'true':'false')+'">' +
-      '<span class="qz-mt">'+escapeHtml(r.text)+'</span>'+(on?'<span class="qz-mb">'+(li+1)+'</span>':'<span class="qz-mb qz-mb-empty"></span>')+'</button>';
+      '<span class="qz-mport"></span><span class="qz-mt">'+escapeHtml(r.text)+'</span><span class="qz-mb">'+(on?(li+1):'')+'</span></button>';
   }).join("");
-  return '<div class="qz-mhead"><span class="qz-mhint'+(sel?' act':'')+'">'+hint+'</span><span class="qz-mcount">Связано '+done+' из '+total+'</span></div>' +
+  return '<div class="qz-mhead"><span class="qz-mhint'+(sel?' act':'')+'">'+hint+'</span><span class="qz-mcount"><b>'+done+'</b> / '+total+'</span></div>' +
     '<div class="qz-mx"'+attr+'><div class="qz-mcol">'+left+'</div><div class="qz-mcol">'+right+'</div><svg class="qz-mwires" aria-hidden="true"></svg></div>';
 }
 // Линии между парами — по реальным координатам карточек.
@@ -3958,11 +3958,11 @@ function qzMatchWires(){
     svg.setAttribute("viewBox", "0 0 "+br.width+" "+br.height);
     box.querySelectorAll('.qz-ml.paired').forEach(function(lc){
       var m = lc.getAttribute("data-m").slice(1), rc = box.querySelector('.qz-mr[data-m="r'+m+'"]'); if(!rc) return;
-      var a = lc.getBoundingClientRect(), b = rc.getBoundingClientRect();
-      var x1 = a.right-br.left, y1 = a.top+a.height/2-br.top, x2 = b.left-br.left, y2 = b.top+b.height/2-br.top, dx = (x2-x1)/2;
-      out += '<path d="M'+x1+' '+y1+' C'+(x1+dx)+' '+y1+' '+(x2-dx)+' '+y2+' '+x2+' '+y2+'"/><circle cx="'+x1+'" cy="'+y1+'" r="3"/><circle cx="'+x2+'" cy="'+y2+'" r="3"/>';
+      var a = lc.querySelector(".qz-mport").getBoundingClientRect(), b = rc.querySelector(".qz-mport").getBoundingClientRect();
+      var x1 = a.left+a.width/2-br.left, y1 = a.top+a.height/2-br.top, x2 = b.left+b.width/2-br.left, y2 = b.top+b.height/2-br.top, dx = (x2-x1)/2;
+      out += '<path d="M'+x1+' '+y1+' C'+(x1+dx)+' '+y1+' '+(x2-dx)+' '+y2+' '+x2+' '+y2+'"/>';
     });
-    svg.innerHTML = out;
+    svg.innerHTML = '<defs><linearGradient id="qzmg" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="'+br.width+'" y2="0"><stop offset="0" stop-color="var(--primary)"/><stop offset="1" stop-color="color-mix(in srgb,var(--primary) 55%,var(--rose))"/></linearGradient></defs>' + out;
   });
 }
 window.addEventListener("resize", qzMatchWires);
