@@ -21,7 +21,7 @@ const LESSON_QUIZ_EXTRA = [
     right: ["Уильямс", "Медевар", "Кирквуд"] },
   { id: "l1-q7", lessonId: "l1", type: "number",
     question: "Во сколько миллиардов долларов оценивался мировой рынок anti-age медицины в 2023 году?",
-    answer: 66.7, tolerance: 0.1, unit: "млрд $" },
+    answer: 66.7, tolerance: 3.3, unit: "млрд $" },  // оценка рынка: засчитываем ±5% (≈63–70)
   { id: "l1-q8", lessonId: "l1", type: "match",
     question: "Сопоставьте longevity-хаб и то, чем он известен",
     options: ["Швейцария, Испания, Италия", "Греция", "Китай, Малайзия, Сингапур"],

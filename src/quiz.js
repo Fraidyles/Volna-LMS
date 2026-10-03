@@ -165,9 +165,15 @@ function gradeChoice(type, options, correct, answer) {
   return { score: cs.length ? Math.max(0, (hits - wrong) / cs.length) : 0, chosen, correct: cs };
 }
 
+// Число засчитывается, если попало в допуск. Сверх допуска принимаем округление
+// дробного ответа до целого (66.7 → 66 или 67): врачи пишут «примерно 67», и
+// отказывать в этом из-за десятых — придирка, а не проверка знаний.
 function gradeNumber(range, answer) {
   const chosen = parseNum(answer);
-  const ok = chosen !== null && chosen >= range.min - 1e-9 && chosen <= range.max + 1e-9;
+  const exact = range.answer != null ? Number(range.answer) : null;
+  const inRange = chosen !== null && chosen >= range.min - 1e-9 && chosen <= range.max + 1e-9;
+  const rounded = chosen !== null && exact !== null && !Number.isInteger(exact) && Number.isInteger(chosen) && Math.abs(chosen - exact) < 1;
+  const ok = inRange || rounded;
   return { score: ok ? 1 : 0, chosen, correct: { answer: range.answer, min: range.min, max: range.max, unit: range.unit || "" } };
 }
 
