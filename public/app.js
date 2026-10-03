@@ -3924,10 +3924,9 @@ function qzOrder(key, q, val){
   }).join("") + '</div>';
 }
 // «Сопоставление»: две колонки. Нажимаешь пункт слева, затем его пару справа (или
-// наоборот) — обе карточки окрашиваются одним цветом с номером пункта, между ними
+// наоборот) — обе карточки получают номер пункта (один цвет платформы), между ними
 // линия (рисует qzMatchWires после render). Нажатие на связанную карточку
 // разъединяет пару и выбирает её заново.
-var QZ_PAIR = ["#5EDFF0","#FF8FCF","#F5C55A","#7EE69A","#B39BFF","#FF9A6B","#6FA8FF","#E7E36A"];
 var qzMatchSel = null; // { key, path, side:"l"|"r", v }
 function qzMatch(key, q, val){
   val = val || {};
@@ -3938,15 +3937,15 @@ function qzMatch(key, q, val){
   var hint = sel ? (sel.side==="l" ? 'Теперь выберите пару для «'+escapeHtml((q.left||[])[sel.v]||"")+'»' : 'Теперь выберите, к чему относится «'+escapeHtml(((q.right||[]).find(function(r){ return r.token===sel.v; })||{}).text||"")+'»')
     : (done===total ? 'Все пары собраны — нажмите на карточку, чтобы перевыбрать' : 'Нажмите пункт, затем его пару — они окрасятся одним цветом');
   var left = (q.left||[]).map(function(l, li){
-    var on = val[li]!=null, c = on ? QZ_PAIR[li % QZ_PAIR.length] : "";
+    var on = val[li]!=null;
     var isSel = sel && sel.side==="l" && sel.v===li;
-    return '<button type="button" class="qz-mc qz-ml'+(on?' paired':'')+(isSel?' sel':'')+'"'+(c?' style="--pc:'+c+'"':'')+' data-action="qm-l" data-l="'+li+'" data-m="l'+li+'"'+attr+' aria-pressed="'+(isSel?'true':'false')+'">' +
+    return '<button type="button" class="qz-mc qz-ml'+(on?' paired':'')+(isSel?' sel':'')+'"'+' data-action="qm-l" data-l="'+li+'" data-m="l'+li+'"'+attr+' aria-pressed="'+(isSel?'true':'false')+'">' +
       '<span class="qz-mb">'+(li+1)+'</span><span class="qz-mt">'+escapeHtml(l)+'</span></button>';
   }).join("");
   var right = (q.right||[]).map(function(r){
-    var li = owner[r.token], on = li!=null, c = on ? QZ_PAIR[li % QZ_PAIR.length] : "";
+    var li = owner[r.token], on = li!=null;
     var isSel = sel && sel.side==="r" && sel.v===r.token;
-    return '<button type="button" class="qz-mc qz-mr'+(on?' paired':'')+(isSel?' sel':'')+'"'+(c?' style="--pc:'+c+'"':'')+' data-action="qm-r" data-t="'+r.token+'" data-m="'+(on?'r'+li:'')+'"'+attr+' aria-pressed="'+(isSel?'true':'false')+'">' +
+    return '<button type="button" class="qz-mc qz-mr'+(on?' paired':'')+(isSel?' sel':'')+'"'+' data-action="qm-r" data-t="'+r.token+'" data-m="'+(on?'r'+li:'')+'"'+attr+' aria-pressed="'+(isSel?'true':'false')+'">' +
       '<span class="qz-mt">'+escapeHtml(r.text)+'</span>'+(on?'<span class="qz-mb">'+(li+1)+'</span>':'<span class="qz-mb qz-mb-empty"></span>')+'</button>';
   }).join("");
   return '<div class="qz-mhead"><span class="qz-mhint'+(sel?' act':'')+'">'+hint+'</span><span class="qz-mcount">Связано '+done+' из '+total+'</span></div>' +
@@ -3961,8 +3960,7 @@ function qzMatchWires(){
       var m = lc.getAttribute("data-m").slice(1), rc = box.querySelector('.qz-mr[data-m="r'+m+'"]'); if(!rc) return;
       var a = lc.getBoundingClientRect(), b = rc.getBoundingClientRect();
       var x1 = a.right-br.left, y1 = a.top+a.height/2-br.top, x2 = b.left-br.left, y2 = b.top+b.height/2-br.top, dx = (x2-x1)/2;
-      var col = getComputedStyle(lc).getPropertyValue("--pc").trim();
-      out += '<path d="M'+x1+' '+y1+' C'+(x1+dx)+' '+y1+' '+(x2-dx)+' '+y2+' '+x2+' '+y2+'" stroke="'+col+'"/><circle cx="'+x1+'" cy="'+y1+'" r="3.5" fill="'+col+'"/><circle cx="'+x2+'" cy="'+y2+'" r="3.5" fill="'+col+'"/>';
+      out += '<path d="M'+x1+' '+y1+' C'+(x1+dx)+' '+y1+' '+(x2-dx)+' '+y2+' '+x2+' '+y2+'"/><circle cx="'+x1+'" cy="'+y1+'" r="3"/><circle cx="'+x2+'" cy="'+y2+'" r="3"/>';
     });
     svg.innerHTML = out;
   });
