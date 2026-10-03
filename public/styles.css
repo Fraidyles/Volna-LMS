@@ -3048,3 +3048,14 @@ mark.hl.hl-flash{animation:hlFlash 1.6s ease;}
   .tour-txt.in{animation:none;}
   .tour-scan,.tour-sheen{display:none;}
 }
+
+/* ===== ПРОФИЛЬ И НАСТРОЙКИ: строка разделов под шапкой ===== */
+.acc-nav{display:flex;gap:.5rem;margin:1.125rem 0 .875rem;overflow-x:auto;scrollbar-width:none;}
+.acc-nav::-webkit-scrollbar{display:none;}
+.acc-chip{display:inline-flex;align-items:center;gap:.4375rem;flex-shrink:0;padding:.5rem .875rem;border-radius:999px;cursor:pointer;
+  font:600 .8125rem var(--sans);color:var(--ink);background:color-mix(in srgb,var(--ink) 5%,transparent);border:1px solid color-mix(in srgb,var(--ink) 10%,transparent);transition:background .2s,border-color .2s;}
+.acc-chip:hover{background:color-mix(in srgb,var(--primary) 14%,transparent);border-color:color-mix(in srgb,var(--primary) 45%,transparent);}
+.acc-chip .ic{color:var(--primary);}
+.acc-grid .co-card{scroll-margin-top:1.25rem;}
+.acc-grid{align-items:start;}
+@media (min-width:601px){.acc-grid .set-row .btn{white-space:nowrap;flex-shrink:0;}}

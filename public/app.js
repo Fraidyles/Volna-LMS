@@ -2717,7 +2717,7 @@ function renderSidebar(){
     top = '<div class="sbx-ring" style="--p:'+pct+'%"><b>'+pct+'%</b></div>' +
       '<div class="sbx-title"><strong>'+escapeHtml(course.course.title)+'</strong><span>'+doneIds.length+' из '+total+' '+ruPluralClient(total,"урока","уроков","уроков")+'</span></div>';
     var curIdx = -1; course.lessons.forEach(function(l,i){ if(curIdx<0 && doneIds.indexOf(l.id)===-1 && !l.hiddenForMe && !l.dripLockedForMe) curIdx = i; });
-    if(!previewMode && !(course.locked||{}).locked && studentState.tab!=="lesson"){
+    if(!previewMode && !(course.locked||{}).locked && studentState.tab!=="lesson" && studentState.tab!=="course"){
       if(curIdx>=0){
         var nl = course.lessons[curIdx];
         next = '<button type="button" class="sbx-next" data-action="open-lesson-at" data-idx="'+curIdx+'" title="Продолжить: '+escapeHtml(nl.title)+'"><span class="sbx-next-k">Продолжить'+(nl.duration?' · '+escapeHtml(nl.duration):'')+'</span><b>'+escapeHtml(nl.title)+'</b><span class="sbx-go">'+icon("go")+'</span></button>';
@@ -2736,7 +2736,7 @@ function renderSidebar(){
     var gam = view==="student" && course ? (course.gamification||{}) : null;
     var sub = gam ? (gam.currentStreak ? icon("flame","sbx-flame")+gam.currentStreak+' '+ruPluralClient(gam.currentStreak,"день","дня","дней")+' · ' : '')+(gam.points||0)+' очков' : escapeHtml(({ super_admin:"Главный администратор", admin:"Администратор", curator:"Куратор" })[me.role]||"");
     meRow = '<div class="sbx-me">' +
-      '<a href="?tab=profile" class="sbx-who'+(navKeyNow==="profile"?' active':'')+'" data-action="sidebar-nav" data-key="profile" title="Мой профиль">'+userAvatar(me,"sbx-av")+'<span class="sbx-who-t"><b>'+escapeHtml(me.name||"")+'</b><span>'+sub+'</span></span></a>' +
+      '<a href="?tab=profile" class="sbx-who'+(navKeyNow==="profile"||navKeyNow==="settings"?' active':'')+'" data-action="sidebar-nav" data-key="profile" title="Профиль и настройки">'+userAvatar(me,"sbx-av")+'<span class="sbx-who-t"><b>'+escapeHtml(me.name||"")+'</b><span>'+sub+'</span></span></a>' +
       '<span class="sbx-btns"><a href="?tab=settings" class="sbx-ib'+(navKeyNow==="settings"?' on':'')+'" data-action="sidebar-nav" data-key="settings" title="Настройки">'+icon("gear")+'</a>' +
       '<button type="button" class="sbx-ib" data-action="logout" title="Выйти">'+icon("logout")+'</button></span></div>';
   }
@@ -3096,9 +3096,7 @@ function renderStudentShell(){
     content.appendChild(renderNotificationsPage());
   } else if(studentState.tab === "telegram" && !previewMode){
     content.appendChild(renderTelegramPage());
-  } else if(studentState.tab === "settings" && !previewMode){
-    content.appendChild(renderSettingsPage());
-  } else if(studentState.tab === "profile" && !previewMode){
+  } else if((studentState.tab === "settings" || studentState.tab === "profile") && !previewMode){
     content.appendChild(renderMyProfilePage());
   } else {
     content.appendChild(renderStudentHome());
@@ -4724,9 +4722,10 @@ function roleCapabilities(role){
 }
 
 function renderMyProfilePage(){
-  // Шапка-обложка с фото (можно загрузить/убрать), именем, ролью и ключевыми
-  // цифрами; ниже — редактирование данных и «что доступно роли». Пароль и
-  // сеансы — в «Настройках».
+  // «Профиль и настройки» — одна страница: шапка-обложка с фото, именем, ролью и
+  // ключевыми цифрами; под ней строка разделов, ниже — личные данные и внешний вид
+  // (слева), безопасность, знакомство с платформой и доступы роли (справа).
+  // «Настройки» в меню ведут сюда же, сразу к «Внешнему виду».
   var isStudent = me.role==="student";
   var caps = roleCapabilities(me.role);
   var stats = [];
@@ -4750,7 +4749,7 @@ function renderMyProfilePage(){
       '<div class="profile-photo">'+userAvatar(me, "profile-av")+
         '<button type="button" class="profile-photo-btn" data-action="pick-avatar" title="Загрузить фото">'+icon("camera","ic-sm")+'</button>' +
         '<input type="file" id="avatarFileInput" accept="image/png,image/jpeg,image/webp" hidden></div>' +
-      '<div class="profile-id"><span class="profile-kicker">Мой профиль</span><h1>'+escapeHtml(me.name||"")+'</h1>' +
+      '<div class="profile-id"><span class="profile-kicker">Профиль и настройки</span><h1>'+escapeHtml(me.name||"")+'</h1>' +
         '<div class="profile-tags"><span class="team-role">'+escapeHtml(roleLabel(me.role))+'</span>' +
           specNamesList.map(function(n){ return '<span class="profile-chip">'+escapeHtml(n)+'</span>'; }).join("") +
           (myStream?'<span class="profile-chip">'+escapeHtml(myStream.name)+'</span>':'') + '</div>' +
@@ -4761,8 +4760,11 @@ function renderMyProfilePage(){
       (stats.length ? '<div class="profile-stats">'+stats.map(function(x){ return '<div><b>'+x[0]+'</b><span>'+x[1]+'</span></div>'; }).join("")+'</div>' : '') +
     '</div></div>';
 
-  html += '<div class="team-row" style="margin-top:1.125rem;">';
-  html += '<div class="team-cell"><div class="card co-card"><b class="co-card-title">Личные данные</b>' +
+  var setCards = settingsCards();
+  html += '<nav class="acc-nav" aria-label="Разделы">' + [["acc-personal","user","Личные данные"],["acc-look","sparkle","Внешний вид"],["acc-security","shield","Безопасность"],["acc-access","check","Доступы"]].map(function(x){
+    return '<button type="button" class="acc-chip" data-action="acc-jump" data-to="'+x[0]+'">'+icon(x[1],"ic-sm")+x[2]+'</button>'; }).join("") + '</nav>';
+  html += '<div class="pp-grid acc-grid"><div class="pp-col">';
+  html += '<div class="card co-card" id="acc-personal"><b class="co-card-title">Личные данные</b>' +
     '<form id="profileEditorForm">' +
       '<div class="field"><label>Имя и фамилия</label><input class="input" id="profileEditorName" required value="'+escapeHtml(profileEditor.name)+'"></div>' +
       (isStudent ? renderProfileSpecializationFields() : '') +
@@ -4774,14 +4776,13 @@ function renderMyProfilePage(){
       '<button class="btn btn-primary" type="submit">Сохранить изменения</button>' +
     '</form>' +
     (isStudent ? renderMyProductBlock() : '') +
-  '</div></div>';
-  html += '<div class="team-cell"><div class="card co-card"><b class="co-card-title" style="margin-bottom:.25rem;">Ваши доступы</b>' +
+  '</div>' + setCards[0] + '</div><div class="pp-col">' + setCards[2] + setCards[1];
+  html += '<div class="card co-card" id="acc-access"><b class="co-card-title" style="margin-bottom:.25rem;">Ваши доступы</b>' +
     '<p class="hint" style="margin:0 0 .625rem;">Что доступно при роли «'+escapeHtml(roleLabel(me.role))+'».</p>';
   caps.forEach(function(c){
     html += '<div class="cap-row'+(c.allowed?'':' off')+'"><span class="cap-dot">'+(c.allowed?icon("check","ic-sm"):'')+'</span><span>'+escapeHtml(c.label)+'</span></div>';
   });
   if(isStudent) html += renderMyOrdersBlock();
-  html += '<button class="btn btn-sm btn-ghost btn-block" style="margin-top:.875rem;" data-action="sidebar-nav" data-key="settings">Пароль, сеансы и тема — в «Настройках» →</button>';
   html += '</div></div></div></div>';
   return el(html);
 }
@@ -4839,9 +4840,9 @@ function homeFx(){
 }
 // Классы анимации на сетке главной: объединённый вариант = каскад + живой свет.
 function homeFxClass(){ return homeFx()==="live" ? "fx-cascade fx-light" : "fx-off"; }
-function renderSettingsPage(){
-  // Слева — внешний вид (превью тем) и безопасность (пароль, сеансы с устройствами),
-  // справа — карточка аккаунта. Сеансы подгружаются лениво при первом открытии.
+// Карточки настроек для страницы «Профиль и настройки»: [внешний вид, знакомство, безопасность].
+// Сеансы подгружаются лениво при первом открытии.
+function settingsCards(){
   if(!mySessionsLoaded && !mySessionsLoading){ mySessionsLoading = true; loadMySessions().then(function(){ mySessionsLoading = false; render(); }); }
   function themeCard(key, label, ic){
     var on = getTheme()===key;
@@ -4849,8 +4850,7 @@ function renderSettingsPage(){
       '<span class="theme-prev '+key+'"><i></i><i></i><i></i></span>' +
       '<span class="theme-label">'+icon(ic,"ic-sm")+label+(on?'<em>выбрана</em>':'')+'</span></button>';
   }
-  var left = '<div class="pp-col">' +
-    '<div class="card co-card"><b class="co-card-title">Внешний вид</b>' +
+  var left = '<div class="card co-card" id="acc-look"><b class="co-card-title">Внешний вид</b>' +
       '<b class="fx-title" style="margin-top:0;">Тема</b><div class="theme-cards">'+themeCard("dark","Тёмная","moon")+themeCard("light","Светлая","sun")+themeCard("depth","Глубина","sparkle")+themeCard("stars","Созвездие","star")+themeCard("cells","Клетки","eye")+'</div>' +
       '<b class="fx-title">Анимация главной</b><div class="fx-cards">' + HOME_FX.map(function(x){
         var on = homeFx()===x[0], text = me.role!=="student" && HOME_FX_STAFF_TEXT[x[0]] ? HOME_FX_STAFF_TEXT[x[0]] : x[2];
@@ -4860,9 +4860,9 @@ function renderSettingsPage(){
         var on = homeBg()===x[0];
         return '<button type="button" class="fx-card'+(on?' on':'')+'" data-action="set-home-bg" data-bg="'+x[0]+'"><span class="fx-prev fxp-bg fxp-'+x[0]+'"><i></i><i></i><i></i></span><b>'+x[1]+(on?' <em>выбран</em>':'')+'</b><span>'+x[2]+'</span></button>';
       }).join("") + '</div></div>' +
-    (me.role==="student" && !previewMode && !me.impersonator ? '<div class="card co-card"><b class="co-card-title">Знакомство с платформой</b>' +
+    '\u0001' + (me.role==="student" && !previewMode && !me.impersonator ? '<div class="card co-card" id="acc-tour"><b class="co-card-title">Знакомство с платформой</b>' +
       '<div class="set-row" style="border-bottom:none;"><div><b>Как всё устроено</b><span>Короткий показ главной и страницы урока — меньше минуты.</span></div><button class="btn btn-sm btn-ghost" data-action="tour-replay">Пройти заново</button></div></div>' : '') +
-    '<div class="card co-card"><b class="co-card-title">Безопасность</b>' +
+    '\u0001' + '<div class="card co-card" id="acc-security"><b class="co-card-title">Безопасность</b>' +
       '<div class="set-row"><div><b>Пароль</b><span>Меняйте пароль, если входили с чужого устройства.</span></div><button class="btn btn-sm btn-ghost" data-action="open-change-password">Сменить пароль</button></div>' +
       '<div class="set-row" style="border-bottom:none;"><div><b>Активные сеансы</b><span>С каких устройств входили в аккаунт.</span></div><button class="btn btn-sm btn-ghost" data-action="logout-everywhere">Выйти со всех устройств</button></div>' +
       '<div class="set-sessions">';
@@ -4872,26 +4872,15 @@ function renderSettingsPage(){
     left += '<div class="set-session"><span class="set-dev">'+icon("user","ic-sm")+'</span><div><b>'+escapeHtml(se.device||"Устройство")+(i===0?' <em>это устройство</em>':'')+'</b>' +
       '<span>'+escapeHtml(se.ip||"—")+' · '+fmtDateShort(se.createdAt)+', '+fmtTime(se.createdAt)+'</span></div></div>';
   });
-  left += '</div></div></div>';
-  var right = '<div class="pp-col"><div class="card co-card set-account">' +
-    userAvatar(me,'set-av') +
-    '<b class="set-name">'+escapeHtml(me.name||"")+'</b><span class="set-mail">'+escapeHtml(me.email||"")+'</span>' +
-    '<span class="team-role" style="margin-top:.375rem;">'+escapeHtml(roleLabel(me.role))+'</span>' +
-    '<div class="set-facts">' +
-      (me.phone?'<div><span>Телефон</span><b>'+escapeHtml(me.phone)+'</b></div>':'') +
-      (me.workplace?'<div><span>Место работы</span><b>'+escapeHtml(me.workplace)+'</b></div>':'') +
-      (me.created_at?'<div><span>На платформе с</span><b>'+fmtDateShort(me.created_at)+'</b></div>':'') +
-    '</div>' +
-    '<button class="btn btn-sm btn-ghost btn-block" style="margin-top:auto;" data-action="sidebar-nav" data-key="profile">Открыть профиль →</button>' +
-  '</div></div>';
-  return el('<div class="page-wide pp-grid">'+left+right+'</div>');
+  left += '</div></div>';
+  return left.split('\u0001');
 }
 
 /* ============================= РЕНДЕР: ПЕРСОНАЛ ============================= */
 var STAFF_PAGE_TITLES = { home:"Главная", students:"Врачи", dashboard:"Аналитика", calendar:"Расписание", courses:"Курсы",
   materials:"Уроки", glossary:"Термины", protocols:"Протоколы", assignments:"Проверка заданий", feed:"Лента ответов", surveys:"Анкеты и опросы",
   orders:"Заказы и оплаты", products:"Продукты", team:"Команда", audit:"Журнал действий", specializations:"Специализации",
-  telegram:"Telegram", notifications:"Уведомления", settings:"Настройки", profile:"Мой профиль" };
+  telegram:"Telegram", notifications:"Уведомления", settings:"Профиль и настройки", profile:"Профиль и настройки" };
 // Разделы, где данные зависят от выбранного курса (запросы с courseId); в остальных
 // (заказы, продукты, анкеты, команда, журнал, Telegram, профиль, настройки, сами
 // курсы — у них выбор плиткой) переключатель курса только занимал место.
@@ -4910,7 +4899,7 @@ function renderStaffShell(){
   if(staffState.mainTab === "modules"){ staffState.mainTab = "materials"; staffState.navKey = "materials"; }
   // У страницы урока и протокола своя шапка с «хлебными крошками» — общий
   // заголовок и переключатель курса там лишние.
-  var ownPage = (staffState.mainTab==="materials" && staffState.lessonPageId) || (staffState.mainTab==="protocols" && protocolEditor.open) || (staffState.mainTab==="glossary" && glossaryAdmin.edit);
+  var ownPage = staffState.mainTab==="profile" || staffState.mainTab==="settings" || (staffState.mainTab==="materials" && staffState.lessonPageId) || (staffState.mainTab==="protocols" && protocolEditor.open) || (staffState.mainTab==="glossary" && glossaryAdmin.edit);
   if(!ownPage){
     // Заголовок — название раздела (раньше на каждом экране было «Главный
     // администратор»: роль не подсказывает, где ты и что здесь делать).
@@ -4939,9 +4928,7 @@ function renderStaffShell(){
     content.appendChild(renderAuditLogTab());
   } else if(staffState.mainTab === "notifications"){
     content.appendChild(renderStaffNotificationsPage());
-  } else if(staffState.mainTab === "settings"){
-    content.appendChild(renderSettingsPage());
-  } else if(staffState.mainTab === "profile"){
+  } else if(staffState.mainTab === "settings" || staffState.mainTab === "profile"){
     content.appendChild(renderMyProfilePage());
   } else if(staffState.mainTab === "assignments"){
     content.appendChild(renderAssignmentsTab());
@@ -8682,6 +8669,7 @@ function wireEvents(root){
     if(action==="toggle-mobile-nav"){ mobileNavOpen = !mobileNavOpen; render(); return; }
     if(action==="close-mobile-nav"){ mobileNavOpen = false; render(); return; }
     if(action==="sb-main-menu" || action==="sb-lessons"){ studentState.sbMainMenu = action==="sb-main-menu"; render(); return; }
+    if(action==="acc-jump"){ var accT = document.getElementById(t.getAttribute("data-to")); if(accT) accT.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block:"start" }); return; }
     if(action==="sidebar-nav"){ studentState.sbMainMenu = false;
       // Пункты меню — теперь настоящие <a href="?tab=..."> (см. sidebarItem), чтобы
       // по ним работало ПКМ → «Открыть в новой вкладке» и Ctrl/⌘+клик — в этих
@@ -8689,6 +8677,8 @@ function wireEvents(root){
       if(e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
       e.preventDefault();
       await navigateToTab(t.getAttribute("data-key"));
+      // «Настройки» открывают «Профиль и настройки» сразу на «Внешнем виде».
+      if(t.getAttribute("data-key")==="settings"){ var accLook = document.getElementById("acc-look"); if(accLook) accLook.scrollIntoView({ block:"start" }); }
       return;
     }
     if(action==="open-course"){
