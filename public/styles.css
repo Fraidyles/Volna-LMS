@@ -1059,7 +1059,7 @@ a.btn{text-decoration:none;}
 
 /* ---------------- Настройки ---------------- */
 .theme-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.125rem,1fr));gap:.75rem;}
-.theme-card{border:.0938rem solid var(--line);border-radius:var(--radius-m);background:transparent;padding:.625rem;cursor:pointer;display:flex;flex-direction:column;gap:.625rem;text-align:left;font-family:var(--sans);transition:border-color .15s;}
+.theme-card{position:relative;min-width:0;border:.0938rem solid var(--line);border-radius:var(--radius-m);background:transparent;padding:.625rem;cursor:pointer;display:flex;flex-direction:column;gap:.625rem;text-align:left;font-family:var(--sans);transition:border-color .15s;}
 .theme-card:hover{border-color:color-mix(in srgb,var(--primary) 45%,transparent);}
 .theme-card.on{border-color:var(--primary);box-shadow:0 0 0 .1875rem color-mix(in srgb,var(--primary) 18%,transparent);}
 .theme-prev{height:4.875rem;border-radius:.75rem;padding:.625rem;display:grid;grid-template-columns:1.375rem 1fr;grid-template-rows:1fr 1fr;gap:.375rem;}
@@ -1069,8 +1069,10 @@ a.btn{text-decoration:none;}
 .theme-prev i:first-child{grid-row:span 2;}
 .theme-prev.dark i{background:#1B1B1F;} .theme-prev.dark i:nth-child(2){background:linear-gradient(90deg,#8B6BFF,#3FD0C9);opacity:.8;}
 .theme-prev.light i{background:#fff;border:1px solid #EDEDF1;} .theme-prev.light i:nth-child(2){background:linear-gradient(90deg,#6F52E0,#17A398);opacity:.75;border:none;}
-.theme-label{display:flex;align-items:center;gap:.375rem;font-size:.875rem;font-weight:600;color:var(--ink);}
-.theme-label em{margin-left:auto;font-style:normal;font-size:.75rem;font-weight:500;color:var(--primary);}
+.theme-label{display:flex;align-items:center;gap:.375rem;min-width:0;font-size:.875rem;font-weight:600;color:var(--ink);white-space:nowrap;}
+.theme-label .ic{flex-shrink:0;}
+/* «выбрана» — значок в углу превью, а не в строке названия: длинные названия тем больше не наезжают */
+.theme-label em{position:absolute;top:1.0625rem;right:1.0625rem;font-style:normal;font-size:.6563rem;font-weight:700;letter-spacing:.02em;padding:.1875rem .5rem;border-radius:1rem;color:#fff;background:var(--primary);box-shadow:0 .25rem .75rem -.25rem var(--primary);}
 .set-row{display:flex;align-items:center;justify-content:space-between;gap:.875rem;padding:.75rem 0;border-bottom:1px solid var(--line-2);}
 .set-row b{display:block;font-size:.875rem;font-weight:600;}
 .set-row span{font-size:.8125rem;color:var(--muted);}

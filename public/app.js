@@ -2664,7 +2664,12 @@ function skyStart(kind){
   var cv = document.createElement("canvas"); cv.id = "skyCanvas"; cv.setAttribute("aria-hidden", "true");
   var grain = document.createElement("div"); grain.id = "skyGrain"; grain.setAttribute("aria-hidden", "true");
   document.body.insertBefore(grain, document.body.firstChild); document.body.insertBefore(cv, document.body.firstChild);
-  var gl = null; try{ gl = cv.getContext("webgl", { antialias:false, alpha:false }); }catch(e){}
+  // Без аппаратного ускорения (программный WebGL) анимированный фон на весь экран
+  // занимает процессор настолько, что интерфейс появляется через десятки секунд —
+  // тогда рисуем один неподвижный кадр в пониженном разрешении.
+  var gl = null, slow = false;
+  try{ gl = cv.getContext("webgl", { antialias:false, alpha:false, failIfMajorPerformanceCaveat:true }); }catch(e){}
+  if(!gl){ try{ gl = cv.getContext("webgl", { antialias:false, alpha:false }); slow = !!gl; }catch(e){} }
   if(!gl){ cv.remove(); grain.remove(); document.documentElement.removeAttribute("data-sky"); return; }
   function sh(type, src){ var x = gl.createShader(type); gl.shaderSource(x, src); gl.compileShader(x); return x; }
   var pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, SKY_VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, SKY_FS[kind])); gl.linkProgram(pr);
@@ -2673,7 +2678,7 @@ function skyStart(kind){
   var b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
   var lp = gl.getAttribLocation(pr, "p"); gl.enableVertexAttribArray(lp); gl.vertexAttribPointer(lp, 2, gl.FLOAT, false, 0, 0);
   sky.u = { R:gl.getUniformLocation(pr, "R"), T:gl.getUniformLocation(pr, "T"), M:gl.getUniformLocation(pr, "M") };
-  sky.kind = kind; sky.cv = cv; sky.grain = grain; sky.gl = gl; sky.t0 = performance.now();
+  sky.kind = kind; sky.cv = cv; sky.grain = grain; sky.gl = gl; sky.slow = slow; sky.t0 = performance.now(); sky.last = 0;
   sky.raf = requestAnimationFrame(skyFrame);
 }
 function skyStop(){
@@ -2685,10 +2690,10 @@ function skyStop(){
 function skyFrame(now){
   sky.raf = 0;
   if(!sky.gl) return;
-  var still = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var still = sky.slow || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
   if(!document.hidden && (now - sky.last >= 33 || !sky.last)){
     sky.last = now;
-    var gl = sky.gl, d = Math.min(1.5, window.devicePixelRatio||1), W = Math.round(innerWidth*d), H = Math.round(innerHeight*d);
+    var gl = sky.gl, d = sky.slow ? .5 : Math.min(1.5, window.devicePixelRatio||1), W = Math.round(innerWidth*d), H = Math.round(innerHeight*d);
     if(sky.cv.width!==W || sky.cv.height!==H){ sky.cv.width = W; sky.cv.height = H; gl.viewport(0, 0, W, H); }
     var tg = sky.target; sky.mouse = tg[0]<0 ? [-1,-1] : (sky.mouse[0]<0 ? tg.slice() : [sky.mouse[0]+(tg[0]-sky.mouse[0])*.08, sky.mouse[1]+(tg[1]-sky.mouse[1])*.08]);
     gl.uniform2f(sky.u.R, W, H); gl.uniform1f(sky.u.T, still ? 20 : 20 + (now - sky.t0)/1000);
@@ -2700,6 +2705,8 @@ function skyFrame(now){
 }
 document.addEventListener("pointermove", function(e){ if(sky.kind) sky.target = [e.clientX, innerHeight - e.clientY]; }, { passive:true });
 document.addEventListener("visibilitychange", function(){ if(sky.gl && !sky.raf && !document.hidden) sky.raf = requestAnimationFrame(skyFrame); });
+// Неподвижный кадр (нет ускорения или «уменьшить движение») перерисовываем при смене размера окна.
+window.addEventListener("resize", function(){ if(sky.gl && !sky.raf) sky.raf = requestAnimationFrame(skyFrame); });
 
 // Переключатель в меню: светлая ↔ последняя из тёмных.
 function toggleTheme(){
