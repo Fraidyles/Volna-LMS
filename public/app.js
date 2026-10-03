@@ -1275,7 +1275,7 @@ async function runSelAction(act){
       await api("/course/lessons/"+ctx.id+"/note", { method:"PUT", body: JSON.stringify({ note: next }) });
       if(!course.progress.lesson_notes) course.progress.lesson_notes = {};
       course.progress.lesson_notes[ctx.id] = next.trim();
-      if(ta){ ta.value = next; ta.defaultValue = next; ta.scrollIntoView({ behavior:"smooth", block:"center" }); ta.classList.add("flash"); setTimeout(function(){ ta.classList.remove("flash"); }, 1200); }
+      if(ta){ var tdet = ta.closest("details"); if(tdet) tdet.open = true; ta.value = next; ta.defaultValue = next; ta.scrollIntoView({ behavior:"smooth", block:"center" }); ta.classList.add("flash"); setTimeout(function(){ ta.classList.remove("flash"); }, 1200); }
       showToast("Добавлено в заметку к уроку");
     }catch(err){ showToast(err.message); }
     return;
@@ -1680,6 +1680,7 @@ function render(){
     lessonPlyrInstance = null;
   }
   if(document.querySelector(".qz-mx")) qzMatchWires();
+  if(document.getElementById("lessonBar")){ lessonTocSpy(); lessonBarSync(); }
   if(view==="student") tourMaybeStart(); else if(tour) closeTour(true);
   syncNavHistory();
 }
@@ -3601,6 +3602,21 @@ function renderStudentMaterials(){
 // (если куратор его добавил) → поурочный «развлекательный» тест на запоминание
 // (если куратор его добавил). Оба шага опциональны — урок без видео и теста
 // работает ровно как раньше (одна кнопка "Урок пройден, далее →").
+// Лектор из первой строки урока («Урок ведёт <b>Имя Отчество Фамилия</b> — …»).
+function lessonLecturer(html){
+  var m = /Урок ведёт\s*<b>([^<]{3,80})<\/b>/.exec(html||""); if(!m) return null;
+  var parts = m[1].trim().split(/\s+/);
+  var short = parts.length>=3 ? parts[parts.length-1]+" "+parts[0][0]+". "+parts[1][0]+"." : m[1].trim();
+  var initials = (parts[0][0] + (parts.length>1 ? parts[parts.length-1][0] : "")).toUpperCase();
+  return { full:m[1].trim(), short:short, initials:initials };
+}
+// Время чтения материала: ~180 слов в минуту.
+function lxReadMin(html){
+  var words = String(html||"").replace(/<[^>]+>/g," ").split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.round(words/180));
+}
+// Неразрывный пробел после коротких слов — заголовок не оставляет «у», «в», «и» в конце строки.
+function lxNbsp(t){ return String(t||"").replace(/(^|\s)(в|у|с|к|о|и|а|на|по|из|за|до|не|от|об|для)\s/gi, "$1$2 "); }
 function lessonStagesFor(lesson){
   var stages = ["intro"];
   if(lesson.videoUrl) stages.push("video");
@@ -3683,7 +3699,7 @@ function lessonNavHtml(){
     if(i===idx && !studentState.quizMode && !isLocked){
       var ltoc = lessonToc(l.html);
       if(ltoc.length) sub = '<div class="lesson-sub">' + ltoc.map(function(x, k){
-        return '<button type="button" class="'+(x.cheat?'mut':'')+(k===0?' on':'')+'" data-action="lesson-toc" data-i="'+x.i+'">'+escapeHtml(x.title)+'</button>';
+        return '<button type="button" class="'+(x.cheat?'mut cheat':'')+(k===0?' on':'')+'" data-action="lesson-toc" data-i="'+x.i+'"><span class="lx-dot" aria-hidden="true"></span><span>'+escapeHtml(lxNbsp(x.title))+'</span></button>';
       }).join('') + '</div>';
     }
     nav += '<div class="lesson-item'+(i===idx?' active':'')+(isDone?' done':'')+'" data-action="goto-lesson" data-idx="'+i+'"'+(isLocked?' style="opacity:.45;cursor:not-allowed;"':'')+'>' +
@@ -3725,24 +3741,38 @@ function renderCoursePlayer(){
   var stage = stages.indexOf(studentState.lessonStage)!==-1 ? studentState.lessonStage : "intro";
   var isBookmarked = (course.bookmarkedLessonIds||[]).indexOf(lesson.id)!==-1;
 
-  var body = '<div class="lesson-body">' +
-    '<button class="back-link" data-action="close-course">← К курсу</button>' +
-    '<div class="lesson-head">' +
-      '<h3>'+escapeHtml(lesson.title)+'</h3>' +
-      '<button class="btn btn-sm btn-ghost lesson-save" data-action="toggle-bookmark" data-id="'+lesson.id+'" data-bookmarked="'+(isBookmarked?"1":"0")+'" title="'+(isBookmarked?"Убрать из конспекта":"Сохранить урок в конспект")+'" aria-label="'+(isBookmarked?"Убрать из конспекта":"Сохранить урок в конспект")+'">'+(isBookmarked?"★":"☆")+'<span>'+(isBookmarked?" В конспекте":" Сохранить")+'</span></button>' +
-    '</div>' +
-    '<div class="meta">Урок '+(idx+1)+' из '+course.lessons.length+' · '+escapeHtml(lesson.duration||"")+'</div>';
+  var stageLabels = { intro:"Материал", video:"Видео", quiz:"Тест", task:"Задание" };
+  var curStage = stages.indexOf(stage);
+  var saveLbl = isBookmarked ? "Убрать из конспекта" : "Сохранить урок в конспект";
+  var saveBtn = function(cls){ return '<button type="button" class="'+cls+(isBookmarked?' on':'')+'" data-action="toggle-bookmark" data-id="'+lesson.id+'" data-bookmarked="'+(isBookmarked?"1":"0")+'" title="'+saveLbl+'" aria-label="'+saveLbl+'">'+icon("star","ic-sm")+'</button>'; };
+  var lect = lessonLecturer(lesson.html);
+  // Шапка урока: номер, заголовок, лектор и время; ниже — путь урока шагами
+  // (Материал → Видео → Тест → Задание). При прокрутке сверху остаётся тонкая
+  // полоска: название, текущий шаг, «в конспект» и прогресс чтения.
+  var body = '<div class="lesson-body lx">' +
+    '<div class="lx-barw"><div class="lx-bar" id="lessonBar" aria-hidden="true"><b>'+escapeHtml(lesson.title)+'</b>' +
+      (stages.length>1 ? '<span class="lx-pill">Шаг '+(curStage+1)+' из '+stages.length+' · '+stageLabels[stage]+'</span>' : '') +
+      '<span class="lx-sp"></span>'+saveBtn("lx-icon")+'<i class="lx-pg"><i id="lessonReadBar"></i></i></div></div>' +
+    '<div class="lx-hero"><div class="lx-num" aria-label="Урок '+(idx+1)+' из '+course.lessons.length+'">'+("0"+(idx+1)).slice(-2)+'</div>' +
+      '<div class="lesson-head"><h3>'+escapeHtml(lxNbsp(lesson.title))+'</h3></div></div>' +
+    '<div class="lx-row">' +
+      (lect ? '<span class="lx-pill lx-who"><span class="lx-av">'+escapeHtml(lect.initials)+'</span>'+escapeHtml(lect.short)+'</span>' : '') +
+      (lesson.duration ? '<span class="lx-pill">'+icon("clock","ic-sm")+escapeHtml(lesson.duration)+'</span>' : '') +
+      '<span class="lx-sp"></span>'+saveBtn("lx-icon")+'</div>' +
+    '<div class="meta lx-meta">Урок '+(idx+1)+' из '+course.lessons.length+'</div>';
 
   var tocMenu = stage==="intro" ? lessonTocMenu(lessonToc(lesson.html)) : "";
   if(stages.length>1 || tocMenu){
-    var stageLabels = { intro:"Материал", video:"Видео", quiz:"Тест", task:"Задание" };
+    var stageSub = { intro: lxReadMin(lesson.html)+" мин чтения", video:"видеолекция", quiz:(lesson.quiz||[]).length+" "+ruPluralClient((lesson.quiz||[]).length,"вопрос","вопроса","вопросов"), task:"практика" };
     body += '<div class="lesson-tabs-row">';
     if(stages.length>1){
-      body += '<div class="tabs" style="margin:.875rem 0 .25rem;">';
-      stages.forEach(function(sKey){
-        body += '<button type="button" class="tab'+(stage===sKey?' active':'')+'" data-action="lesson-stage" data-stage="'+sKey+'">'+stageLabels[sKey]+'</button>';
+      body += '<nav class="lx-steps" style="--n:'+stages.length+'" aria-label="Шаги урока">';
+      stages.forEach(function(sKey, i){
+        var st = i===curStage ? "on" : ((i<curStage || isDoneAlready) ? "ok" : "");
+        body += '<button type="button" class="lx-step '+st+'" data-action="lesson-stage" data-stage="'+sKey+'"'+(i===curStage?' aria-current="step"':'')+'>' +
+          '<span class="lx-n">'+(st==="ok"?icon("check","ic-sm"):(i+1))+'</span><span class="lx-st"><b>'+stageLabels[sKey]+'</b><small>'+stageSub[sKey]+'</small></span></button>';
       });
-      body += '</div>';
+      body += '</nav>';
     }
     body += tocMenu + '</div>';
   }
@@ -3751,15 +3781,21 @@ function renderCoursePlayer(){
     var noteVal = (course.progress && course.progress.lesson_notes && course.progress.lesson_notes[lesson.id]) || "";
     var opener = lessonOpener(lesson);
     body += '<div class="prose lesson-text" id="lessonProse" data-lesson-id="'+lesson.id+'">'+opener.rest+'</div>' +
-      (previewMode ? '' : '<p class="sel-hint">'+icon("star","ic-sm")+' Выделите фрагмент текста — его можно отметить маркером, добавить в заметку или задать по нему вопрос куратору.</p>') +
-      '<div class="lesson-note">' +
-        '<label>Ваша заметка к уроку <span style="font-weight:400;color:var(--muted-2);">(видна только вам)</span></label>' +
-        '<textarea class="input" id="lessonNoteInput" style="height:4rem;font-size:.875rem;" placeholder="Например: спросить куратора про дозировки">'+escapeHtml(noteVal)+'</textarea>' +
-        '<button class="btn btn-sm btn-ghost" style="margin-top:.5rem;" data-action="save-lesson-note" data-id="'+lesson.id+'">Сохранить заметку</button>' +
-      '</div>';
+      (previewMode ? '' : '<p class="sel-hint">'+icon("star","ic-sm")+' Выделите фрагмент текста — его можно отметить маркером, добавить в заметку или задать по нему вопрос куратору.</p>');
     if(stages.length>1){
-      body += '<div class="lesson-footer"><span></span><button class="btn btn-primary" data-action="lesson-stage" data-stage="'+stages[1]+'">Далее → '+stageLabels[stages[1]]+'</button></div>';
-    } else {
+      // Следующий шаг урока — крупной карточкой: дочитал — сразу видно, что дальше.
+      var nx = stages[1], nxIc = { video:"play", quiz:"task", task:"clipboard" }[nx] || "go";
+      var nxTitle = { video:"Дальше — видеолекция", quiz:"Дальше — тест по уроку", task:"Дальше — задание" }[nx];
+      var nxSub = { video:(lect ? "Лектор — "+lect.short : "Посмотрите лекцию к уроку"), quiz:stageSub.quiz+" — проверьте, что главное запомнилось", task:"Практика по материалу урока" }[nx];
+      var nxBtn = { video:"Смотреть видео", quiz:"Пройти тест", task:"К заданию" }[nx];
+      body += '<div class="lx-next"><span class="lx-next-ic">'+icon(nxIc)+'</span><span class="lx-next-t"><span>Шаг 2 из '+stages.length+'</span><b>'+nxTitle+'</b><small>'+escapeHtml(nxSub)+'</small></span>' +
+        '<button type="button" class="btn btn-primary lx-go" data-action="lesson-stage" data-stage="'+nx+'">'+nxBtn+' →</button></div>';
+    }
+    body += '<details class="lx-note"'+(noteVal?' open':'')+'><summary>'+icon("list","ic-sm")+'<span>Моя заметка к уроку</span><em>'+(noteVal?'видна только вам':'Добавить')+'</em></summary>' +
+        '<textarea class="input" id="lessonNoteInput" style="height:4.5rem;font-size:.875rem;" placeholder="Например: спросить куратора про дозировки">'+escapeHtml(noteVal)+'</textarea>' +
+        '<button class="btn btn-sm btn-ghost" style="margin-top:.5rem;" data-action="save-lesson-note" data-id="'+lesson.id+'">Сохранить заметку</button>' +
+      '</details>';
+    if(stages.length<=1){
       var isLast = idx === course.lessons.length-1;
       body += '<div class="lesson-footer">' +
         '<button class="btn btn-ghost" data-action="prev-lesson"'+(idx===0?' disabled':'')+'>← Предыдущий</button>' +
@@ -3816,14 +3852,30 @@ function lessonTocSpy(){
   if(ch && !marks.some(function(m){ return /Шпаргалка/.test(m.el.textContent); })) marks.push({ el:ch, i:"cheat" });
   var cur = marks.length ? marks[0].i : null;
   marks.forEach(function(m){ if(m.el.getBoundingClientRect().top < 140) cur = m.i; });
+  var order = marks.map(function(m){ return m.i; }), ci = order.indexOf(cur);
   document.querySelectorAll('.lesson-sub [data-action="lesson-toc"], #lessonTocMenu [data-action="lesson-toc"]').forEach(function(x){
-    x.classList.toggle("on", x.getAttribute("data-i")===cur);
+    var i = order.indexOf(x.getAttribute("data-i"));
+    x.classList.toggle("on", i===ci);
+    x.classList.toggle("ok", i>=0 && i<ci);
   });
+  // линия разделов в меню заливается до текущего раздела
+  var sub = document.querySelector(".lesson-sub"), btns = sub ? sub.querySelectorAll("button") : [];
+  if(sub && btns.length>1) sub.style.setProperty("--done", Math.round(Math.max(0, ci)/(btns.length-1)*100)+"%");
+  // прогресс чтения и компактная шапка
+  var pr = prose.getBoundingClientRect(), total = pr.height - innerHeight*.6;
+  var pct = total>0 ? Math.min(100, Math.max(0, (-pr.top + innerHeight*.25)/total*100)) : 100;
+  var rb = document.getElementById("lessonReadBar"); if(rb) rb.style.width = pct.toFixed(1)+"%";
+}
+function lessonBarSync(){
+  var bar = document.getElementById("lessonBar"), hero = document.querySelector(".lx-steps") || document.querySelector(".lx-row");
+  if(!bar || !hero) return;
+  var on = hero.getBoundingClientRect().bottom < 0;
+  bar.classList.toggle("on", on); bar.setAttribute("aria-hidden", on ? "false" : "true");
 }
 var lessonTocSpyQueued = false;
 window.addEventListener("scroll", function(){
   if(lessonTocSpyQueued) return; lessonTocSpyQueued = true;
-  requestAnimationFrame(function(){ lessonTocSpyQueued = false; lessonTocSpy(); });
+  requestAnimationFrame(function(){ lessonTocSpyQueued = false; lessonTocSpy(); lessonBarSync(); });
 }, { passive:true });
 document.addEventListener("click", function(e){
   var m = document.getElementById("lessonTocMenu");
