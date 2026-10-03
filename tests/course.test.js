@@ -351,6 +351,27 @@ describe("Курс врача", () => {
     expect((await request(app).put("/api/course/welcome-seen").set("Cookie", staff)).status).toBe(403);
   });
 
+  test("знакомство с платформой: главная и урок отмечаются отдельно, только для врача", async () => {
+    const user = await createUser({ role: "student", courseId: course.courseId });
+    const cookie = await loginAs(user);
+    const before = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
+    expect(before.body.progress.tour_home_seen).toBe(false);
+    expect(before.body.progress.tour_lesson_seen).toBe(false);
+    expect((await request(app).put("/api/course/tour-seen").set("Cookie", cookie).send({ tour: "home" })).status).toBe(200);
+    const mid = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
+    expect(mid.body.progress.tour_home_seen).toBe(true);
+    expect(mid.body.progress.tour_lesson_seen).toBe(false);
+    expect((await request(app).put("/api/course/tour-seen").set("Cookie", cookie).send({ tour: "lesson" })).status).toBe(200);
+    const after = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
+    expect(after.body.progress.tour_lesson_seen).toBe(true);
+    expect((await request(app).put("/api/course/tour-seen").set("Cookie", cookie).send({ tour: "x; DROP" })).status).toBe(400);
+    await request(app).put("/api/course/tour-seen").set("Cookie", cookie).send({ tour: "home", seen: false });
+    const reset = await request(app).get("/api/course/content/" + course.courseId).set("Cookie", cookie);
+    expect(reset.body.progress.tour_home_seen).toBe(false);
+    const staff = await loginAs(await createUser({ role: "curator" }));
+    expect((await request(app).put("/api/course/tour-seen").set("Cookie", staff).send({ tour: "home" })).status).toBe(403);
+  });
+
   test("«Мои материалы»: врач может сохранить и убрать урок из закладок", async () => {
     const user = await createUser({ role: "student", courseId: course.courseId });
     const cookie = await loginAs(user);

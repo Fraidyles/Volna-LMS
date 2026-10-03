@@ -835,6 +835,170 @@ function runEntranceAnimations(){
   runStep(0);
 }
 
+/* ============================= ЗНАКОМСТВО С ПЛАТФОРМОЙ («голо-карта») ============================= */
+// Два коротких показа: главная (5 шагов) и страница урока (6 шагов). Слева — объёмная
+// схема экрана, нужная зона поднимается и светится; справа — текст и список шагов.
+// Карточка живёт в body (вне #app): render() её не трогает. Каждый показ — один раз
+// (progress.tour_home_seen / tour_lesson_seen), повторить можно из «Настроек».
+var tour = null; // { kind, i, root, timers }
+var tourPending = false;
+var TOUR = {
+  home: {
+    kicker: "Знакомство с платформой",
+    blocks: { sbTop:[0,0,5,2.6], nav0:[.4,3.2,4.2,.75], nav1:[.4,4.25,4.2,.75], nav2:[.4,5.3,4.2,.75], nav3:[.4,6.35,4.2,.75], nav4:[.4,7.75,4.2,.75], nav5:[.4,8.8,4.2,.75],
+      sbNext:[0,11.2,5,3.2], sbMe:[0,15,5,2], hero:[6,0,12,5.5], list:[6,6.5,12,4], survey:[6,11.5,12,2.3], steps:[6,14.6,12,2.4],
+      curator:[19,0,6,3.8], efir:[19,4.6,6,2.8], progress:[19,8.2,6,4.2], notifs:[19,13.2,6,3.8] },
+    steps: function(){
+      var n = course && course.lessons ? course.lessons.length : 0;
+      return [
+        { t:"Прогресс курса", p:"Кольцо в меню показывает, какая часть курса уже позади. "+(n ? n+" "+ruPluralClient(n,"урок","урока","уроков")+" и итоговый тест — это 100%." : "Все уроки и итоговый тест — это 100%."), tag:"Кольцо прогресса", at:"sbTop", w:{sbTop:1}, cam:[-30,3,2.5,1.04] },
+        { t:"Ваш следующий шаг", p:"Главная всегда начинается с урока, на котором вы остановились. Нажмите «Начать урок» — и продолжите с того же места.", tag:"Следующий шаг", at:"hero", w:{hero:1}, cam:[-34,0,2.5,1.04] },
+        { t:"Урок и разделы", p:"В уроке меню превращается в список уроков с разделами. Выделите фразу в тексте — появятся маркер, заметка и вопрос куратору.", tag:"Уроки и разделы", at:"nav0", w:{nav0:1,nav1:1,nav2:1,nav3:1,nav4:.9,nav5:.9,hero:.45,list:.45,survey:.45,steps:.45}, cam:[-28,2.5,-.5,1] },
+        { t:"Мой конспект", p:"Все маркеры и заметки собираются в «Моём конспекте» — по урокам и с поиском. Ничего не потеряется.", tag:"Мой конспект", at:"nav1", w:{nav1:1}, cam:[-31,4,.5,1.1] },
+        { t:"Эфиры и куратор", p:"Ближайший эфир и связь с куратором — справа на главной. Расписание и чат потока в Telegram — в меню.", tag:"Эфиры и куратор", at:"curator", w:{curator:1,efir:1,nav4:.7,nav5:.7}, cam:[-36,-4,2.5,1.06] }
+      ];
+    }
+  },
+  lesson: {
+    kicker: "Как устроен урок",
+    blocks: { card:[6,0,19,17], sbTop:[0,0,5,2.4],
+      L1:[.3,2.9,4.4,.8], L2:[.3,3.95,4.4,.8], L3:[.3,5,4.4,.8], L4:[.3,6.05,4.4,.8], L5:[.3,7.1,4.4,.8], L6:[.3,8.15,4.4,.8],
+      S1:[.9,9.1,3.8,.42], S2:[.9,9.72,3.8,.42], S3:[.9,10.34,3.8,.42], L7:[.3,11.1,4.4,.8], L8:[.3,12.15,4.4,.8], sbMe:[0,15,5,2],
+      back:[6.8,.55,2,.45], title:[6.8,1.25,11,1.15], save:[21.4,1.35,2.8,.9],
+      T1:[6.8,3,2.2,.7], T2:[9.3,3,2.2,.7], T3:[11.8,3,2.2,.7],
+      P1:[6.8,4.3,17,.32], P2:[6.8,4.9,16.2,.32], P3:[6.8,5.5,17,.32], P4:[6.8,6.1,10,.32], term:[11.2,4.86,3.4,.4],
+      B1:[6.8,7,5.4,3], B2:[12.6,7,5.4,3], B3:[18.4,7,5.4,3],
+      P5:[6.8,10.6,17,.32], P6:[6.8,11.2,16,.32], P7:[6.8,11.8,12,.32], hl:[9,11.16,8.5,.4],
+      cheat:[6.8,12.7,17,2.3], foot:[19.4,15.6,4.4,.9],
+      pop:[10.6,3.55,7,1.15], tool:[9.4,9.95,8.2,.85] },
+    steps: function(){
+      return [
+        { t:"Уроки курса", p:"В уроке меню превращается в список уроков: галочки у пройденных, под текущим — его разделы. «Главное меню» вернёт обычные пункты.", tag:"Уроки и разделы", at:"L1", w:{L1:1,L2:1,L3:1,L4:1,L5:1,L6:1,L7:1,L8:1,S1:1,S2:1,S3:1}, cam:[-30,5,1,1.12] },
+        { t:"Этапы урока", p:"Урок идёт по шагам: материал, видео, тест. Кнопка внизу сама ведёт к следующему этапу — ничего не нужно искать.", tag:"Материал · Видео · Тест", at:"T2", w:{T1:1,T2:1,T3:1,foot:.55}, cam:[-33,0,3,1.12] },
+        { t:"Термины", p:"Слова, подчёркнутые пунктиром, — термины курса. Наведите на них, и появится короткое определение.", tag:"Термин", at:"pop", w:{term:1}, show:["pop"], cam:[-29,-.5,2,1.2] },
+        { t:"Выделение текста", p:"Выделите фразу — появится панель: маркер, заметка, вопрос куратору, поиск по курсу. Маркеры сохраняются навсегда.", tag:"Маркер · заметка · вопрос", at:"tool", w:{P6:.5}, show:["hl","tool"], cam:[-31,-.5,-1.5,1.18] },
+        { t:"Сохранить и шпаргалка", p:"«★ Сохранить» кладёт урок в «Мой конспект». В конце каждого урока — шпаргалка: главное на одном экране.", tag:"Шпаргалка", at:"cheat", w:{save:1,cheat:1}, cam:[-35,-1,-.5,1.04] },
+        { t:"Тест и следующий урок", p:"Короткий тест проверяет главное. «Урок пройден» — галочка в списке, кольцо прогресса растёт, следующий урок открыт.", tag:"Урок пройден", at:"L6", w:{foot:1,sbTop:1,L6:.8}, done:true, cam:[-30,3.5,-.5,1.06] }
+      ];
+    }
+  }
+};
+var TOUR_DEMO = { pop:1, hl:1, tool:1 };
+function tourCoursePct(){
+  var pr = (course && course.progress) || {}, total = course && course.lessons ? course.lessons.length : 0;
+  return total ? Math.round(((pr.completed_lessons||[]).length + (pr.completed?1:0)) / (total+1) * 100) : 0;
+}
+// Вызывается после каждого render(): открывает нужный показ, если врач его ещё не видел.
+function tourMaybeStart(){
+  if(tour || tourPending || previewMode || (me && me.impersonator) || view!=="student" || !course || !course.progress || (course.locked||{}).locked) return;
+  var pr = course.progress, kind = null;
+  if(studentState.tab==="lesson" && !studentState.quizMode && !studentState.moduleGateStage && !pr.tour_lesson_seen && document.getElementById("lessonProse")) kind = "lesson";
+  else if(studentState.tab==="course" && !pr.tour_home_seen && document.querySelector(".hs-h") && !document.querySelector('[data-action="welcome-start"]')) kind = "home";
+  if(!kind) return;
+  tourPending = true;
+  setTimeout(function(){
+    tourPending = false;
+    // за это время врач мог уйти с экрана
+    if(kind==="lesson" ? !document.getElementById("lessonProse") : !document.querySelector(".hs-h")) return;
+    openTour(kind);
+  }, kind==="home" ? 1100 : 700);
+}
+function openTour(kind){
+  closeTour(true);
+  var def = TOUR[kind], steps = def.steps(), B = def.blocks;
+  var root = document.createElement("div"); root.className = "tour"; root.setAttribute("data-kind", kind);
+  var pct = tourCoursePct(), next = Math.min(100, pct + Math.round(100 / ((course.lessons||[]).length + 1)));
+  root.innerHTML = '<div class="tour-veil"></div>' +
+    '<div class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tourTitle"><div class="tour-in"><span class="tour-sheen"></span>' +
+      '<div class="tour-stage" aria-hidden="true"><div class="tour-float"><div class="tour-plane"><div class="tour-floor"></div>' +
+        Object.keys(B).map(function(k){
+          var b = B[k];
+          return '<div class="tb tb-'+k+(TOUR_DEMO[k]?' tb-demo':'')+'" data-k="'+k+'" style="left:'+b[0]+'rem;top:'+b[1]+'rem;width:'+b[2]+'rem;height:'+b[3]+'rem">' +
+            (k==="sbTop" ? '<span class="tb-ring" style="--tp:'+pct+'%"><b>'+pct+'%</b></span>' : '') + '<span class="tb-beam"></span></div>';
+        }).join("") +
+      '</div></div><span class="tour-scan"></span><span class="tour-lines"></span><span class="tour-tag"></span></div>' +
+      '<div class="tour-side"><div class="tour-k"></div><div class="tour-txt"><h3 id="tourTitle"></h3><p></p></div>' +
+        '<ol class="tour-list">'+steps.map(function(s, i){ return '<li><b>'+(i+1)+'</b><span>'+escapeHtml(s.t)+'</span></li>'; }).join("")+'</ol>' +
+        '<div class="tour-foot"><span class="tour-dots">'+steps.map(function(){ return '<i></i>'; }).join("")+'</span><span class="tour-sp"></span>' +
+          '<button type="button" class="tour-btn tour-back" data-tour="back" aria-label="Назад" title="Назад">←</button>' +
+          '<button type="button" class="tour-btn" data-tour="skip">Пропустить</button>' +
+          '<button type="button" class="tour-btn tour-next" data-tour="next"></button></div></div></div></div>';
+  document.body.appendChild(root);
+  tour = { kind:kind, i:-1, root:root, steps:steps, timers:[], next:next };
+  root.addEventListener("click", function(e){
+    var b = e.target.closest("[data-tour]"); if(!b) return;
+    var a = b.getAttribute("data-tour");
+    if(a==="next"){ if(tour.i >= tour.steps.length-1) finishTour(); else tourGo(tour.i+1); }
+    else if(a==="back"){ if(tour.i>0) tourGo(tour.i-1); }
+    else if(a==="skip") finishTour();
+  });
+  requestAnimationFrame(function(){ root.classList.add("open"); tourGo(0); var n = root.querySelector(".tour-next"); if(n) n.focus({ preventScroll:true }); });
+}
+function tourGo(i){
+  if(!tour) return;
+  var root = tour.root, s = tour.steps[i], first = tour.i < 0, B = TOUR[tour.kind].blocks;
+  tour.timers.forEach(clearTimeout); tour.timers = [];
+  tour.i = i;
+  // камера и подъём блоков — CSS-переходы (см. .tour-plane, .tb)
+  root.querySelector(".tour-plane").style.transform = "translate("+s.cam[1]+"rem,"+s.cam[2]+"rem) scale("+s.cam[3]+") rotateX(55deg) rotateZ("+s.cam[0]+"deg)";
+  Object.keys(B).forEach(function(k){
+    var b = root.querySelector('.tb[data-k="'+k+'"]'), w = s.w[k] || 0;
+    b.style.setProperty("--tw", w);
+    b.classList.toggle("on", w >= .9);
+    if(TOUR_DEMO[k]) b.classList.toggle("show", !!(s.show && s.show.indexOf(k)!==-1));
+  });
+  var l6 = root.querySelector('.tb[data-k="L6"]'); if(l6) l6.classList.toggle("done", !!s.done);
+  var ring = root.querySelector(".tb-ring");
+  if(ring){ var pv = s.done ? tour.next : tourCoursePct(); ring.style.setProperty("--tp", pv+"%"); ring.classList.toggle("grow", !!s.done);
+    tour.timers.push(setTimeout(function(){ var b = ring.querySelector("b"); if(b) b.textContent = pv+"%"; }, s.done ? 2400 : 0)); }
+  // текст: уходит старый, приходит новый
+  var txt = root.querySelector(".tour-txt");
+  var fill = function(){
+    root.querySelector(".tour-k").textContent = TOUR[tour.kind].kicker + " · " + (i+1) + " / " + tour.steps.length;
+    root.querySelector(".tour-txt h3").textContent = s.t; root.querySelector(".tour-txt p").textContent = s.p;
+    txt.classList.remove("out"); txt.classList.add("in");
+  };
+  if(first) fill(); else { txt.classList.remove("in"); txt.classList.add("out"); tour.timers.push(setTimeout(fill, 220)); }
+  root.querySelectorAll(".tour-list li").forEach(function(li, k){ li.className = k<i ? "ok" : (k===i ? "on" : ""); });
+  root.querySelectorAll(".tour-dots i").forEach(function(d, k){ d.className = k<i ? "ok" : (k===i ? "on" : ""); });
+  root.querySelector(".tour-next").textContent = i===tour.steps.length-1 ? (tour.kind==="lesson" ? "Понятно" : "Готово") : "Дальше →";
+  root.querySelector(".tour-back").hidden = i===0;
+  // подпись над поднятой зоной — когда камера доехала
+  var tag = root.querySelector(".tour-tag"); tag.classList.remove("on");
+  tour.timers.push(setTimeout(function(){ tourPlaceTag(); if(tour) tour.root.querySelector(".tour-tag").classList.add("on"); }, first ? 1300 : 1000));
+}
+function tourPlaceTag(){
+  if(!tour) return;
+  var s = tour.steps[tour.i], tag = tour.root.querySelector(".tour-tag"), stage = tour.root.querySelector(".tour-stage");
+  var b = tour.root.querySelector('.tb[data-k="'+s.at+'"]'); if(!b) return;
+  var r = b.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+  tag.textContent = s.tag;
+  var x = Math.min(Math.max(r.left + r.width/2 - sr.left, 70), sr.width - 70), y = Math.max(r.top - sr.top - 10, 34);
+  tag.style.left = x + "px"; tag.style.top = y + "px";
+}
+function finishTour(){
+  if(!tour) return;
+  var kind = tour.kind;
+  if(course && course.progress) course.progress[kind==="lesson" ? "tour_lesson_seen" : "tour_home_seen"] = true;
+  if(!previewMode) api("/course/tour-seen", { method:"PUT", body: JSON.stringify({ tour: kind }) }).catch(function(){});
+  closeTour();
+}
+function closeTour(instant){
+  if(!tour) return;
+  var t = tour; tour = null;
+  t.timers.forEach(clearTimeout);
+  if(instant){ t.root.remove(); return; }
+  t.root.classList.remove("open"); t.root.classList.add("closing");
+  setTimeout(function(){ t.root.remove(); }, 650);
+}
+document.addEventListener("keydown", function(e){
+  if(!tour) return;
+  if(e.key==="Escape"){ e.preventDefault(); finishTour(); }
+  else if(e.key==="ArrowRight"){ e.preventDefault(); if(tour.i < tour.steps.length-1) tourGo(tour.i+1); }
+  else if(e.key==="ArrowLeft"){ e.preventDefault(); if(tour.i > 0) tourGo(tour.i-1); }
+}, true);
+window.addEventListener("resize", function(){ if(tour) tourPlaceTag(); });
+
 /* ============================= ВЫДЕЛЕНИЕ ТЕКСТА В УРОКЕ ============================= */
 // Врач выделяет фрагмент урока — над ним появляется панель: маркер (сохраняется
 // и подсвечивается при следующих открытиях), в заметку, спросить куратора,
@@ -1027,7 +1191,20 @@ function selLessonCtx(){
   var l = course && course.lessons[studentState.lessonIndex];
   return l ? { id:l.id, n:studentState.lessonIndex+1, title:l.title } : null;
 }
+function placeSelTools(el2, rect){
+  var w = el2.offsetWidth, h = el2.offsetHeight, coarse = window.matchMedia && window.matchMedia("(pointer:coarse)").matches;
+  var top = coarse ? rect.bottom + 10 : rect.top - h - 10;
+  if(top < 8) top = rect.bottom + 10;
+  if(top + h > window.innerHeight - 8) top = Math.max(8, rect.top - h - 10);
+  // выделение частично за краем экрана — панель всё равно остаётся видимой
+  top = Math.min(Math.max(8, top), window.innerHeight - h - 8);
+  var left = Math.min(Math.max(8, rect.left + rect.width/2 - w/2), window.innerWidth - w - 8);
+  el2.style.top = top + "px"; el2.style.left = left + "px";
+}
 function openSelTools(rect, text, hid){
+  // Панель уже открыта в том же режиме — только обновляем текст и место, не пересоздавая
+  // (иначе заново играет анимация появления и панель «прыгает»).
+  if(selTools && selTools.hid===(hid||null)){ selTools.text = text; placeSelTools(selTools.el, rect); return; }
   closeSelTools();
   var btn = function(act, ic, label){ return '<button type="button" data-sel-action="'+act+'">'+icon(ic,"ic-sm")+'<span>'+label+'</span></button>'; };
   var html = '<div class="sel-tools" role="toolbar" aria-label="Действия с выделенным">' +
@@ -1040,14 +1217,7 @@ function openSelTools(rect, text, hid){
   selTools = { el:el2, text:text, hid:hid||null };
   // над выделением; если не помещается — под ним. На сенсорных экранах сверху
   // висит системное меню выделения — ставим панель снизу.
-  var w = el2.offsetWidth, h = el2.offsetHeight, coarse = window.matchMedia && window.matchMedia("(pointer:coarse)").matches;
-  var top = coarse ? rect.bottom + 10 : rect.top - h - 10;
-  if(top < 8) top = rect.bottom + 10;
-  if(top + h > window.innerHeight - 8) top = Math.max(8, rect.top - h - 10);
-  // выделение частично за краем экрана — панель всё равно остаётся видимой
-  top = Math.min(Math.max(8, top), window.innerHeight - h - 8);
-  var left = Math.min(Math.max(8, rect.left + rect.width/2 - w/2), window.innerWidth - w - 8);
-  el2.style.top = top + "px"; el2.style.left = left + "px";
+  placeSelTools(el2, rect);
   el2.addEventListener("mousedown", function(e){ e.preventDefault(); }); // не снимать выделение кликом по панели
   el2.addEventListener("click", function(e){
     var b = e.target.closest("[data-sel-action]"); if(b) runSelAction(b.getAttribute("data-sel-action"));
@@ -1138,8 +1308,11 @@ async function runSelAction(act){
 }
 // Выделение мышью — по отпусканию кнопки; с клавиатуры и на сенсорных экранах —
 // по selectionchange (с задержкой, пока пользователь тянет границы).
-var selCheckTimer = null;
+var selCheckTimer = null, selMouseDown = false;
+// Пока кнопка мыши зажата, выделение ещё тянут — панель не показываем.
+document.addEventListener("mousedown", function(e){ if(e.button===0 && !(e.target.closest && e.target.closest(".sel-tools, .sel-pop"))){ selMouseDown = true; closeSelTools(); } }, true);
 document.addEventListener("mouseup", function(e){
+  selMouseDown = false;
   if(e.target.closest && e.target.closest(".sel-tools")) return;
   var mk = e.target.closest && e.target.closest("#lessonProse mark.hl");
   var sel = window.getSelection && window.getSelection();
@@ -1154,7 +1327,7 @@ document.addEventListener("mouseup", function(e){
 });
 document.addEventListener("selectionchange", function(){
   clearTimeout(selCheckTimer);
-  selCheckTimer = setTimeout(function(){ if(!(selTools && selTools.hid)) selCheck(); }, 350);
+  selCheckTimer = setTimeout(function(){ if(!selMouseDown && !(selTools && selTools.hid)) selCheck(); }, 350);
 });
 document.addEventListener("keydown", function(e){ if(e.key==="Escape") closeSelTools(); });
 window.addEventListener("scroll", function(){ closeSelTools(); }, { passive:true, capture:true });
@@ -1506,6 +1679,7 @@ function render(){
     // отсутствующими в DOM узлами.
     lessonPlyrInstance = null;
   }
+  if(view==="student") tourMaybeStart(); else if(tour) closeTour(true);
   syncNavHistory();
 }
 
@@ -2543,7 +2717,7 @@ function renderSidebar(){
     top = '<div class="sbx-ring" style="--p:'+pct+'%"><b>'+pct+'%</b></div>' +
       '<div class="sbx-title"><strong>'+escapeHtml(course.course.title)+'</strong><span>'+doneIds.length+' из '+total+' '+ruPluralClient(total,"урока","уроков","уроков")+'</span></div>';
     var curIdx = -1; course.lessons.forEach(function(l,i){ if(curIdx<0 && doneIds.indexOf(l.id)===-1 && !l.hiddenForMe && !l.dripLockedForMe) curIdx = i; });
-    if(!previewMode && !(course.locked||{}).locked && studentState.tab!=="lesson"){
+    if(!previewMode && !(course.locked||{}).locked && studentState.tab!=="lesson" && studentState.tab!=="course"){
       if(curIdx>=0){
         var nl = course.lessons[curIdx];
         next = '<button type="button" class="sbx-next" data-action="open-lesson-at" data-idx="'+curIdx+'" title="Продолжить: '+escapeHtml(nl.title)+'"><span class="sbx-next-k">Продолжить'+(nl.duration?' · '+escapeHtml(nl.duration):'')+'</span><b>'+escapeHtml(nl.title)+'</b><span class="sbx-go">'+icon("go")+'</span></button>';
@@ -2562,7 +2736,7 @@ function renderSidebar(){
     var gam = view==="student" && course ? (course.gamification||{}) : null;
     var sub = gam ? (gam.currentStreak ? icon("flame","sbx-flame")+gam.currentStreak+' '+ruPluralClient(gam.currentStreak,"день","дня","дней")+' · ' : '')+(gam.points||0)+' очков' : escapeHtml(({ super_admin:"Главный администратор", admin:"Администратор", curator:"Куратор" })[me.role]||"");
     meRow = '<div class="sbx-me">' +
-      '<a href="?tab=profile" class="sbx-who'+(navKeyNow==="profile"?' active':'')+'" data-action="sidebar-nav" data-key="profile" title="Мой профиль">'+userAvatar(me,"sbx-av")+'<span class="sbx-who-t"><b>'+escapeHtml(me.name||"")+'</b><span>'+sub+'</span></span></a>' +
+      '<a href="?tab=profile" class="sbx-who'+(navKeyNow==="profile"||navKeyNow==="settings"?' active':'')+'" data-action="sidebar-nav" data-key="profile" title="Профиль и настройки">'+userAvatar(me,"sbx-av")+'<span class="sbx-who-t"><b>'+escapeHtml(me.name||"")+'</b><span>'+sub+'</span></span></a>' +
       '<span class="sbx-btns"><a href="?tab=settings" class="sbx-ib'+(navKeyNow==="settings"?' on':'')+'" data-action="sidebar-nav" data-key="settings" title="Настройки">'+icon("gear")+'</a>' +
       '<button type="button" class="sbx-ib" data-action="logout" title="Выйти">'+icon("logout")+'</button></span></div>';
   }
@@ -2655,7 +2829,12 @@ function skyStart(kind){
   var cv = document.createElement("canvas"); cv.id = "skyCanvas"; cv.setAttribute("aria-hidden", "true");
   var grain = document.createElement("div"); grain.id = "skyGrain"; grain.setAttribute("aria-hidden", "true");
   document.body.insertBefore(grain, document.body.firstChild); document.body.insertBefore(cv, document.body.firstChild);
-  var gl = null; try{ gl = cv.getContext("webgl", { antialias:false, alpha:false }); }catch(e){}
+  // Без аппаратного ускорения (программный WebGL) анимированный фон на весь экран
+  // занимает процессор настолько, что интерфейс появляется через десятки секунд —
+  // тогда рисуем один неподвижный кадр в пониженном разрешении.
+  var gl = null, slow = false;
+  try{ gl = cv.getContext("webgl", { antialias:false, alpha:false, failIfMajorPerformanceCaveat:true }); }catch(e){}
+  if(!gl){ try{ gl = cv.getContext("webgl", { antialias:false, alpha:false }); slow = !!gl; }catch(e){} }
   if(!gl){ cv.remove(); grain.remove(); document.documentElement.removeAttribute("data-sky"); return; }
   function sh(type, src){ var x = gl.createShader(type); gl.shaderSource(x, src); gl.compileShader(x); return x; }
   var pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, SKY_VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, SKY_FS[kind])); gl.linkProgram(pr);
@@ -2664,7 +2843,7 @@ function skyStart(kind){
   var b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,1,1]), gl.STATIC_DRAW);
   var lp = gl.getAttribLocation(pr, "p"); gl.enableVertexAttribArray(lp); gl.vertexAttribPointer(lp, 2, gl.FLOAT, false, 0, 0);
   sky.u = { R:gl.getUniformLocation(pr, "R"), T:gl.getUniformLocation(pr, "T"), M:gl.getUniformLocation(pr, "M") };
-  sky.kind = kind; sky.cv = cv; sky.grain = grain; sky.gl = gl; sky.t0 = performance.now();
+  sky.kind = kind; sky.cv = cv; sky.grain = grain; sky.gl = gl; sky.slow = slow; sky.t0 = performance.now(); sky.last = 0;
   sky.raf = requestAnimationFrame(skyFrame);
 }
 function skyStop(){
@@ -2676,10 +2855,10 @@ function skyStop(){
 function skyFrame(now){
   sky.raf = 0;
   if(!sky.gl) return;
-  var still = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var still = sky.slow || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
   if(!document.hidden && (now - sky.last >= 33 || !sky.last)){
     sky.last = now;
-    var gl = sky.gl, d = Math.min(1.5, window.devicePixelRatio||1), W = Math.round(innerWidth*d), H = Math.round(innerHeight*d);
+    var gl = sky.gl, d = sky.slow ? .5 : Math.min(1.5, window.devicePixelRatio||1), W = Math.round(innerWidth*d), H = Math.round(innerHeight*d);
     if(sky.cv.width!==W || sky.cv.height!==H){ sky.cv.width = W; sky.cv.height = H; gl.viewport(0, 0, W, H); }
     var tg = sky.target; sky.mouse = tg[0]<0 ? [-1,-1] : (sky.mouse[0]<0 ? tg.slice() : [sky.mouse[0]+(tg[0]-sky.mouse[0])*.08, sky.mouse[1]+(tg[1]-sky.mouse[1])*.08]);
     gl.uniform2f(sky.u.R, W, H); gl.uniform1f(sky.u.T, still ? 20 : 20 + (now - sky.t0)/1000);
@@ -2691,6 +2870,8 @@ function skyFrame(now){
 }
 document.addEventListener("pointermove", function(e){ if(sky.kind) sky.target = [e.clientX, innerHeight - e.clientY]; }, { passive:true });
 document.addEventListener("visibilitychange", function(){ if(sky.gl && !sky.raf && !document.hidden) sky.raf = requestAnimationFrame(skyFrame); });
+// Неподвижный кадр (нет ускорения или «уменьшить движение») перерисовываем при смене размера окна.
+window.addEventListener("resize", function(){ if(sky.gl && !sky.raf) sky.raf = requestAnimationFrame(skyFrame); });
 
 // Переключатель в меню: светлая ↔ последняя из тёмных.
 function toggleTheme(){
@@ -2915,9 +3096,7 @@ function renderStudentShell(){
     content.appendChild(renderNotificationsPage());
   } else if(studentState.tab === "telegram" && !previewMode){
     content.appendChild(renderTelegramPage());
-  } else if(studentState.tab === "settings" && !previewMode){
-    content.appendChild(renderSettingsPage());
-  } else if(studentState.tab === "profile" && !previewMode){
+  } else if((studentState.tab === "settings" || studentState.tab === "profile") && !previewMode){
     content.appendChild(renderMyProfilePage());
   } else {
     content.appendChild(renderStudentHome());
@@ -4543,9 +4722,10 @@ function roleCapabilities(role){
 }
 
 function renderMyProfilePage(){
-  // Шапка-обложка с фото (можно загрузить/убрать), именем, ролью и ключевыми
-  // цифрами; ниже — редактирование данных и «что доступно роли». Пароль и
-  // сеансы — в «Настройках».
+  // «Профиль и настройки» — одна страница: шапка-обложка с фото, именем, ролью и
+  // ключевыми цифрами; под ней строка разделов, ниже — личные данные и внешний вид
+  // (слева), безопасность, знакомство с платформой и доступы роли (справа).
+  // «Настройки» в меню ведут сюда же, сразу к «Внешнему виду».
   var isStudent = me.role==="student";
   var caps = roleCapabilities(me.role);
   var stats = [];
@@ -4569,7 +4749,7 @@ function renderMyProfilePage(){
       '<div class="profile-photo">'+userAvatar(me, "profile-av")+
         '<button type="button" class="profile-photo-btn" data-action="pick-avatar" title="Загрузить фото">'+icon("camera","ic-sm")+'</button>' +
         '<input type="file" id="avatarFileInput" accept="image/png,image/jpeg,image/webp" hidden></div>' +
-      '<div class="profile-id"><span class="profile-kicker">Мой профиль</span><h1>'+escapeHtml(me.name||"")+'</h1>' +
+      '<div class="profile-id"><span class="profile-kicker">Профиль и настройки</span><h1>'+escapeHtml(me.name||"")+'</h1>' +
         '<div class="profile-tags"><span class="team-role">'+escapeHtml(roleLabel(me.role))+'</span>' +
           specNamesList.map(function(n){ return '<span class="profile-chip">'+escapeHtml(n)+'</span>'; }).join("") +
           (myStream?'<span class="profile-chip">'+escapeHtml(myStream.name)+'</span>':'') + '</div>' +
@@ -4580,8 +4760,11 @@ function renderMyProfilePage(){
       (stats.length ? '<div class="profile-stats">'+stats.map(function(x){ return '<div><b>'+x[0]+'</b><span>'+x[1]+'</span></div>'; }).join("")+'</div>' : '') +
     '</div></div>';
 
-  html += '<div class="team-row" style="margin-top:1.125rem;">';
-  html += '<div class="team-cell"><div class="card co-card"><b class="co-card-title">Личные данные</b>' +
+  var setCards = settingsCards();
+  html += '<nav class="acc-nav" aria-label="Разделы">' + [["acc-personal","user","Личные данные"],["acc-look","sparkle","Внешний вид"],["acc-security","shield","Безопасность"],["acc-access","check","Доступы"]].map(function(x){
+    return '<button type="button" class="acc-chip" data-action="acc-jump" data-to="'+x[0]+'">'+icon(x[1],"ic-sm")+x[2]+'</button>'; }).join("") + '</nav>';
+  html += '<div class="pp-grid acc-grid"><div class="pp-col">';
+  html += '<div class="card co-card" id="acc-personal"><b class="co-card-title">Личные данные</b>' +
     '<form id="profileEditorForm">' +
       '<div class="field"><label>Имя и фамилия</label><input class="input" id="profileEditorName" required value="'+escapeHtml(profileEditor.name)+'"></div>' +
       (isStudent ? renderProfileSpecializationFields() : '') +
@@ -4593,14 +4776,13 @@ function renderMyProfilePage(){
       '<button class="btn btn-primary" type="submit">Сохранить изменения</button>' +
     '</form>' +
     (isStudent ? renderMyProductBlock() : '') +
-  '</div></div>';
-  html += '<div class="team-cell"><div class="card co-card"><b class="co-card-title" style="margin-bottom:.25rem;">Ваши доступы</b>' +
+  '</div>' + setCards[0] + '</div><div class="pp-col">' + setCards[2] + setCards[1];
+  html += '<div class="card co-card" id="acc-access"><b class="co-card-title" style="margin-bottom:.25rem;">Ваши доступы</b>' +
     '<p class="hint" style="margin:0 0 .625rem;">Что доступно при роли «'+escapeHtml(roleLabel(me.role))+'».</p>';
   caps.forEach(function(c){
     html += '<div class="cap-row'+(c.allowed?'':' off')+'"><span class="cap-dot">'+(c.allowed?icon("check","ic-sm"):'')+'</span><span>'+escapeHtml(c.label)+'</span></div>';
   });
   if(isStudent) html += renderMyOrdersBlock();
-  html += '<button class="btn btn-sm btn-ghost btn-block" style="margin-top:.875rem;" data-action="sidebar-nav" data-key="settings">Пароль, сеансы и тема — в «Настройках» →</button>';
   html += '</div></div></div></div>';
   return el(html);
 }
@@ -4658,9 +4840,9 @@ function homeFx(){
 }
 // Классы анимации на сетке главной: объединённый вариант = каскад + живой свет.
 function homeFxClass(){ return homeFx()==="live" ? "fx-cascade fx-light" : "fx-off"; }
-function renderSettingsPage(){
-  // Слева — внешний вид (превью тем) и безопасность (пароль, сеансы с устройствами),
-  // справа — карточка аккаунта. Сеансы подгружаются лениво при первом открытии.
+// Карточки настроек для страницы «Профиль и настройки»: [внешний вид, знакомство, безопасность].
+// Сеансы подгружаются лениво при первом открытии.
+function settingsCards(){
   if(!mySessionsLoaded && !mySessionsLoading){ mySessionsLoading = true; loadMySessions().then(function(){ mySessionsLoading = false; render(); }); }
   function themeCard(key, label, ic){
     var on = getTheme()===key;
@@ -4668,8 +4850,7 @@ function renderSettingsPage(){
       '<span class="theme-prev '+key+'"><i></i><i></i><i></i></span>' +
       '<span class="theme-label">'+icon(ic,"ic-sm")+label+(on?'<em>выбрана</em>':'')+'</span></button>';
   }
-  var left = '<div class="pp-col">' +
-    '<div class="card co-card"><b class="co-card-title">Внешний вид</b>' +
+  var left = '<div class="card co-card" id="acc-look"><b class="co-card-title">Внешний вид</b>' +
       '<b class="fx-title" style="margin-top:0;">Тема</b><div class="theme-cards">'+themeCard("dark","Тёмная","moon")+themeCard("light","Светлая","sun")+themeCard("depth","Глубина","sparkle")+themeCard("stars","Созвездие","star")+themeCard("cells","Клетки","eye")+'</div>' +
       '<b class="fx-title">Анимация главной</b><div class="fx-cards">' + HOME_FX.map(function(x){
         var on = homeFx()===x[0], text = me.role!=="student" && HOME_FX_STAFF_TEXT[x[0]] ? HOME_FX_STAFF_TEXT[x[0]] : x[2];
@@ -4679,7 +4860,9 @@ function renderSettingsPage(){
         var on = homeBg()===x[0];
         return '<button type="button" class="fx-card'+(on?' on':'')+'" data-action="set-home-bg" data-bg="'+x[0]+'"><span class="fx-prev fxp-bg fxp-'+x[0]+'"><i></i><i></i><i></i></span><b>'+x[1]+(on?' <em>выбран</em>':'')+'</b><span>'+x[2]+'</span></button>';
       }).join("") + '</div></div>' +
-    '<div class="card co-card"><b class="co-card-title">Безопасность</b>' +
+    '\u0001' + (me.role==="student" && !previewMode && !me.impersonator ? '<div class="card co-card" id="acc-tour"><b class="co-card-title">Знакомство с платформой</b>' +
+      '<div class="set-row" style="border-bottom:none;"><div><b>Как всё устроено</b><span>Короткий показ главной и страницы урока — меньше минуты.</span></div><button class="btn btn-sm btn-ghost" data-action="tour-replay">Пройти заново</button></div></div>' : '') +
+    '\u0001' + '<div class="card co-card" id="acc-security"><b class="co-card-title">Безопасность</b>' +
       '<div class="set-row"><div><b>Пароль</b><span>Меняйте пароль, если входили с чужого устройства.</span></div><button class="btn btn-sm btn-ghost" data-action="open-change-password">Сменить пароль</button></div>' +
       '<div class="set-row" style="border-bottom:none;"><div><b>Активные сеансы</b><span>С каких устройств входили в аккаунт.</span></div><button class="btn btn-sm btn-ghost" data-action="logout-everywhere">Выйти со всех устройств</button></div>' +
       '<div class="set-sessions">';
@@ -4689,26 +4872,15 @@ function renderSettingsPage(){
     left += '<div class="set-session"><span class="set-dev">'+icon("user","ic-sm")+'</span><div><b>'+escapeHtml(se.device||"Устройство")+(i===0?' <em>это устройство</em>':'')+'</b>' +
       '<span>'+escapeHtml(se.ip||"—")+' · '+fmtDateShort(se.createdAt)+', '+fmtTime(se.createdAt)+'</span></div></div>';
   });
-  left += '</div></div></div>';
-  var right = '<div class="pp-col"><div class="card co-card set-account">' +
-    userAvatar(me,'set-av') +
-    '<b class="set-name">'+escapeHtml(me.name||"")+'</b><span class="set-mail">'+escapeHtml(me.email||"")+'</span>' +
-    '<span class="team-role" style="margin-top:.375rem;">'+escapeHtml(roleLabel(me.role))+'</span>' +
-    '<div class="set-facts">' +
-      (me.phone?'<div><span>Телефон</span><b>'+escapeHtml(me.phone)+'</b></div>':'') +
-      (me.workplace?'<div><span>Место работы</span><b>'+escapeHtml(me.workplace)+'</b></div>':'') +
-      (me.created_at?'<div><span>На платформе с</span><b>'+fmtDateShort(me.created_at)+'</b></div>':'') +
-    '</div>' +
-    '<button class="btn btn-sm btn-ghost btn-block" style="margin-top:auto;" data-action="sidebar-nav" data-key="profile">Открыть профиль →</button>' +
-  '</div></div>';
-  return el('<div class="page-wide pp-grid">'+left+right+'</div>');
+  left += '</div></div>';
+  return left.split('\u0001');
 }
 
 /* ============================= РЕНДЕР: ПЕРСОНАЛ ============================= */
 var STAFF_PAGE_TITLES = { home:"Главная", students:"Врачи", dashboard:"Аналитика", calendar:"Расписание", courses:"Курсы",
   materials:"Уроки", glossary:"Термины", protocols:"Протоколы", assignments:"Проверка заданий", feed:"Лента ответов", surveys:"Анкеты и опросы",
   orders:"Заказы и оплаты", products:"Продукты", team:"Команда", audit:"Журнал действий", specializations:"Специализации",
-  telegram:"Telegram", notifications:"Уведомления", settings:"Настройки", profile:"Мой профиль" };
+  telegram:"Telegram", notifications:"Уведомления", settings:"Профиль и настройки", profile:"Профиль и настройки" };
 // Разделы, где данные зависят от выбранного курса (запросы с courseId); в остальных
 // (заказы, продукты, анкеты, команда, журнал, Telegram, профиль, настройки, сами
 // курсы — у них выбор плиткой) переключатель курса только занимал место.
@@ -4727,7 +4899,7 @@ function renderStaffShell(){
   if(staffState.mainTab === "modules"){ staffState.mainTab = "materials"; staffState.navKey = "materials"; }
   // У страницы урока и протокола своя шапка с «хлебными крошками» — общий
   // заголовок и переключатель курса там лишние.
-  var ownPage = (staffState.mainTab==="materials" && staffState.lessonPageId) || (staffState.mainTab==="protocols" && protocolEditor.open) || (staffState.mainTab==="glossary" && glossaryAdmin.edit);
+  var ownPage = staffState.mainTab==="profile" || staffState.mainTab==="settings" || (staffState.mainTab==="materials" && staffState.lessonPageId) || (staffState.mainTab==="protocols" && protocolEditor.open) || (staffState.mainTab==="glossary" && glossaryAdmin.edit);
   if(!ownPage){
     // Заголовок — название раздела (раньше на каждом экране было «Главный
     // администратор»: роль не подсказывает, где ты и что здесь делать).
@@ -4756,9 +4928,7 @@ function renderStaffShell(){
     content.appendChild(renderAuditLogTab());
   } else if(staffState.mainTab === "notifications"){
     content.appendChild(renderStaffNotificationsPage());
-  } else if(staffState.mainTab === "settings"){
-    content.appendChild(renderSettingsPage());
-  } else if(staffState.mainTab === "profile"){
+  } else if(staffState.mainTab === "settings" || staffState.mainTab === "profile"){
     content.appendChild(renderMyProfilePage());
   } else if(staffState.mainTab === "assignments"){
     content.appendChild(renderAssignmentsTab());
@@ -8499,6 +8669,7 @@ function wireEvents(root){
     if(action==="toggle-mobile-nav"){ mobileNavOpen = !mobileNavOpen; render(); return; }
     if(action==="close-mobile-nav"){ mobileNavOpen = false; render(); return; }
     if(action==="sb-main-menu" || action==="sb-lessons"){ studentState.sbMainMenu = action==="sb-main-menu"; render(); return; }
+    if(action==="acc-jump"){ var accT = document.getElementById(t.getAttribute("data-to")); if(accT) accT.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block:"start" }); return; }
     if(action==="sidebar-nav"){ studentState.sbMainMenu = false;
       // Пункты меню — теперь настоящие <a href="?tab=..."> (см. sidebarItem), чтобы
       // по ним работало ПКМ → «Открыть в новой вкладке» и Ctrl/⌘+клик — в этих
@@ -8506,6 +8677,8 @@ function wireEvents(root){
       if(e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
       e.preventDefault();
       await navigateToTab(t.getAttribute("data-key"));
+      // «Настройки» открывают «Профиль и настройки» сразу на «Внешнем виде».
+      if(t.getAttribute("data-key")==="settings"){ var accLook = document.getElementById("acc-look"); if(accLook) accLook.scrollIntoView({ block:"start" }); }
       return;
     }
     if(action==="open-course"){
@@ -8703,6 +8876,13 @@ function wireEvents(root){
       // advanceAfterLesson() ДО того, как renderCoursePlayer показал этот гейт
       // (см. findPendingModuleGate); здесь просто убираем гейт с дороги.
       render(); return;
+    }
+    if(action==="tour-replay"){
+      // Оба показа снова «не просмотрены»: главная откроется сейчас, урок — при следующем входе в урок.
+      if(course && course.progress){ course.progress.tour_home_seen = false; course.progress.tour_lesson_seen = false; }
+      ["home","lesson"].forEach(function(k){ api("/course/tour-seen", { method:"PUT", body: JSON.stringify({ tour:k, seen:false }) }).catch(function(){}); });
+      studentState.tab = "course"; studentState.navKey = "course"; studentState.quizMode = false;
+      render(); window.scrollTo(0, 0); return;
     }
     if(action==="welcome-start"){
       // Приветствие уезжает, главная въезжает (см. .wl-leave / .home-enter в styles.css).

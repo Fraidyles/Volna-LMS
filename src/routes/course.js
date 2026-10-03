@@ -410,6 +410,15 @@ router.put("/welcome-seen", authRequired, requireRole("student"), async (req, re
   res.json({ ok: true });
 });
 
+// Знакомство с платформой (главная / страница урока) пройдено или пропущено — больше само не открывается.
+router.put("/tour-seen", authRequired, requireRole("student"), async (req, res) => {
+  const col = { home: "tour_home_seen", lesson: "tour_lesson_seen" }[req.body && req.body.tour];
+  if (!col) return res.status(400).json({ error: "bad_tour", message: "Неизвестное знакомство" });
+  // seen:false — «Пройти знакомство заново» из настроек.
+  await pool.query("UPDATE progress SET " + col + "=$2 WHERE user_id=$1", [req.user.id, !(req.body && req.body.seen === false)]);
+  res.json({ ok: true });
+});
+
 // «Ваши протоколы»: разблокируются по мере прохождения уроков (lesson_protocols),
 // каждый урок может открыть несколько протоколов. Делим на «по вашей специализации»
 // (есть гайд под основную специализацию ИЛИ любую из «хочу развиваться в...») и
