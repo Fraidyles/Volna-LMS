@@ -227,6 +227,8 @@ var ICONS = {
   list: '<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1.2"/><circle cx="4" cy="12" r="1.2"/><circle cx="4" cy="18" r="1.2"/>',
   download: '<path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15"/><path d="M8 11l4 4 4-4"/><path d="M12 14.5V4"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  panel: '<rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M9.5 4.5v15"/>',
+  go: '<path d="M8.5 5.8v12.4L18.5 12z"/>',
   close: '<path d="M6 6l12 12M18 6L6 18"/>'
 };
 function icon(name, cls){ return '<svg class="ic'+(cls?' '+cls:'')+'" viewBox="0 0 24 24">'+(ICONS[name]||'')+'</svg>'; }
@@ -2482,13 +2484,13 @@ function renderSidebar(){
       var notifBadge = notifState.unreadCount + upcomingEventReminders().length;
       items += sidebarItem("profile","user","Мой профиль", navKey==="profile");
       items += sidebarItem("course","home","Главная", navKey==="course");
-      items += sidebarItem("schedule","calendar","Расписание", navKey==="schedule");
       items += sidebarItem("materials","list","Мой конспект", navKey==="materials");
       items += sidebarItem("progress","chartbar","Мой прогресс", navKey==="progress");
       // См. protocolsSectionAvailable — до этого момента в коллекции нечему появиться.
       if(course && protocolsSectionAvailable()){
         items += sidebarItem("protocols","doctor","Ваши протоколы", navKey==="protocols");
       }
+      items += sidebarItem("schedule","calendar","Расписание", navKey==="schedule");
       items += sidebarItem("telegram","message","Telegram", navKey==="telegram");
       items += sidebarItem("notifications","bell","Уведомления", navKey==="notifications", notifBadge);
       items += sidebarItem("settings","gear","Настройки", navKey==="settings");
@@ -2524,28 +2526,64 @@ function renderSidebar(){
     items += sidebarItem("settings","gear","Настройки", snavKey==="settings");
   }
 
-  var footer;
-  if(previewMode){
-    footer = '<div class="sidebar-footer">' +
-      '<button type="button" class="sidebar-item" data-action="exit-preview" title="Вернуться в панель">'+icon("logout")+'<span class="sidebar-item-label">Вернуться в панель</span></button>' +
-    '</div>';
-  } else {
-    var isDark = getTheme()!=="light";
-    footer = '<div class="sidebar-footer">' +
-      '<button type="button" class="sidebar-item" data-action="toggle-theme" title="Переключить тему">'+icon(isDark?"sun":"moon")+'<span class="sidebar-item-label">'+(isDark?"Светлая тема":"Тёмная тема")+'</span></button>' +
-      '<button type="button" class="sidebar-item" data-action="logout" title="Выйти">'+icon("logout")+'<span class="sidebar-item-label">Выйти</span></button>' +
-    '</div>';
-  }
+  // Пункты «Мой профиль» и «Настройки» — в нижней строке профиля, в списке их нет.
+  items = items.replace(/<a [^>]*data-key="(profile|settings)"[\s\S]*?<\/a>/g, "");
+  // Разделители между смысловыми группами: у врача «учёба | общение», у сотрудников — перед связью.
+  if(view==="student"){ if(!previewMode) items = items.replace(/(<a [^>]*data-key="schedule")/, '<div class="sbx-hr"></div>$1'); }
+  else items = items.replace(/(<a [^>]*data-key="telegram")/, '<div class="sbx-hr"></div>$1');
+  // Идёт эфир — точка у «Расписания».
+  if(liveEventNow()) items = items.replace(/(data-key="(?:schedule|calendar)"[^>]*>[\s\S]*?)(<\/a>)/, '$1<span class="sbx-live" title="Идёт эфир"></span>$2');
 
+  var collapsed = sidebarCollapsed() && !mobileNavOpen;
+  var top, next = "", meRow;
+  if(view==="student" && course && course.lessons){
+    var pr = course.progress || {}, doneIds = pr.completed_lessons || [], total = course.lessons.length;
+    var pct = Math.round((doneIds.length + (pr.completed?1:0)) / (total+1) * 100);
+    top = '<div class="sbx-ring" style="--p:'+pct+'%"><b>'+pct+'%</b></div>' +
+      '<div class="sbx-title"><strong>'+escapeHtml(course.course.title)+'</strong><span>'+doneIds.length+' из '+total+' '+ruPluralClient(total,"урока","уроков","уроков")+'</span></div>';
+    var curIdx = -1; course.lessons.forEach(function(l,i){ if(curIdx<0 && doneIds.indexOf(l.id)===-1 && !l.hiddenForMe && !l.dripLockedForMe) curIdx = i; });
+    if(!previewMode && !(course.locked||{}).locked && studentState.tab!=="lesson"){
+      if(curIdx>=0){
+        var nl = course.lessons[curIdx];
+        next = '<button type="button" class="sbx-next" data-action="open-lesson-at" data-idx="'+curIdx+'" title="Продолжить: '+escapeHtml(nl.title)+'"><span class="sbx-next-k">Продолжить'+(nl.duration?' · '+escapeHtml(nl.duration):'')+'</span><b>'+escapeHtml(nl.title)+'</b><span class="sbx-go">'+icon("go")+'</span></button>';
+      } else if(!pr.completed && !course.quizHiddenForMe){
+        next = '<button type="button" class="sbx-next" data-action="open-final-quiz" title="Итоговый тест"><span class="sbx-next-k">Остался последний шаг</span><b>Итоговый тест</b><span class="sbx-go">'+icon("go")+'</span></button>';
+      }
+    }
+  } else {
+    var roleLabel = { super_admin:"Главный администратор", admin:"Администратор", curator:"Куратор", student:"Врач" }[me && me.role] || "";
+    top = '<div class="sbx-mark">'+icon("doctor")+'</div><div class="sbx-title"><strong>Медицина Долголетия</strong><span>'+(view==="student"?"Демо-курс":escapeHtml(roleLabel))+'</span></div>';
+  }
+  var navKeyNow = view==="student" ? (studentState.navKey||"course") : (staffState.navKey||"home");
+  if(previewMode){
+    meRow = '<div class="sbx-me"><button type="button" class="sidebar-item sbx-exit" data-action="exit-preview" title="Вернуться в панель">'+icon("logout")+'<span class="sidebar-item-label">Вернуться в панель</span></button></div>';
+  } else {
+    var gam = view==="student" && course ? (course.gamification||{}) : null;
+    var sub = gam ? (gam.currentStreak ? icon("flame","sbx-flame")+gam.currentStreak+' '+ruPluralClient(gam.currentStreak,"день","дня","дней")+' · ' : '')+(gam.points||0)+' очков' : escapeHtml(({ super_admin:"Главный администратор", admin:"Администратор", curator:"Куратор" })[me.role]||"");
+    meRow = '<div class="sbx-me">' +
+      '<a href="?tab=profile" class="sbx-who'+(navKeyNow==="profile"?' active':'')+'" data-action="sidebar-nav" data-key="profile" title="Мой профиль">'+userAvatar(me,"sbx-av")+'<span class="sbx-who-t"><b>'+escapeHtml(me.name||"")+'</b><span>'+sub+'</span></span></a>' +
+      '<span class="sbx-btns"><a href="?tab=settings" class="sbx-ib'+(navKeyNow==="settings"?' on':'')+'" data-action="sidebar-nav" data-key="settings" title="Настройки">'+icon("gear")+'</a>' +
+      '<button type="button" class="sbx-ib" data-action="logout" title="Выйти">'+icon("logout")+'</button></span></div>';
+  }
   return el(
-    '<div class="sidebar'+(mobileNavOpen?' mobile-open':'')+'">' +
-      '<div class="sidebar-brand">'+brandMark()+'<span class="sidebar-item-label">Медицина Долголетия</span>' +
+    '<div class="sidebar sbx'+(collapsed?' collapsed':'')+(mobileNavOpen?' mobile-open':'')+'">' +
+      '<div class="sbx-top">'+top +
+        '<button type="button" class="sbx-collapse" data-action="toggle-sidebar" title="'+(collapsed?'Развернуть меню':'Свернуть меню')+'" aria-label="'+(collapsed?'Развернуть меню':'Свернуть меню')+'">'+icon("panel")+'</button>' +
         '<button type="button" class="sidebar-toggle" data-action="toggle-mobile-nav" title="Меню" aria-label="Меню">'+icon(mobileNavOpen?"close":"menu")+'</button>' +
       '</div>' +
-      '<div class="sidebar-nav">'+items+'</div>' +
-      footer +
+      '<div class="sidebar-nav">'+items+'</div>' + next + meRow +
     '</div>'
   );
+}
+// Свёрнутый сайдбар — выбор пользователя, хранится в браузере.
+function sidebarCollapsed(){ try{ return localStorage.getItem("lms-sb-collapsed")==="1"; }catch(e){ return false; } }
+function liveEventNow(){
+  if(!me) return null;
+  var mySid = me.stream_id || "", now = new Date();
+  return (calendarState.events||[]).filter(function(ev){ return view!=="student" || !ev.stream_id || ev.stream_id===mySid; }).find(function(ev){
+    var st = new Date(ev.event_date+"T"+(ev.event_time||"00:00")), en = new Date(st.getTime() + (ev.duration_min||60)*60000);
+    return st<=now && now<=en;
+  }) || null;
 }
 
 // Подложка мобильного меню — отдельный элемент (не вложенный в .sidebar), чтобы
@@ -8320,6 +8358,7 @@ function wireEvents(root){
     if(action==="register-as"){ registerDraft.asStaff = t.getAttribute("data-staff")==="1"; if(registerDraft.asStaff){ registerDraft.specializationIds=[]; registerDraft.interestIds=[]; } render(); return; }
     if(action==="sidebar-group"){
       var gid=t.getAttribute("data-group"), grp=t.closest(".nav-group");
+      if(t.closest(".sidebar.collapsed")){ try{ localStorage.setItem("lms-sb-collapsed","0"); }catch(err){} sidebarGroupsOpen[gid]=true; render(); return; }
       if(grp && grp.classList.contains("has-active")) return;
       sidebarGroupsOpen[gid]=!sidebarGroupsOpen[gid];
       try{ localStorage.setItem("lms-nav-groups", JSON.stringify(sidebarGroupsOpen)); }catch(e){}
@@ -8431,6 +8470,7 @@ function wireEvents(root){
       await applyStudentTab(t.getAttribute("data-tab"));
       return;
     }
+    if(action==="toggle-sidebar"){ try{ localStorage.setItem("lms-sb-collapsed", sidebarCollapsed() ? "0" : "1"); }catch(err){} render(); return; }
     if(action==="toggle-mobile-nav"){ mobileNavOpen = !mobileNavOpen; render(); return; }
     if(action==="close-mobile-nav"){ mobileNavOpen = false; render(); return; }
     if(action==="sidebar-nav"){
