@@ -1679,6 +1679,7 @@ function render(){
     // отсутствующими в DOM узлами.
     lessonPlyrInstance = null;
   }
+  if(document.querySelector(".qz-mx")) qzMatchWires();
   if(view==="student") tourMaybeStart(); else if(tour) closeTour(true);
   syncNavHistory();
 }
@@ -3922,23 +3923,57 @@ function qzOrder(key, q, val){
       '<span class="qz-ord-grip"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span><span class="qz-ord-n">'+(i+1)+'</span><span class="qz-ord-text">'+escapeHtml(byTok[tk]||"")+'</span></div>';
   }).join("") + '</div>';
 }
+// «Сопоставление»: две колонки. Нажимаешь пункт слева, затем его пару справа (или
+// наоборот) — обе карточки окрашиваются одним цветом с номером пункта, между ними
+// линия (рисует qzMatchWires после render). Нажатие на связанную карточку
+// разъединяет пару и выбирает её заново.
+var QZ_PAIR = ["#5EDFF0","#FF8FCF","#F5C55A","#7EE69A","#B39BFF","#FF9A6B","#6FA8FF","#E7E36A"];
+var qzMatchSel = null; // { key, path, side:"l"|"r", v }
 function qzMatch(key, q, val){
   val = val || {};
-  var used = {}; Object.keys(val).forEach(function(k){ used[val[k]] = k; });
-  return '<div class="qz-match">' + (q.left||[]).map(function(l, li){
-    return '<div class="qz-mrow"><div class="qz-mleft"><span class="qz-mnum">'+(li+1)+'</span>'+escapeHtml(l)+'</div><div class="qz-mright">' +
-      (q.right||[]).map(function(r){
-        var on = val[li]===r.token, taken = !on && used[r.token]!=null;
-        return '<button type="button" class="qz-chip'+(on?' on':'')+(taken?' taken':'')+'" data-action="qr-match" data-key="'+key+'" data-path="'+q.id+'" data-l="'+li+'" data-t="'+r.token+'">'+escapeHtml(r.text)+(taken?'<i>'+(parseInt(used[r.token],10)+1)+'</i>':'')+'</button>';
-      }).join("") + '</div></div>';
-  }).join("") + '</div>';
+  var owner = {}; Object.keys(val).forEach(function(k){ owner[val[k]] = parseInt(k,10); });
+  var sel = qzMatchSel && qzMatchSel.key===key && qzMatchSel.path===q.id ? qzMatchSel : null;
+  var total = (q.left||[]).length, done = Object.keys(val).length;
+  var attr = ' data-key="'+key+'" data-path="'+q.id+'"';
+  var hint = sel ? (sel.side==="l" ? 'Теперь выберите пару для «'+escapeHtml((q.left||[])[sel.v]||"")+'»' : 'Теперь выберите, к чему относится «'+escapeHtml(((q.right||[]).find(function(r){ return r.token===sel.v; })||{}).text||"")+'»')
+    : (done===total ? 'Все пары собраны — нажмите на карточку, чтобы перевыбрать' : 'Нажмите пункт, затем его пару — они окрасятся одним цветом');
+  var left = (q.left||[]).map(function(l, li){
+    var on = val[li]!=null, c = on ? QZ_PAIR[li % QZ_PAIR.length] : "";
+    var isSel = sel && sel.side==="l" && sel.v===li;
+    return '<button type="button" class="qz-mc qz-ml'+(on?' paired':'')+(isSel?' sel':'')+'"'+(c?' style="--pc:'+c+'"':'')+' data-action="qm-l" data-l="'+li+'" data-m="l'+li+'"'+attr+' aria-pressed="'+(isSel?'true':'false')+'">' +
+      '<span class="qz-mb">'+(li+1)+'</span><span class="qz-mt">'+escapeHtml(l)+'</span></button>';
+  }).join("");
+  var right = (q.right||[]).map(function(r){
+    var li = owner[r.token], on = li!=null, c = on ? QZ_PAIR[li % QZ_PAIR.length] : "";
+    var isSel = sel && sel.side==="r" && sel.v===r.token;
+    return '<button type="button" class="qz-mc qz-mr'+(on?' paired':'')+(isSel?' sel':'')+'"'+(c?' style="--pc:'+c+'"':'')+' data-action="qm-r" data-t="'+r.token+'" data-m="'+(on?'r'+li:'')+'"'+attr+' aria-pressed="'+(isSel?'true':'false')+'">' +
+      '<span class="qz-mt">'+escapeHtml(r.text)+'</span>'+(on?'<span class="qz-mb">'+(li+1)+'</span>':'<span class="qz-mb qz-mb-empty"></span>')+'</button>';
+  }).join("");
+  return '<div class="qz-mhead"><span class="qz-mhint'+(sel?' act':'')+'">'+hint+'</span><span class="qz-mcount">Связано '+done+' из '+total+'</span></div>' +
+    '<div class="qz-mx"'+attr+'><div class="qz-mcol">'+left+'</div><div class="qz-mcol">'+right+'</div><svg class="qz-mwires" aria-hidden="true"></svg></div>';
 }
+// Линии между парами — по реальным координатам карточек.
+function qzMatchWires(){
+  document.querySelectorAll(".qz-mx").forEach(function(box){
+    var svg = box.querySelector(".qz-mwires"), br = box.getBoundingClientRect(), out = "";
+    svg.setAttribute("viewBox", "0 0 "+br.width+" "+br.height);
+    box.querySelectorAll('.qz-ml.paired').forEach(function(lc){
+      var m = lc.getAttribute("data-m").slice(1), rc = box.querySelector('.qz-mr[data-m="r'+m+'"]'); if(!rc) return;
+      var a = lc.getBoundingClientRect(), b = rc.getBoundingClientRect();
+      var x1 = a.right-br.left, y1 = a.top+a.height/2-br.top, x2 = b.left-br.left, y2 = b.top+b.height/2-br.top, dx = (x2-x1)/2;
+      var col = getComputedStyle(lc).getPropertyValue("--pc").trim();
+      out += '<path d="M'+x1+' '+y1+' C'+(x1+dx)+' '+y1+' '+(x2-dx)+' '+y2+' '+x2+' '+y2+'" stroke="'+col+'"/><circle cx="'+x1+'" cy="'+y1+'" r="3.5" fill="'+col+'"/><circle cx="'+x2+'" cy="'+y2+'" r="3.5" fill="'+col+'"/>';
+    });
+    svg.innerHTML = out;
+  });
+}
+window.addEventListener("resize", qzMatchWires);
 function qzInput(key, q, answers){
   var t = q.type || "single";
   if(t==="multi") return '<p class="qz-sub">Отметьте все верные варианты</p>' + qzChoice(key, q.id, q.options, answers[q.id], true);
   if(t==="number") return qzNumber(key, q.id, q.unit, answers[q.id]);
   if(t==="order") return '<p class="qz-sub qz-ord-hint">Потяните строку за <span class="qz-ord-hint-g"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span> вверх или вниз — сверху первый шаг</p>' + qzOrder(key, q, answers[q.id]);
-  if(t==="match") return '<p class="qz-sub">Для каждого пункта слева выберите пару</p>' + qzMatch(key, q, answers[q.id]);
+  if(t==="match") return qzMatch(key, q, answers[q.id]);
   if(t==="case"){
     return '<div class="qz-steps">' + (q.steps||[]).map(function(st, i){
       var path = q.id+"#"+i, v = answers[path];
@@ -6664,7 +6699,7 @@ function renderGlossaryTermPage(){
 // правки. Внутри работают только «врачебные» действия, которые ничего не меняют на
 // сервере (ответить на вопрос теста, перемотать видео, переключить гайд), — всё
 // остальное (отправка, переходы) гасится перехватчиком кликов ниже.
-var PREVIEW_ALLOWED = ["qr-pick","qr-goto","qr-prev","qr-next","qr-match","seek-lesson-video","select-protocol-guide","prev-toc"];
+var PREVIEW_ALLOWED = ["qr-pick","qr-goto","qr-prev","qr-next","qm-l","qm-r","seek-lesson-video","select-protocol-guide","prev-toc"];
 var previewQuizCache = {};
 document.addEventListener("click", function(e){
   var box = e.target.closest && e.target.closest(".doc-prev-body");
@@ -8785,14 +8820,21 @@ function wireEvents(root){
     if(action==="qr-prev"){ var qpK=t.getAttribute("data-key"); qzGo(qpK, Math.max(0,(quizRun(qpK).step||0)-1)); return; }
     if(action==="qr-next"){ var qnK=t.getAttribute("data-key"); qzGo(qnK, (quizRun(qnK).step||0)+1); return; }
     if(action==="qr-submit"){ await qzSubmit(t.getAttribute("data-key")); return; }
-    if(action==="qr-match"){
-      // Выбор пары: если этот вариант уже стоит у другого пункта — пары меняются местами.
-      var mtRun=quizRun(t.getAttribute("data-key")), mtPath=t.getAttribute("data-path"), mtL=t.getAttribute("data-l"), mtT=t.getAttribute("data-t");
-      var mtVal=Object.assign({}, mtRun.answers[mtPath]||{});
-      var mtPrev=mtVal[mtL];
-      Object.keys(mtVal).forEach(function(k){ if(k!==mtL && mtVal[k]===mtT){ if(mtPrev) mtVal[k]=mtPrev; else delete mtVal[k]; } });
-      if(mtPrev===mtT) delete mtVal[mtL]; else mtVal[mtL]=mtT;
-      mtRun.answers[mtPath]=mtVal; render(); return;
+    if(action==="qm-l" || action==="qm-r"){
+      var mKey=t.getAttribute("data-key"), mPath=t.getAttribute("data-path"), mRun=quizRun(mKey);
+      var mVal=Object.assign({}, mRun.answers[mPath]||{});
+      var mSel = qzMatchSel && qzMatchSel.key===mKey && qzMatchSel.path===mPath ? qzMatchSel : null;
+      var mSide = action==="qm-l" ? "l" : "r", mV = mSide==="l" ? parseInt(t.getAttribute("data-l"),10) : t.getAttribute("data-t");
+      var mPair = function(li, tok){ Object.keys(mVal).forEach(function(k){ if(mVal[k]===tok) delete mVal[k]; }); mVal[li] = tok; qzMatchSel = null; };
+      if(mSel && mSel.side!==mSide){ if(mSide==="l") mPair(mV, mSel.v); else mPair(mSel.v, mV); }
+      else if(mSel && mSel.v===mV){ qzMatchSel = null; }
+      else {
+        // связанная карточка: разъединяем пару и выбираем её заново
+        if(mSide==="l" && mVal[mV]!=null) delete mVal[mV];
+        if(mSide==="r") Object.keys(mVal).forEach(function(k){ if(mVal[k]===mV) delete mVal[k]; });
+        qzMatchSel = { key:mKey, path:mPath, side:mSide, v:mV };
+      }
+      mRun.answers[mPath]=mVal; render(); return;
     }
     if(action==="set-home-bg"){
       try{ localStorage.setItem("lms-home-bg", t.getAttribute("data-bg")); }catch(err){}
