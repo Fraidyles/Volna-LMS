@@ -3915,11 +3915,11 @@ function qzOrder(key, q, val){
   var byTok = {}; (q.items||[]).forEach(function(it){ byTok[it.token] = it.text; });
   var order = Array.isArray(val) && val.length ? val : (q.items||[]).map(function(it){ return it.token; });
   var n = order.length;
-  return '<div class="qz-ord" data-key="'+key+'" data-path="'+q.id+'">' + order.map(function(tk, i){
-    return '<div class="qz-ord-item" draggable="true" data-tok="'+tk+'">' +
-      '<span class="qz-ord-grip" aria-hidden="true">⋮⋮</span><span class="qz-ord-n">'+(i+1)+'</span><span class="qz-ord-text">'+escapeHtml(byTok[tk]||"")+'</span>' +
-      '<span class="qz-ord-btns"><button type="button" class="qz-ord-btn" data-action="qr-move" data-key="'+key+'" data-path="'+q.id+'" data-i="'+i+'" data-dir="-1"'+(i===0?' disabled':'')+' aria-label="Выше">↑</button>' +
-      '<button type="button" class="qz-ord-btn" data-action="qr-move" data-key="'+key+'" data-path="'+q.id+'" data-i="'+i+'" data-dir="1"'+(i===n-1?' disabled':'')+' aria-label="Ниже">↓</button></span></div>';
+  return '<div class="qz-ord" data-key="'+key+'" data-path="'+q.id+'" role="list">' + order.map(function(tk, i){
+    // Одно управление — перетащить строку (мышью за любое место, пальцем — за ручку);
+    // с клавиатуры: Tab к строке и стрелки ↑/↓.
+    return '<div class="qz-ord-item" role="listitem" tabindex="0" data-tok="'+tk+'" aria-label="Шаг '+(i+1)+' из '+n+': '+escapeHtml(byTok[tk]||"")+'. Стрелки вверх и вниз — переставить">' +
+      '<span class="qz-ord-grip"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span><span class="qz-ord-n">'+(i+1)+'</span><span class="qz-ord-text">'+escapeHtml(byTok[tk]||"")+'</span></div>';
   }).join("") + '</div>';
 }
 function qzMatch(key, q, val){
@@ -3937,7 +3937,7 @@ function qzInput(key, q, answers){
   var t = q.type || "single";
   if(t==="multi") return '<p class="qz-sub">Отметьте все верные варианты</p>' + qzChoice(key, q.id, q.options, answers[q.id], true);
   if(t==="number") return qzNumber(key, q.id, q.unit, answers[q.id]);
-  if(t==="order") return '<p class="qz-sub">Перетащите или расставьте стрелками — сверху первый шаг</p>' + qzOrder(key, q, answers[q.id]);
+  if(t==="order") return '<p class="qz-sub qz-ord-hint">Потяните строку за <span class="qz-ord-hint-g"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg></span> вверх или вниз — сверху первый шаг</p>' + qzOrder(key, q, answers[q.id]);
   if(t==="match") return '<p class="qz-sub">Для каждого пункта слева выберите пару</p>' + qzMatch(key, q, answers[q.id]);
   if(t==="case"){
     return '<div class="qz-steps">' + (q.steps||[]).map(function(st, i){
@@ -4168,29 +4168,64 @@ document.addEventListener("input", function(e){
   quizRun(key).answers[inp.getAttribute("data-path")] = inp.value;
   qzSetButtons(key);
 });
-// Перетаскивание в вопросе «порядок» (мышью; на телефоне — стрелки).
-var qzDragTok = null;
-document.addEventListener("dragstart", function(e){
-  var it = e.target.closest && e.target.closest(".qz-ord-item"); if(!it) return;
-  qzDragTok = it.getAttribute("data-tok"); it.classList.add("dragging");
-  try{ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", qzDragTok); }catch(err){}
-});
-document.addEventListener("dragover", function(e){
-  if(!qzDragTok) return;
-  var it = e.target.closest && e.target.closest(".qz-ord-item"); if(!it) return;
-  e.preventDefault();
-  var list = it.parentElement, dragged = list.querySelector('.qz-ord-item[data-tok="'+qzDragTok+'"]'); if(!dragged || dragged===it) return;
-  var r = it.getBoundingClientRect();
-  list.insertBefore(dragged, e.clientY < r.top + r.height/2 ? it : it.nextSibling);
-});
-document.addEventListener("dragend", function(e){
-  if(!qzDragTok) return;
-  var list = e.target.closest && e.target.closest(".qz-ord");
-  qzDragTok = null;
-  if(!list) return;
-  quizRun(list.getAttribute("data-key")).answers[list.getAttribute("data-path")] = [].map.call(list.querySelectorAll(".qz-ord-item"), function(x){ return x.getAttribute("data-tok"); });
+// Перетаскивание в вопросе «порядок»: pointer-события, одинаково для мыши и пальца.
+// Строка поднимается и едет за указателем, на месте, куда она встанет, — пунктирная
+// рамка. Мышью можно тянуть за любое место строки, пальцем — за ручку (иначе по
+// списку нельзя было бы прокрутить страницу).
+var qzDrag = null;
+function qzOrdSave(list, toks){
+  quizRun(list.getAttribute("data-key")).answers[list.getAttribute("data-path")] = toks;
   render();
+}
+document.addEventListener("pointerdown", function(e){
+  if(e.button!==0 || qzDrag) return;
+  var it = e.target.closest && e.target.closest(".qz-ord-item"); if(!it) return;
+  if(e.pointerType!=="mouse" && !e.target.closest(".qz-ord-grip")) return;
+  qzDrag = { it:it, list:it.parentElement, id:e.pointerId, x0:e.clientX, y0:e.clientY, on:false };
 });
+document.addEventListener("pointermove", function(e){
+  var d = qzDrag; if(!d || e.pointerId!==d.id) return;
+  if(!d.on){
+    if(Math.abs(e.clientY-d.y0) < 4 && Math.abs(e.clientX-d.x0) < 4) return;
+    var r = d.it.getBoundingClientRect();
+    d.on = true; d.dy = d.y0 - r.top; d.left = r.left;
+    d.slot = document.createElement("div"); d.slot.className = "qz-ord-slot"; d.slot.style.height = r.height+"px";
+    d.list.insertBefore(d.slot, d.it);
+    d.it.classList.add("lifted"); d.it.style.width = r.width+"px"; d.it.style.left = r.left+"px"; d.it.style.top = r.top+"px";
+    document.body.classList.add("qz-ord-dragging");
+  }
+  e.preventDefault();
+  d.it.style.top = (e.clientY - d.dy)+"px";
+  // место вставки — по середине соседних строк
+  var others = [].filter.call(d.list.querySelectorAll(".qz-ord-item"), function(x){ return x!==d.it; });
+  var before = null;
+  for(var k=0; k<others.length; k++){ var rr = others[k].getBoundingClientRect(); if(e.clientY < rr.top + rr.height/2){ before = others[k]; break; } }
+  if(before){ if(d.slot.nextSibling!==before) d.list.insertBefore(d.slot, before); }
+  else if(d.list.lastElementChild!==d.slot) d.list.appendChild(d.slot);
+}, { passive:false });
+function qzDragEnd(e){
+  var d = qzDrag; if(!d || (e && e.pointerId!==d.id)) return;
+  qzDrag = null;
+  if(!d.on) return;
+  document.body.classList.remove("qz-ord-dragging");
+  d.list.insertBefore(d.it, d.slot); d.slot.remove();
+  qzOrdSave(d.list, [].map.call(d.list.querySelectorAll(".qz-ord-item"), function(x){ return x.getAttribute("data-tok"); }));
+}
+document.addEventListener("pointerup", qzDragEnd);
+document.addEventListener("pointercancel", qzDragEnd);
+document.addEventListener("keydown", function(e){
+  if(e.key!=="ArrowUp" && e.key!=="ArrowDown") return;
+  var it = e.target.classList && e.target.classList.contains("qz-ord-item") ? e.target : null; if(!it) return;
+  e.preventDefault();
+  var list = it.parentElement, toks = [].map.call(list.querySelectorAll(".qz-ord-item"), function(x){ return x.getAttribute("data-tok"); });
+  var i = toks.indexOf(it.getAttribute("data-tok")), j = i + (e.key==="ArrowUp" ? -1 : 1);
+  if(j<0 || j>=toks.length) return;
+  var tk = toks[i]; toks[i] = toks[j]; toks[j] = tk;
+  var key = list.getAttribute("data-key");
+  qzOrdSave(list, toks);
+  var back = document.querySelector('.qz-ord[data-key="'+key+'"] .qz-ord-item[data-tok="'+tk+'"]'); if(back) back.focus();
+});
+
 
 
 // Гейт после последнего урока модуля: сначала итоговый тест по модулю (если у него
@@ -6629,7 +6664,7 @@ function renderGlossaryTermPage(){
 // правки. Внутри работают только «врачебные» действия, которые ничего не меняют на
 // сервере (ответить на вопрос теста, перемотать видео, переключить гайд), — всё
 // остальное (отправка, переходы) гасится перехватчиком кликов ниже.
-var PREVIEW_ALLOWED = ["qr-pick","qr-goto","qr-prev","qr-next","qr-move","qr-match","seek-lesson-video","select-protocol-guide","prev-toc"];
+var PREVIEW_ALLOWED = ["qr-pick","qr-goto","qr-prev","qr-next","qr-match","seek-lesson-video","select-protocol-guide","prev-toc"];
 var previewQuizCache = {};
 document.addEventListener("click", function(e){
   var box = e.target.closest && e.target.closest(".doc-prev-body");
@@ -8750,12 +8785,6 @@ function wireEvents(root){
     if(action==="qr-prev"){ var qpK=t.getAttribute("data-key"); qzGo(qpK, Math.max(0,(quizRun(qpK).step||0)-1)); return; }
     if(action==="qr-next"){ var qnK=t.getAttribute("data-key"); qzGo(qnK, (quizRun(qnK).step||0)+1); return; }
     if(action==="qr-submit"){ await qzSubmit(t.getAttribute("data-key")); return; }
-    if(action==="qr-move"){
-      var mvRun=quizRun(t.getAttribute("data-key")), mvPath=t.getAttribute("data-path"), mvI=parseInt(t.getAttribute("data-i"),10), mvD=parseInt(t.getAttribute("data-dir"),10);
-      var mvArr=(mvRun.answers[mvPath]||[]).slice(), mvJ=mvI+mvD;
-      if(mvJ<0 || mvJ>=mvArr.length) return;
-      var mvTmp=mvArr[mvI]; mvArr[mvI]=mvArr[mvJ]; mvArr[mvJ]=mvTmp; mvRun.answers[mvPath]=mvArr; render(); return;
-    }
     if(action==="qr-match"){
       // Выбор пары: если этот вариант уже стоит у другого пункта — пары меняются местами.
       var mtRun=quizRun(t.getAttribute("data-key")), mtPath=t.getAttribute("data-path"), mtL=t.getAttribute("data-l"), mtT=t.getAttribute("data-t");

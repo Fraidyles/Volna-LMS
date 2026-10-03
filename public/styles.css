@@ -1984,20 +1984,27 @@ mark.hl.hl-flash{animation:hlFlash 1.6s ease;}
 .qz-unit{font-size:.9375rem;color:var(--muted);white-space:nowrap;}
 /* порядок */
 .qz-ord{display:flex;flex-direction:column;gap:.5rem;}
-.qz-ord-item{display:flex;align-items:center;gap:.75rem;padding:.625rem .625rem .625rem .75rem;border-radius:.875rem;border:1px solid var(--line-2);
-  background:color-mix(in srgb,var(--surface-2) 80%,transparent);cursor:grab;transition:border-color .15s,box-shadow .15s,transform .15s;user-select:none;}
+.qz-ord-item{display:flex;align-items:center;gap:.875rem;padding:.75rem 1rem .75rem .625rem;border-radius:1rem;border:1px solid var(--line-2);
+  background:color-mix(in srgb,var(--surface-2) 80%,transparent);cursor:grab;transition:border-color .15s,background .15s;user-select:none;-webkit-user-select:none;}
 .qz-ord-item:hover{border-color:color-mix(in srgb,var(--primary) 45%,transparent);}
-.qz-ord-item.dragging{opacity:.55;border-style:dashed;cursor:grabbing;}
-.qz-ord-grip{color:var(--muted);letter-spacing:-.1875rem;font-size:.875rem;}
-.qz-ord-n{flex:0 0 1.75rem;height:1.75rem;border-radius:.5625rem;display:grid;place-items:center;font-size:.8125rem;font-weight:700;color:#fff;background:var(--primary);}
-.qz-ord-text{flex:1;min-width:0;font-size:.9375rem;line-height:1.4;}
-.qz-ord-btns{display:flex;gap:.25rem;flex-shrink:0;}
-/* На телефоне стрелки — столбиком, а ⋮⋮ не нужна (там переставляют стрелками):
-   иначе блок кнопок сжимался и наезжал на текст шага. */
-@media (max-width:640px){ .qz-ord-item{gap:.625rem;padding:.625rem;} .qz-ord-grip{display:none;} .qz-ord-btns{flex-direction:column;} .qz-ord-text{font-size:.875rem;} }
-.qz-ord-btn{width:2rem;height:2rem;border-radius:.5625rem;border:1px solid var(--line-2);background:var(--surface);color:var(--ink);cursor:pointer;font-size:.875rem;}
-.qz-ord-btn:hover:not(:disabled){border-color:var(--primary);color:var(--primary);}
-.qz-ord-btn:disabled{opacity:.3;cursor:default;}
+.qz-ord-item:hover .qz-ord-grip{color:var(--ink);background:color-mix(in srgb,var(--primary) 22%,transparent);}
+.qz-ord-item:focus-visible{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 25%,transparent);}
+/* ручка: крупная, за неё тянут пальцем (touch-action:none — только здесь, остальная строка прокручивает страницу) */
+.qz-ord-grip{flex:0 0 2rem;height:2.5rem;border-radius:.625rem;display:grid;place-items:center;color:var(--muted);background:color-mix(in srgb,var(--ink) 7%,transparent);touch-action:none;transition:background .15s,color .15s;}
+.qz-ord-grip svg{width:1rem;height:1rem;}
+.qz-ord-n{flex:0 0 1.75rem;height:1.75rem;border-radius:50%;display:grid;place-items:center;font-size:.8125rem;font-weight:700;color:var(--primary);border:1.5px solid color-mix(in srgb,var(--primary) 60%,transparent);}
+.qz-ord-text{flex:1;min-width:0;font-size:.9375rem;line-height:1.4;overflow-wrap:break-word;hyphens:auto;}
+/* строка в руке */
+.qz-ord-item.lifted{position:fixed;z-index:400;margin:0;cursor:grabbing;transform:rotate(-.6deg) scale(1.01);pointer-events:none;
+  border-color:var(--primary);background:color-mix(in srgb,var(--primary) 16%,var(--surface));
+  box-shadow:0 1.25rem 2.5rem -.75rem rgba(0,0,0,.6),0 0 0 3px color-mix(in srgb,var(--primary) 25%,transparent);}
+.qz-ord-item.lifted .qz-ord-grip{background:var(--primary);color:#fff;}
+.qz-ord-slot{border-radius:1rem;border:1.5px dashed color-mix(in srgb,var(--primary) 60%,transparent);background:color-mix(in srgb,var(--primary) 6%,transparent);}
+body.qz-ord-dragging{cursor:grabbing;user-select:none;-webkit-user-select:none;}
+.qz-ord-hint{line-height:1.6;}
+.qz-ord-hint-g{display:inline-grid;place-items:center;vertical-align:-.3125rem;margin:0 .125rem;width:1.375rem;height:1.375rem;border-radius:.375rem;background:color-mix(in srgb,var(--ink) 8%,transparent);}
+.qz-ord-hint-g svg{width:.75rem;height:.75rem;}
+@media (max-width:640px){ .qz-ord-item{gap:.5rem;padding:.5rem .625rem .5rem .375rem;} .qz-ord-text{font-size:.875rem;} .qz-ord-grip{flex-basis:2rem;height:2.75rem;} .qz-ord-n{flex-basis:1.5rem;height:1.5rem;font-size:.75rem;} }
 /* сопоставление */
 .qz-match{display:flex;flex-direction:column;gap:.625rem;}
 .qz-mrow{display:grid;grid-template-columns:minmax(0,13.75rem) minmax(0,1fr);gap:.875rem;align-items:center;padding:.75rem .875rem;border-radius:.875rem;
