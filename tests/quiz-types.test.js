@@ -108,6 +108,18 @@ describe("Подсчёт балла", () => {
     expect(gradeQuestion(q, "").score).toBe(0);
   });
 
+  test("число — дробный ответ можно округлить до целого", () => {
+    const q = row("number", { payload: { answer: 66.7, min: 66.6, max: 66.8, unit: "млрд $" } });
+    expect(gradeQuestion(q, 67).score).toBe(1);
+    expect(gradeQuestion(q, 66).score).toBe(1);
+    expect(gradeQuestion(q, "66,7").score).toBe(1);
+    expect(gradeQuestion(q, 65).score).toBe(0);
+    expect(gradeQuestion(q, 66.2).score).toBe(0);
+    // целый ответ — только в пределах допуска
+    const w = row("number", { payload: { answer: 26, min: 26, max: 26, unit: "баллов" } });
+    expect(gradeQuestion(w, 25).score).toBe(0);
+  });
+
   test("сопоставление — доля верных пар", () => {
     const q = row("match", { options: ["l0", "l1"], payload: { right: ["r0", "r1"] } });
     const pub = publicQuestion(q);
