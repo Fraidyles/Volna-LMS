@@ -4342,17 +4342,17 @@ function renderModuleQuizStage(mod){
 // (обязателен) + необязательный комментарий. Кнопка недоступна, пока не выбрана оценка.
 function renderModuleFeedbackStage(mod){
   var rating = studentState.moduleFeedbackRating || 0;
-  var html = '<div class="meta" style="margin-bottom:.125rem;">Модуль «'+escapeHtml(mod.title)+'» пройден</div>' +
-    '<h3 style="margin-top:.25rem;">Как вам этот модуль?</h3>' +
-    '<p class="meta">Оцените и, если хотите, добавьте пару слов — куратор это увидит.</p>' +
-    '<div style="display:flex;gap:.25rem;margin:1.125rem 0 .875rem;">';
+  var LBL = ["","Не понравился","Так себе","Нормально","Хорошо","Отлично"];
+  var html = '<div class="mf"><span class="mf-badge">'+icon("check")+'</span>' +
+    '<div class="mf-k">Модуль пройден</div><h3 class="mf-h">«'+escapeHtml(lxNbsp(mod.title))+'»</h3>' +
+    '<p class="mf-sub">Как вам этот модуль? Оценка и пара слов помогут куратору сделать курс лучше.</p>' +
+    '<div class="mf-stars" role="radiogroup" aria-label="Оценка модуля">';
   for(var i=1;i<=5;i++){
     html += '<button type="button" class="star-btn'+(i<=rating?' active':'')+'" data-action="set-module-feedback-rating" data-value="'+i+'" aria-label="'+i+' из 5">'+icon("star","ic-lg")+'</button>';
   }
-  html += '</div>' +
-    '<textarea class="input" id="moduleFeedbackComment" style="height:5rem;" placeholder="Комментарий необязателен">'+escapeHtml(studentState.moduleFeedbackComment||"")+'</textarea>' +
-    '<button class="btn btn-primary" style="margin-top:.875rem;" data-action="submit-module-feedback" data-module-id="'+mod.id+'"'+(rating?'':' disabled')+'>Отправить и продолжить</button>' +
-    (rating?'':'<p class="hint" style="margin-top:.375rem;">Выберите оценку, чтобы продолжить.</p>');
+  html += '</div><div class="mf-lbl">'+(rating ? LBL[rating] : 'Выберите оценку')+'</div>' +
+    '<textarea class="input mf-ta" id="moduleFeedbackComment" placeholder="Что понравилось или чего не хватило? (необязательно)">'+escapeHtml(studentState.moduleFeedbackComment||"")+'</textarea>' +
+    '<button class="btn btn-primary mf-go" data-action="submit-module-feedback" data-module-id="'+mod.id+'"'+(rating?'':' disabled')+'>Отправить и продолжить →</button></div>';
   return html;
 }
 

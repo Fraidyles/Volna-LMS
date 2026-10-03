@@ -3192,7 +3192,7 @@ body.qz-ord-dragging{cursor:grabbing;user-select:none;-webkit-user-select:none;}
 .sbx-lessons .lesson-sub,.player > .lesson-nav .lesson-sub{position:relative;border-left:none;gap:.125rem;margin:.625rem 0 .125rem -.125rem;}
 .sbx-lessons .lesson-sub::before,.player > .lesson-nav .lesson-sub::before{content:"";position:absolute;left:.5625rem;top:.75rem;bottom:.75rem;width:2px;border-radius:2px;
   background:linear-gradient(180deg,var(--primary) 0 var(--done,0%),color-mix(in srgb,var(--ink) 12%,transparent) var(--done,0%));transition:background .3s;}
-.sbx-lessons .lesson-sub button,.player > .lesson-nav .lesson-sub button{position:relative;display:flex;align-items:flex-start;gap:.625rem;margin:0;padding:.3125rem .25rem .3125rem 0;border-left:none;font:500 .78rem/1.35 var(--sans);color:color-mix(in srgb,var(--ink) 66%,transparent);overflow-wrap:anywhere;}
+.sbx-lessons .lesson-sub button,.player > .lesson-nav .lesson-sub button{position:relative;display:flex;align-items:flex-start;gap:.625rem;margin:0;padding:.3125rem .25rem .3125rem 0;border-left:none;font:500 .78rem/1.35 var(--sans);color:color-mix(in srgb,var(--ink) 66%,transparent);overflow-wrap:break-word;hyphens:auto;-webkit-hyphens:auto;}
 .sbx-lessons .lesson-sub button:hover,.player > .lesson-nav .lesson-sub button:hover{color:var(--ink);}
 .lx-dot{position:relative;z-index:1;flex:0 0 1.125rem;height:1.125rem;border-radius:50%;display:grid;place-items:center;background:color-mix(in srgb,var(--ink) 4%,var(--surface));border:1.5px solid color-mix(in srgb,var(--ink) 24%,transparent);}
 .sbx-lessons .lesson-sub button.ok .lx-dot,.player > .lesson-nav .lesson-sub button.ok .lx-dot{background:var(--primary);border-color:var(--primary);}
@@ -3231,3 +3231,18 @@ body.qz-ord-dragging{cursor:grabbing;user-select:none;-webkit-user-select:none;}
   .player:has(.lesson-body.lx) > .lesson-nav .lesson-item b{font-size:.8125rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .player:has(.lesson-body.lx) > .lesson-nav .lesson-item > div > span,.player:has(.lesson-body.lx) > .lesson-nav .lesson-sub{display:none;}
 }
+/* отзыв о модуле — в стиле урока */
+.mf{max-width:34rem;margin:1.5rem auto 1rem;text-align:center;display:flex;flex-direction:column;align-items:center;}
+.mf-badge{width:3.5rem;height:3.5rem;border-radius:1.125rem;display:grid;place-items:center;color:#fff;background:linear-gradient(135deg,var(--primary),var(--rose));box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 .875rem 2rem -1rem var(--rose);margin-bottom:1.25rem;}
+.mf-badge .ic{width:1.5rem;height:1.5rem;stroke-width:2.4;}
+.mf-k{font-size:.6875rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--primary);}
+.mf-h{font-size:1.75rem;font-weight:800;letter-spacing:-.025em;line-height:1.15;margin:.375rem 0 .625rem;text-wrap:balance;}
+.mf-sub{color:var(--muted);font-size:.9375rem;line-height:1.55;margin:0 0 1.5rem;}
+.mf-stars{display:flex;gap:.375rem;}
+.mf-stars .star-btn{padding:.375rem;color:color-mix(in srgb,var(--ink) 16%,transparent);transition:color .12s,transform .12s;}
+.mf-stars .star-btn:hover{transform:scale(1.1);}
+.mf-stars .star-btn .ic{width:2.25rem;height:2.25rem;}
+.mf-stars .star-btn.active{color:var(--status-attention);filter:drop-shadow(0 0 .5rem color-mix(in srgb,var(--status-attention) 45%,transparent));}
+.mf-lbl{min-height:1.25rem;margin:.375rem 0 1.25rem;font-size:.875rem;font-weight:600;color:var(--muted);}
+.mf-ta{width:100%;height:5.5rem;text-align:left;}
+.mf-go{margin-top:1rem;width:100%;}
