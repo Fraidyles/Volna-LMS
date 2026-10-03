@@ -1027,7 +1027,20 @@ function selLessonCtx(){
   var l = course && course.lessons[studentState.lessonIndex];
   return l ? { id:l.id, n:studentState.lessonIndex+1, title:l.title } : null;
 }
+function placeSelTools(el2, rect){
+  var w = el2.offsetWidth, h = el2.offsetHeight, coarse = window.matchMedia && window.matchMedia("(pointer:coarse)").matches;
+  var top = coarse ? rect.bottom + 10 : rect.top - h - 10;
+  if(top < 8) top = rect.bottom + 10;
+  if(top + h > window.innerHeight - 8) top = Math.max(8, rect.top - h - 10);
+  // выделение частично за краем экрана — панель всё равно остаётся видимой
+  top = Math.min(Math.max(8, top), window.innerHeight - h - 8);
+  var left = Math.min(Math.max(8, rect.left + rect.width/2 - w/2), window.innerWidth - w - 8);
+  el2.style.top = top + "px"; el2.style.left = left + "px";
+}
 function openSelTools(rect, text, hid){
+  // Панель уже открыта в том же режиме — только обновляем текст и место, не пересоздавая
+  // (иначе заново играет анимация появления и панель «прыгает»).
+  if(selTools && selTools.hid===(hid||null)){ selTools.text = text; placeSelTools(selTools.el, rect); return; }
   closeSelTools();
   var btn = function(act, ic, label){ return '<button type="button" data-sel-action="'+act+'">'+icon(ic,"ic-sm")+'<span>'+label+'</span></button>'; };
   var html = '<div class="sel-tools" role="toolbar" aria-label="Действия с выделенным">' +
@@ -1040,14 +1053,7 @@ function openSelTools(rect, text, hid){
   selTools = { el:el2, text:text, hid:hid||null };
   // над выделением; если не помещается — под ним. На сенсорных экранах сверху
   // висит системное меню выделения — ставим панель снизу.
-  var w = el2.offsetWidth, h = el2.offsetHeight, coarse = window.matchMedia && window.matchMedia("(pointer:coarse)").matches;
-  var top = coarse ? rect.bottom + 10 : rect.top - h - 10;
-  if(top < 8) top = rect.bottom + 10;
-  if(top + h > window.innerHeight - 8) top = Math.max(8, rect.top - h - 10);
-  // выделение частично за краем экрана — панель всё равно остаётся видимой
-  top = Math.min(Math.max(8, top), window.innerHeight - h - 8);
-  var left = Math.min(Math.max(8, rect.left + rect.width/2 - w/2), window.innerWidth - w - 8);
-  el2.style.top = top + "px"; el2.style.left = left + "px";
+  placeSelTools(el2, rect);
   el2.addEventListener("mousedown", function(e){ e.preventDefault(); }); // не снимать выделение кликом по панели
   el2.addEventListener("click", function(e){
     var b = e.target.closest("[data-sel-action]"); if(b) runSelAction(b.getAttribute("data-sel-action"));
@@ -1138,8 +1144,11 @@ async function runSelAction(act){
 }
 // Выделение мышью — по отпусканию кнопки; с клавиатуры и на сенсорных экранах —
 // по selectionchange (с задержкой, пока пользователь тянет границы).
-var selCheckTimer = null;
+var selCheckTimer = null, selMouseDown = false;
+// Пока кнопка мыши зажата, выделение ещё тянут — панель не показываем.
+document.addEventListener("mousedown", function(e){ if(e.button===0 && !(e.target.closest && e.target.closest(".sel-tools, .sel-pop"))){ selMouseDown = true; closeSelTools(); } }, true);
 document.addEventListener("mouseup", function(e){
+  selMouseDown = false;
   if(e.target.closest && e.target.closest(".sel-tools")) return;
   var mk = e.target.closest && e.target.closest("#lessonProse mark.hl");
   var sel = window.getSelection && window.getSelection();
@@ -1154,7 +1163,7 @@ document.addEventListener("mouseup", function(e){
 });
 document.addEventListener("selectionchange", function(){
   clearTimeout(selCheckTimer);
-  selCheckTimer = setTimeout(function(){ if(!(selTools && selTools.hid)) selCheck(); }, 350);
+  selCheckTimer = setTimeout(function(){ if(!selMouseDown && !(selTools && selTools.hid)) selCheck(); }, 350);
 });
 document.addEventListener("keydown", function(e){ if(e.key==="Escape") closeSelTools(); });
 window.addEventListener("scroll", function(){ closeSelTools(); }, { passive:true, capture:true });
