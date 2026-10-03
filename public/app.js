@@ -1694,7 +1694,7 @@ function lbBarHtml(block){
       out += b("step-icon","Иконка: "+ic[1]) + b("step-up","↑ шаг") + b("step-down","↓ шаг") + b("step-del","− шаг");
     }
   } else if(k==="warn" || k==="cheat"){
-    out += '<span style="color:var(--muted);font-size:12px;">Enter — новый пункт</span>';
+    out += '<span style="color:var(--muted);font-size:.75rem;">Enter — новый пункт</span>';
   }
   return out + '<span class="lb-bar-sep"></span>' + b("up","↑ Выше") + b("down","↓ Ниже") + b("del","Удалить блок","danger");
 }
@@ -1780,17 +1780,17 @@ function lbOp(op){
 }
 
 function renderLessonEditorModal(){
-  var body = '<div class="drawer-head"><b style="font-size:16px;">'+(lessonEditor.isNew?"Новый урок":"Редактирование урока")+'</b><button class="btn btn-ghost btn-sm" data-action="close-lesson-editor">Закрыть ✕</button></div>' +
+  var body = '<div class="drawer-head"><b style="font-size:1rem;">'+(lessonEditor.isNew?"Новый урок":"Редактирование урока")+'</b><button class="btn btn-ghost btn-sm" data-action="close-lesson-editor">Закрыть ✕</button></div>' +
     '<div class="drawer-body">';
   if(!lessonEditor.isNew && !lessonEditor.loaded){
-    body += '<div class="empty-state" style="padding:30px 10px;">Загрузка…</div>';
+    body += '<div class="empty-state" style="padding:1.875rem .625rem;">Загрузка…</div>';
   } else {
     if(lessonEditor.hasDraft){
-      body += '<div class="card" style="padding:12px 14px;margin-bottom:16px;background:var(--accent-tint);border-color:transparent;">' +
-        '<b style="font-size:13px;">Есть несохранённый черновик</b> — врачи всё ещё видят опубликованную версию.</div>';
+      body += '<div class="card" style="padding:.75rem .875rem;margin-bottom:1rem;background:var(--accent-tint);border-color:transparent;">' +
+        '<b style="font-size:.8125rem;">Есть несохранённый черновик</b> — врачи всё ещё видят опубликованную версию.</div>';
     }
     if(!lessonEditor.isNew){
-      body += '<div class="tabs" style="margin-bottom:14px;">' +
+      body += '<div class="tabs" style="margin-bottom:.875rem;">' +
         '<button type="button" class="tab'+(!lessonEditor.showHistory && !lessonEditor.showPreview?' active':'')+'" data-action="lesson-editor-mode" data-mode="edit">Редактирование</button>' +
         '<button type="button" class="tab'+(lessonEditor.showPreview?' active':'')+'" data-action="lesson-editor-mode" data-mode="preview">Предпросмотр</button>' +
         '<button type="button" class="tab'+(lessonEditor.showHistory?' active':'')+'" data-action="lesson-editor-mode" data-mode="history">История версий</button>' +
@@ -1799,11 +1799,11 @@ function renderLessonEditorModal(){
 
     if(lessonEditor.showHistory){
       if(!lessonEditor.history.length){
-        body += '<div class="empty-state" style="padding:24px 10px;">Правок ещё не было.</div>';
+        body += '<div class="empty-state" style="padding:1.5rem .625rem;">Правок ещё не было.</div>';
       } else {
         lessonEditor.history.forEach(function(h){
-          body += '<div class="adm-row" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);">' +
-            '<div style="flex:1;"><b style="font-size:14px;display:block;">'+escapeHtml(h.title)+'</b><span style="font-size:12px;color:var(--muted);">до '+fmtDate(h.edited_at)+' '+fmtTime(h.edited_at)+' · '+escapeHtml(h.edited_by||"")+'</span></div>' +
+          body += '<div class="adm-row" style="display:flex;align-items:center;gap:.625rem;padding:.625rem 0;border-bottom:1px solid var(--line-2);">' +
+            '<div style="flex:1;"><b style="font-size:.875rem;display:block;">'+escapeHtml(h.title)+'</b><span style="font-size:.75rem;color:var(--muted);">до '+fmtDate(h.edited_at)+' '+fmtTime(h.edited_at)+' · '+escapeHtml(h.edited_by||"")+'</span></div>' +
             '<button class="btn btn-sm btn-ghost" data-action="restore-lesson-history" data-history-id="'+h.id+'">Восстановить</button></div>';
         });
       }
@@ -1813,7 +1813,7 @@ function renderLessonEditorModal(){
       body += '<form id="lessonEditorForm">' +
         '<div class="field"><label>Заголовок урока</label><input class="input" name="title" required value="'+escapeHtml(lessonEditor.title)+'"></div>' +
         '<div class="field"><label>Длительность</label><input class="input" name="duration" value="'+escapeHtml(lessonEditor.duration)+'" placeholder="Например, 5 мин"></div>' +
-        (!lessonEditor.isNew ? '<div class="field"><label>Открыть через дней после регистрации врача <span style="font-weight:400;color:var(--muted-2);">(пусто — сразу)</span></label><input class="input" type="number" min="0" id="lessonDripInput" value="'+(lessonEditor.dripDays===null||lessonEditor.dripDays===undefined?"":lessonEditor.dripDays)+'" style="max-width:120px;" placeholder="0"></div>' : '') +
+        (!lessonEditor.isNew ? '<div class="field"><label>Открыть через дней после регистрации врача <span style="font-weight:400;color:var(--muted-2);">(пусто — сразу)</span></label><input class="input" type="number" min="0" id="lessonDripInput" value="'+(lessonEditor.dripDays===null||lessonEditor.dripDays===undefined?"":lessonEditor.dripDays)+'" style="max-width:7.5rem;" placeholder="0"></div>' : '') +
         '<div class="field"><label>Содержимое</label>' +
           renderWysiwygToolbar("lessonWysiwygEditor","lessonHtmlHidden") +
           '<div class="lb-bar" id="lbBar" hidden></div>' +
@@ -1821,7 +1821,7 @@ function renderLessonEditorModal(){
           '<textarea name="html" id="lessonHtmlHidden" required style="display:none;">'+escapeHtml(lessonEditor.html)+'</textarea>' +
         '<p class="hint">«＋ Блок» — оформленные вставки (главное, цифры, шаги, важно, шпаргалка); текст в них правится прямо здесь. Форматирование, списки, ссылки, изображения и видео — через панель выше. Опасные теги вырезаются автоматически при сохранении.</p></div>' +
         '<div class="err-text" id="lessonEditorError" style="display:none;"></div>' +
-        '<div style="display:flex;gap:10px;">' +
+        '<div style="display:flex;gap:.625rem;">' +
           (lessonEditor.isNew
             ? '<button class="btn btn-primary" type="submit" data-submit-mode="create">Добавить урок</button>'
             : '<button class="btn btn-ghost" type="submit" data-submit-mode="draft">Сохранить черновик</button>' +
@@ -1831,7 +1831,7 @@ function renderLessonEditorModal(){
     }
   }
   body += '</div>';
-  return el('<div class="overlay" data-action="overlay-close-lesson-editor"><div class="drawer" data-stop="1" style="width:min(600px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay" data-action="overlay-close-lesson-editor"><div class="drawer" data-stop="1" style="width:min(37.5rem,100%);">'+body+'</div></div>');
 }
 
 // Редактор вопроса: тип плитками и своя форма под тип (см. src/quiz.js).
@@ -1906,7 +1906,7 @@ function qeNumber(base, obj){
 }
 function renderQuizEditorModal(){
   var e = quizEditor, t = e.type || "single";
-  var body = '<div class="drawer-head"><b style="font-size:16px;">'+(e.isNew?"Новый вопрос":"Редактирование вопроса")+'</b><button class="btn btn-ghost btn-sm" data-action="close-quiz-editor">Закрыть ✕</button></div>' +
+  var body = '<div class="drawer-head"><b style="font-size:1rem;">'+(e.isNew?"Новый вопрос":"Редактирование вопроса")+'</b><button class="btn btn-ghost btn-sm" data-action="close-quiz-editor">Закрыть ✕</button></div>' +
     '<div class="drawer-body qe">' +
       '<label class="qe-label">Тип вопроса</label><div class="qe-types">' + QE_TYPES.map(function(x){
         return '<button type="button" class="qe-type'+(t===x[0]?' on':'')+'" data-action="qe-type" data-type="'+x[0]+'"><b>'+x[1]+'</b><span>'+x[2]+'</span></button>';
@@ -1944,9 +1944,9 @@ function renderQuizEditorModal(){
     '<p class="hint">Балл за случай — среднее по шагам.</p>';
   }
   body += '<div class="err-text" id="quizEditorError" style="display:none;"></div>' +
-      '<button class="btn btn-primary btn-block" type="button" data-action="qe-save" style="margin-top:14px;">'+(e.isNew?"Добавить вопрос":"Сохранить вопрос")+'</button>' +
+      '<button class="btn btn-primary btn-block" type="button" data-action="qe-save" style="margin-top:.875rem;">'+(e.isNew?"Добавить вопрос":"Сохранить вопрос")+'</button>' +
     '</div>';
-  return el('<div class="overlay" data-action="overlay-close-quiz-editor"><div class="drawer" data-stop="1" style="width:min(600px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay" data-action="overlay-close-quiz-editor"><div class="drawer" data-stop="1" style="width:min(37.5rem,100%);">'+body+'</div></div>');
 }
 function qeGet(path){ return path.split(".").reduce(function(o, k){ return o==null ? o : o[k]; }, quizEditor); }
 function qeSet(path, val){
@@ -2001,157 +2001,157 @@ function syncVideoEditorFromDom(){
 
 function renderVideoEditorModal(){
   var uploading = videoEditor.uploadProgress!==null;
-  var body = '<div class="drawer-head"><b style="font-size:16px;">Видео урока «'+escapeHtml(videoEditor.lessonTitle)+'»</b><button class="btn btn-ghost btn-sm" data-action="close-video-editor">Закрыть ✕</button></div>' +
+  var body = '<div class="drawer-head"><b style="font-size:1rem;">Видео урока «'+escapeHtml(videoEditor.lessonTitle)+'»</b><button class="btn btn-ghost btn-sm" data-action="close-video-editor">Закрыть ✕</button></div>' +
     '<div class="drawer-body">' +
       // Без этого блока непонятно, что видео уже загружено: файловый инпут ниже браузер
       // всегда показывает пустым (не даёт подставить имя файла из соображений безопасности),
       // а поле-ссылка — просто текст среди других полей формы, легко пропустить. Мини-плеер
       // с самим видео убирает любые сомнения — его либо видно и можно проиграть, либо нет.
       (videoEditor.videoUrl
-        ? '<div class="card" style="padding:12px;margin-bottom:14px;">' +
-            '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;color:var(--muted);font-size:13px;">' +
+        ? '<div class="card" style="padding:.75rem;margin-bottom:.875rem;">' +
+            '<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;color:var(--muted);font-size:.8125rem;">' +
               icon("badge","ic-sm") + '<span>Сейчас загружено это видео — новая загрузка или ссылка его заменят</span>' +
             '</div>' +
-            '<video src="'+escapeHtml(videoEditor.videoUrl)+'" controls preload="metadata" style="width:100%;max-height:220px;border-radius:var(--radius-s);background:#000;display:block;"></video>' +
+            '<video src="'+escapeHtml(videoEditor.videoUrl)+'" controls preload="metadata" style="width:100%;max-height:13.75rem;border-radius:var(--radius-s);background:#000;display:block;"></video>' +
           '</div>'
         : '') +
       '<div class="field"><label>Загрузить видео файлом <span style="font-weight:400;color:var(--muted-2);">(.mp4, .webm, .mov, .m4v — до 500 МБ)</span></label>' +
-        '<div style="display:flex;gap:8px;align-items:center;">' +
-          '<input type="file" id="videoFileInput" accept=".mp4,.webm,.mov,.m4v" style="font-size:12px;flex:1;min-width:0;"'+(uploading?' disabled':'')+'>' +
+        '<div style="display:flex;gap:.5rem;align-items:center;">' +
+          '<input type="file" id="videoFileInput" accept=".mp4,.webm,.mov,.m4v" style="font-size:.75rem;flex:1;min-width:0;"'+(uploading?' disabled':'')+'>' +
           '<button type="button" class="btn btn-sm btn-primary" data-action="upload-lesson-video" data-id="'+videoEditor.lessonId+'"'+(uploading?' disabled':'')+'>'+(uploading?'Загружаем…':'Загрузить')+'</button>' +
         '</div>' +
-        (uploading ? '<div style="margin-top:8px;height:6px;border-radius:3px;background:var(--line-2);overflow:hidden;"><div id="videoUploadProgressFill" style="height:100%;width:100%;background:var(--primary);transform:scaleX('+(videoEditor.uploadProgress/100)+');transform-origin:left;transition:transform .15s;"></div></div>' : '') +
+        (uploading ? '<div style="margin-top:.5rem;height:.375rem;border-radius:.1875rem;background:var(--line-2);overflow:hidden;"><div id="videoUploadProgressFill" style="height:100%;width:100%;background:var(--primary);transform:scaleX('+(videoEditor.uploadProgress/100)+');transform-origin:left;transition:transform .15s;"></div></div>' : '') +
       '</div>' +
-      '<div style="display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--muted-2);font-size:13px;"><span style="flex:1;height:1px;background:var(--line-2);"></span>или<span style="flex:1;height:1px;background:var(--line-2);"></span></div>' +
+      '<div style="display:flex;align-items:center;gap:.625rem;margin:1rem 0;color:var(--muted-2);font-size:.8125rem;"><span style="flex:1;height:1px;background:var(--line-2);"></span>или<span style="flex:1;height:1px;background:var(--line-2);"></span></div>' +
     '<form id="videoEditorForm">' +
       '<div class="field"><label>Ссылка на видео <span style="font-weight:400;color:var(--muted-2);">(прямой URL на mp4-файл)</span></label><input class="input" name="videoUrl" value="'+escapeHtml(videoEditor.videoUrl||"")+'" placeholder="https://…/video.mp4"></div>' +
       '<label>Главы по таймкодам <span style="font-weight:400;color:var(--muted-2);">(необязательно — под видео появится сводка по текущей главе)</span></label>';
   videoEditor.timecodes.forEach(function(tc,i){
-    body += '<div class="card" style="padding:12px 14px;margin-bottom:10px;">' +
-      '<div style="display:flex;gap:8px;margin-bottom:8px;">' +
-        '<input class="input" style="max-width:90px;" name="time_'+i+'" value="'+escapeHtml(typeof tc.time==="number"?fmtTimecode(tc.time):(tc.time||""))+'" placeholder="мм:сс">' +
+    body += '<div class="card" style="padding:.75rem .875rem;margin-bottom:.625rem;">' +
+      '<div style="display:flex;gap:.5rem;margin-bottom:.5rem;">' +
+        '<input class="input" style="max-width:5.625rem;" name="time_'+i+'" value="'+escapeHtml(typeof tc.time==="number"?fmtTimecode(tc.time):(tc.time||""))+'" placeholder="мм:сс">' +
         '<input class="input" style="flex:1;" name="title_'+i+'" value="'+escapeHtml(tc.title||"")+'" placeholder="Тема главы" required>' +
         '<button type="button" class="btn btn-sm btn-ghost" data-action="remove-video-timecode" data-idx="'+i+'" title="Удалить главу">✕</button>' +
       '</div>' +
-      '<textarea class="input" name="summary_'+i+'" style="height:56px;font-size:13px;" placeholder="Краткая сводка по теме (покажется под видео)">'+escapeHtml(tc.summary||"")+'</textarea>' +
+      '<textarea class="input" name="summary_'+i+'" style="height:3.5rem;font-size:.8125rem;" placeholder="Краткая сводка по теме (покажется под видео)">'+escapeHtml(tc.summary||"")+'</textarea>' +
     '</div>';
   });
-  body += '<button type="button" class="btn btn-sm btn-ghost" style="margin-bottom:14px;" data-action="add-video-timecode">+ Добавить главу</button>' +
+  body += '<button type="button" class="btn btn-sm btn-ghost" style="margin-bottom:.875rem;" data-action="add-video-timecode">+ Добавить главу</button>' +
       '<div class="err-text" id="videoEditorError" style="display:none;"></div>' +
       '<button class="btn btn-primary btn-block" type="submit">Сохранить видео</button>' +
     '</form></div>';
-  return el('<div class="overlay" data-action="overlay-close-video-editor"><div class="drawer" data-stop="1" style="width:min(560px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay" data-action="overlay-close-video-editor"><div class="drawer" data-stop="1" style="width:min(35rem,100%);">'+body+'</div></div>');
 }
 
 // Список поурочных вопросов конкретного урока — свой набор, отдельно от
 // staffState.quizAdmin (итоговый тест курса). Редактирование каждого вопроса
 // переиспользует renderQuizEditorModal (quizEditor.lessonId различает, куда слать запрос).
 function renderLessonQuizManagerDrawer(){
-  var body = '<div class="drawer-head"><b style="font-size:16px;">Поурочный тест «'+escapeHtml(lessonQuizManager.lessonTitle)+'»</b><button class="btn btn-ghost btn-sm" data-action="close-lesson-quiz-manager">Закрыть ✕</button></div>' +
+  var body = '<div class="drawer-head"><b style="font-size:1rem;">Поурочный тест «'+escapeHtml(lessonQuizManager.lessonTitle)+'»</b><button class="btn btn-ghost btn-sm" data-action="close-lesson-quiz-manager">Закрыть ✕</button></div>' +
     '<div class="drawer-body">' +
       '<p class="hint" style="margin-top:0;">«Развлекательный» тест на запоминание материала — открывается врачу после просмотра видео, не влияет на итоговый сертификат.</p>' +
-      '<div style="display:flex;justify-content:flex-end;margin-bottom:10px;"><button class="btn btn-sm btn-primary" data-action="open-lesson-quiz-creator">+ Добавить вопрос</button></div>';
+      '<div style="display:flex;justify-content:flex-end;margin-bottom:.625rem;"><button class="btn btn-sm btn-primary" data-action="open-lesson-quiz-creator">+ Добавить вопрос</button></div>';
   if(!lessonQuizManager.questions.length){
-    body += '<div class="empty-state" style="padding:24px 10px;">Вопросов пока нет — без них шаг «Тест» у этого урока просто не появится.</div>';
+    body += '<div class="empty-state" style="padding:1.5rem .625rem;">Вопросов пока нет — без них шаг «Тест» у этого урока просто не появится.</div>';
   } else {
     lessonQuizManager.questions.forEach(function(q,i){
       var qIsFirst=i===0, qIsLast=i===lessonQuizManager.questions.length-1;
-      body += '<div class="adm-row" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);">' +
-        '<div style="display:flex;flex-direction:column;gap:2px;">' +
-          '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-lesson-quiz-question" data-idx="'+i+'" data-dir="up"'+(qIsFirst?' disabled':'')+' title="Выше">↑</button>' +
-          '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-lesson-quiz-question" data-idx="'+i+'" data-dir="down"'+(qIsLast?' disabled':'')+' title="Ниже">↓</button></div>' +
-        '<div style="flex:1;"><b style="font-size:14px;display:block;">'+(i+1)+'. '+escapeHtml(q.question)+'</b><span style="font-size:12px;color:var(--muted);">'+describeQuizQuestion(q)+'</span></div>' +
+      body += '<div class="adm-row" style="display:flex;align-items:center;gap:.625rem;padding:.625rem 0;border-bottom:1px solid var(--line-2);">' +
+        '<div style="display:flex;flex-direction:column;gap:.125rem;">' +
+          '<button class="btn btn-sm btn-ghost" style="padding:.125rem .4375rem;" data-action="move-lesson-quiz-question" data-idx="'+i+'" data-dir="up"'+(qIsFirst?' disabled':'')+' title="Выше">↑</button>' +
+          '<button class="btn btn-sm btn-ghost" style="padding:.125rem .4375rem;" data-action="move-lesson-quiz-question" data-idx="'+i+'" data-dir="down"'+(qIsLast?' disabled':'')+' title="Ниже">↓</button></div>' +
+        '<div style="flex:1;"><b style="font-size:.875rem;display:block;">'+(i+1)+'. '+escapeHtml(q.question)+'</b><span style="font-size:.75rem;color:var(--muted);">'+describeQuizQuestion(q)+'</span></div>' +
         '<button class="btn btn-sm btn-ghost" data-action="open-lesson-quiz-editor" data-id="'+q.id+'">Редактировать</button>' +
         '<button class="btn btn-sm btn-ghost" data-action="delete-quiz-question" data-id="'+q.id+'" title="Удалить вопрос">'+icon("trash","ic-sm")+'</button></div>';
     });
   }
   body += '</div>';
-  return el('<div class="overlay" data-action="overlay-close-lesson-quiz-manager"><div class="drawer" data-stop="1" style="width:min(560px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay" data-action="overlay-close-lesson-quiz-manager"><div class="drawer" data-stop="1" style="width:min(35rem,100%);">'+body+'</div></div>');
 }
 
 function renderModuleQuizManagerDrawer(){
-  var body = '<div class="drawer-head"><b style="font-size:16px;">Итоговый тест модуля «'+escapeHtml(moduleQuizManager.moduleTitle)+'»</b><button class="btn btn-ghost btn-sm" data-action="close-module-quiz-manager">Закрыть ✕</button></div>' +
+  var body = '<div class="drawer-head"><b style="font-size:1rem;">Итоговый тест модуля «'+escapeHtml(moduleQuizManager.moduleTitle)+'»</b><button class="btn btn-ghost btn-sm" data-action="close-module-quiz-manager">Закрыть ✕</button></div>' +
     '<div class="drawer-body">' +
       '<p class="hint" style="margin-top:0;">Показывается врачу сразу после последнего урока модуля, перед мини-опросом. Без вопросов — сразу переходит к опросу.</p>' +
-      '<div style="display:flex;justify-content:flex-end;margin-bottom:10px;"><button class="btn btn-sm btn-primary" data-action="open-module-quiz-creator">+ Добавить вопрос</button></div>';
+      '<div style="display:flex;justify-content:flex-end;margin-bottom:.625rem;"><button class="btn btn-sm btn-primary" data-action="open-module-quiz-creator">+ Добавить вопрос</button></div>';
   if(!moduleQuizManager.questions.length){
-    body += '<div class="empty-state" style="padding:24px 10px;">Вопросов пока нет — тест модуля не появится, только мини-опрос.</div>';
+    body += '<div class="empty-state" style="padding:1.5rem .625rem;">Вопросов пока нет — тест модуля не появится, только мини-опрос.</div>';
   } else {
     moduleQuizManager.questions.forEach(function(q,i){
       var qIsFirst=i===0, qIsLast=i===moduleQuizManager.questions.length-1;
-      body += '<div class="adm-row" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);">' +
-        '<div style="display:flex;flex-direction:column;gap:2px;">' +
-          '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-module-quiz-question" data-idx="'+i+'" data-dir="up"'+(qIsFirst?' disabled':'')+' title="Выше">↑</button>' +
-          '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-module-quiz-question" data-idx="'+i+'" data-dir="down"'+(qIsLast?' disabled':'')+' title="Ниже">↓</button></div>' +
-        '<div style="flex:1;"><b style="font-size:14px;display:block;">'+(i+1)+'. '+escapeHtml(q.question)+'</b><span style="font-size:12px;color:var(--muted);">'+describeQuizQuestion(q)+'</span></div>' +
+      body += '<div class="adm-row" style="display:flex;align-items:center;gap:.625rem;padding:.625rem 0;border-bottom:1px solid var(--line-2);">' +
+        '<div style="display:flex;flex-direction:column;gap:.125rem;">' +
+          '<button class="btn btn-sm btn-ghost" style="padding:.125rem .4375rem;" data-action="move-module-quiz-question" data-idx="'+i+'" data-dir="up"'+(qIsFirst?' disabled':'')+' title="Выше">↑</button>' +
+          '<button class="btn btn-sm btn-ghost" style="padding:.125rem .4375rem;" data-action="move-module-quiz-question" data-idx="'+i+'" data-dir="down"'+(qIsLast?' disabled':'')+' title="Ниже">↓</button></div>' +
+        '<div style="flex:1;"><b style="font-size:.875rem;display:block;">'+(i+1)+'. '+escapeHtml(q.question)+'</b><span style="font-size:.75rem;color:var(--muted);">'+describeQuizQuestion(q)+'</span></div>' +
         '<button class="btn btn-sm btn-ghost" data-action="open-module-quiz-editor" data-id="'+q.id+'">Редактировать</button>' +
         '<button class="btn btn-sm btn-ghost" data-action="delete-quiz-question" data-id="'+q.id+'" title="Удалить вопрос">'+icon("trash","ic-sm")+'</button></div>';
     });
   }
   body += '</div>';
-  return el('<div class="overlay" data-action="overlay-close-module-quiz-manager"><div class="drawer" data-stop="1" style="width:min(560px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay" data-action="overlay-close-module-quiz-manager"><div class="drawer" data-stop="1" style="width:min(35rem,100%);">'+body+'</div></div>');
 }
 
 function renderModuleFeedbackViewerDrawer(){
   var v = moduleFeedbackViewer;
-  var body = '<div class="drawer-head"><b style="font-size:16px;">Отзывы о модуле «'+escapeHtml(v.moduleTitle)+'»</b><button class="btn btn-ghost btn-sm" data-action="close-module-feedback-viewer">Закрыть ✕</button></div>' +
+  var body = '<div class="drawer-head"><b style="font-size:1rem;">Отзывы о модуле «'+escapeHtml(v.moduleTitle)+'»</b><button class="btn btn-ghost btn-sm" data-action="close-module-feedback-viewer">Закрыть ✕</button></div>' +
     '<div class="drawer-body">';
   if(!v.feedback.length){
-    body += '<div class="empty-state" style="padding:24px 10px;">Пока никто не оставил отзыв по этому модулю.</div>';
+    body += '<div class="empty-state" style="padding:1.5rem .625rem;">Пока никто не оставил отзыв по этому модулю.</div>';
   } else {
-    body += '<div class="card" style="padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:10px;">' +
+    body += '<div class="card" style="padding:.875rem 1rem;margin-bottom:.875rem;display:flex;align-items:center;gap:.625rem;">' +
       icon("star","ic-lg") +
-      '<div><b style="font-size:18px;display:block;">'+v.average.toFixed(1)+' / 5</b><span style="font-size:12px;color:var(--muted);">'+v.count+' '+(v.count===1?'отзыв':'отзывов')+'</span></div>' +
+      '<div><b style="font-size:1.125rem;display:block;">'+v.average.toFixed(1)+' / 5</b><span style="font-size:.75rem;color:var(--muted);">'+v.count+' '+(v.count===1?'отзыв':'отзывов')+'</span></div>' +
     '</div>';
     v.feedback.forEach(function(f){
-      body += '<div style="padding:10px 0;border-bottom:1px solid var(--line-2);">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">' +
-          '<b style="font-size:13px;">'+escapeHtml(f.userName)+'</b>' +
-          '<span style="font-size:13px;color:var(--status-attention);">'+'★'.repeat(f.rating)+'<span style="color:var(--line-2);">'+'★'.repeat(5-f.rating)+'</span></span>' +
+      body += '<div style="padding:.625rem 0;border-bottom:1px solid var(--line-2);">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.25rem;">' +
+          '<b style="font-size:.8125rem;">'+escapeHtml(f.userName)+'</b>' +
+          '<span style="font-size:.8125rem;color:var(--status-attention);">'+'★'.repeat(f.rating)+'<span style="color:var(--line-2);">'+'★'.repeat(5-f.rating)+'</span></span>' +
         '</div>' +
-        (f.comment ? '<p style="font-size:13px;margin:0;color:var(--muted);">'+escapeHtml(f.comment)+'</p>' : '') +
+        (f.comment ? '<p style="font-size:.8125rem;margin:0;color:var(--muted);">'+escapeHtml(f.comment)+'</p>' : '') +
       '</div>';
     });
   }
   body += '</div>';
-  return el('<div class="overlay" data-action="overlay-close-module-feedback-viewer"><div class="drawer" data-stop="1" style="width:min(480px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay" data-action="overlay-close-module-feedback-viewer"><div class="drawer" data-stop="1" style="width:min(30rem,100%);">'+body+'</div></div>');
 }
 
 function renderTempPasswordModal(){
-  var body = '<div class="drawer-head"><b style="font-size:16px;">Новый пароль создан</b><button class="btn btn-ghost btn-sm" data-action="close-temp-password">Закрыть ✕</button></div>' +
+  var body = '<div class="drawer-head"><b style="font-size:1rem;">Новый пароль создан</b><button class="btn btn-ghost btn-sm" data-action="close-temp-password">Закрыть ✕</button></div>' +
     '<div class="drawer-body">' +
-      '<p style="font-size:14px;color:var(--muted);margin:0 0 14px;">Сообщите этот пароль <b style="color:var(--ink);">'+escapeHtml(tempPasswordResult.name)+'</b> лично или через Telegram — он больше нигде не отобразится.</p>' +
-      '<div class="card" style="padding:16px;text-align:center;background:var(--primary-tint);border-color:transparent;margin-bottom:16px;">' +
-        '<code style="font-size:20px;font-weight:700;letter-spacing:1px;color:var(--primary-dark);">'+escapeHtml(tempPasswordResult.tempPassword)+'</code>' +
+      '<p style="font-size:.875rem;color:var(--muted);margin:0 0 .875rem;">Сообщите этот пароль <b style="color:var(--ink);">'+escapeHtml(tempPasswordResult.name)+'</b> лично или через Telegram — он больше нигде не отобразится.</p>' +
+      '<div class="card" style="padding:1rem;text-align:center;background:var(--primary-tint);border-color:transparent;margin-bottom:1rem;">' +
+        '<code style="font-size:1.25rem;font-weight:700;letter-spacing:1px;color:var(--primary-dark);">'+escapeHtml(tempPasswordResult.tempPassword)+'</code>' +
       '</div>' +
       '<button class="btn btn-primary btn-block" data-action="close-temp-password">Понятно</button>' +
     '</div>';
-  return el('<div class="overlay overlay-center" data-action="close-temp-password"><div class="drawer modal" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay overlay-center" data-action="close-temp-password"><div class="drawer modal" data-stop="1" style="width:min(26.25rem,100%);">'+body+'</div></div>');
 }
 
 function renderConfirmModal(){
-  var body = '<div class="drawer-head"><b style="font-size:16px;">'+escapeHtml(confirmState.title)+'</b><button class="btn btn-ghost btn-sm" data-action="confirm-modal-no">Закрыть ✕</button></div>' +
+  var body = '<div class="drawer-head"><b style="font-size:1rem;">'+escapeHtml(confirmState.title)+'</b><button class="btn btn-ghost btn-sm" data-action="confirm-modal-no">Закрыть ✕</button></div>' +
     '<div class="drawer-body">' +
-      (confirmState.body ? '<p style="margin:0 0 18px;color:var(--muted);line-height:1.5;">'+escapeHtml(confirmState.body)+'</p>' : '') +
-      '<div style="display:flex;gap:10px;">' +
+      (confirmState.body ? '<p style="margin:0 0 1.125rem;color:var(--muted);line-height:1.5;">'+escapeHtml(confirmState.body)+'</p>' : '') +
+      '<div style="display:flex;gap:.625rem;">' +
         '<button class="btn btn-ghost btn-block" data-action="confirm-modal-no">Отмена</button>' +
         '<button class="btn '+(confirmState.danger?'btn-danger':'btn-primary')+' btn-block" data-action="confirm-modal-yes">'+escapeHtml(confirmState.confirmLabel)+'</button>' +
       '</div>' +
     '</div>';
-  return el('<div class="overlay overlay-center" data-action="overlay-close-confirm"><div class="drawer modal" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay overlay-center" data-action="overlay-close-confirm"><div class="drawer modal" data-stop="1" style="width:min(26.25rem,100%);">'+body+'</div></div>');
 }
 
 function renderChangePasswordModal(){
-  var body = '<div class="drawer-head"><b style="font-size:16px;">Сменить пароль</b><button class="btn btn-ghost btn-sm" data-action="close-change-password">Закрыть ✕</button></div>' +
+  var body = '<div class="drawer-head"><b style="font-size:1rem;">Сменить пароль</b><button class="btn btn-ghost btn-sm" data-action="close-change-password">Закрыть ✕</button></div>' +
     '<div class="drawer-body"><form id="changePasswordForm">' +
       '<div class="field"><label>Текущий пароль</label><input class="input" type="password" name="currentPassword" required></div>' +
       '<div class="field"><label>Новый пароль <span style="font-weight:400;color:var(--muted-2);">(от 6 символов)</span></label><input class="input" type="password" name="newPassword" required minlength="6"></div>' +
       '<div class="err-text" id="changePasswordError" style="display:none;"></div>' +
       '<button class="btn btn-primary btn-block" type="submit">Сохранить новый пароль</button>' +
     '</form>' +
-    '<button class="btn btn-ghost btn-block" style="margin-top:10px;" data-action="logout-everywhere">Выйти со всех устройств</button>' +
+    '<button class="btn btn-ghost btn-block" style="margin-top:.625rem;" data-action="logout-everywhere">Выйти со всех устройств</button>' +
     '</div>';
-  return el('<div class="overlay overlay-center" data-action="overlay-close-password"><div class="drawer modal" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay overlay-center" data-action="overlay-close-password"><div class="drawer modal" data-stop="1" style="width:min(26.25rem,100%);">'+body+'</div></div>');
 }
 
 // Врач раньше не видел вообще, за какой продукт и как оплачено — только персонал
@@ -2159,23 +2159,23 @@ function renderChangePasswordModal(){
 function renderMyProductBlock(){
   var payStatus = me.payment_status || "unpaid";
   var payKind = payStatus==="paid" ? "done" : (payStatus==="partial" ? "attention" : "neutral");
-  return '<div style="padding:16px 20px;border-top:1px solid var(--line);margin-top:4px;">' +
-    '<b style="font-size:13px;display:block;margin-bottom:10px;">Ваш продукт и оплата</b>' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
-      '<span style="font-size:13px;color:var(--muted);">Продукт</span>' +
-      '<span style="font-size:13px;font-weight:600;">'+escapeHtml(PRODUCTS[me.product||"longevity"]||me.product)+'</span>' +
+  return '<div style="padding:1rem 1.25rem;border-top:1px solid var(--line);margin-top:.25rem;">' +
+    '<b style="font-size:.8125rem;display:block;margin-bottom:.625rem;">Ваш продукт и оплата</b>' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem;">' +
+      '<span style="font-size:.8125rem;color:var(--muted);">Продукт</span>' +
+      '<span style="font-size:.8125rem;font-weight:600;">'+escapeHtml(PRODUCTS[me.product||"longevity"]||me.product)+'</span>' +
     '</div>' +
     '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-      '<span style="font-size:13px;color:var(--muted);">Оплата</span>' +
+      '<span style="font-size:.8125rem;color:var(--muted);">Оплата</span>' +
       magnet(payKind, PAYMENT_LABELS[payStatus]||payStatus) +
     '</div>' +
-    ((studentTools.orders||[]).length ? '' : '<p class="hint" style="margin-top:10px;">Вопрос по оплате — обратитесь к куратору в Telegram-группе потока.</p>') +
+    ((studentTools.orders||[]).length ? '' : '<p class="hint" style="margin-top:.625rem;">Вопрос по оплате — обратитесь к куратору в Telegram-группе потока.</p>') +
   '</div>';
 }
 
 function renderProfileModal(){
   var isStudent = me.role === "student";
-  var body = '<div class="drawer-head"><b style="font-size:16px;">Профиль</b><button class="btn btn-ghost btn-sm" data-action="close-profile-editor">Закрыть ✕</button></div>' +
+  var body = '<div class="drawer-head"><b style="font-size:1rem;">Профиль</b><button class="btn btn-ghost btn-sm" data-action="close-profile-editor">Закрыть ✕</button></div>' +
     '<div class="drawer-body"><form id="profileEditorForm">' +
       '<div class="field"><label>Имя и фамилия</label><input class="input" id="profileEditorName" required value="'+escapeHtml(profileEditor.name)+'"></div>' +
       (isStudent ? renderProfileSpecializationFields() : '') +
@@ -2187,7 +2187,7 @@ function renderProfileModal(){
     '</form>' +
     (isStudent ? renderMyProductBlock() : '') +
     '</div>';
-  return el('<div class="overlay overlay-center" data-action="overlay-close-profile-editor"><div class="drawer modal" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay overlay-center" data-action="overlay-close-profile-editor"><div class="drawer modal" data-stop="1" style="width:min(26.25rem,100%);">'+body+'</div></div>');
 }
 
 // Всё общение врачей, кураторов и преподавателей — в Telegram-группе потока, не
@@ -2375,7 +2375,7 @@ function renderAuthScreen(mode){
   var left =
     '<div class="onb-left">' +
       '<div><div class="brand">'+brandMark()+'Медицина Долголетия</div>' +
-      '<h1 style="margin-top:56px;">'+(isLogin ? "С возвращением" : (registerDraft.asStaff ? "Регистрация сотрудника" : "Регистрация на демо-курс"))+'</h1>' +
+      '<h1 style="margin-top:3.5rem;">'+(isLogin ? "С возвращением" : (registerDraft.asStaff ? "Регистрация сотрудника" : "Регистрация на демо-курс"))+'</h1>' +
       '<p>'+(isLogin ? "Войдите, чтобы продолжить обучение или открыть панель куратора." : (registerDraft.asStaff ? "По приглашению на ваш email и коду сотрудника — сразу в панель куратора." : "Пара полей — и вы сразу в первом уроке."))+'</p></div>' +
       '<div class="onb-aurora aurora" aria-hidden="true">' +
         '<span class="bw" data-k="0.6"><span class="band b3"></span></span><span class="bw" data-k="1"><span class="band b1"></span></span>' +
@@ -2387,27 +2387,27 @@ function renderAuthScreen(mode){
   if(isLogin){
     right =
       '<div class="onb-right"><div class="onb-box">' +
-        '<div class="brand" style="margin-bottom:28px;">'+brandMark()+'Медицина Долголетия</div>' +
-        '<h2 style="font-size:20px;margin:0 0 20px;">Вход</h2>' +
+        '<div class="brand" style="margin-bottom:1.75rem;">'+brandMark()+'Медицина Долголетия</div>' +
+        '<h2 style="font-size:1.25rem;margin:0 0 1.25rem;">Вход</h2>' +
         '<form id="loginForm">' +
           '<div class="field"><label>Email</label><input class="input" type="email" name="email" required></div>' +
           '<div class="field"><label>Пароль</label><input class="input" type="password" name="password" required></div>' +
           '<div class="err-text" id="authError" style="display:none;"></div>' +
           '<button class="btn btn-primary btn-block" type="submit">Войти</button>' +
         '</form>' +
-        '<button class="back-link" style="margin-top:16px;" data-action="go-register">Ещё нет аккаунта? Зарегистрироваться →</button>' +
+        '<button class="back-link" style="margin-top:1rem;" data-action="go-register">Ещё нет аккаунта? Зарегистрироваться →</button>' +
       '</div></div>';
   } else {
     right =
       '<div class="onb-right"><div class="onb-box">' +
         '<button class="back-link" data-action="go-login">← Уже есть аккаунт? Войти</button>' +
-        '<div class="brand" style="margin-bottom:20px;">'+brandMark()+'Медицина Долголетия</div>' +
-        '<h2 style="font-size:20px;margin:0 0 14px;">Расскажите о себе</h2>' +
+        '<div class="brand" style="margin-bottom:1.25rem;">'+brandMark()+'Медицина Долголетия</div>' +
+        '<h2 style="font-size:1.25rem;margin:0 0 .875rem;">Расскажите о себе</h2>' +
         // Врач и сотрудник регистрируются по-разному: врачу нужна специализация
         // (от неё зависят протоколы), сотруднику — приглашение на email и код.
         '<div class="seg" role="tablist"><button type="button" class="seg-btn'+(registerDraft.asStaff?'':' on')+'" data-action="register-as" data-staff="0">Я врач</button>' +
           '<button type="button" class="seg-btn'+(registerDraft.asStaff?' on':'')+'" data-action="register-as" data-staff="1">Я сотрудник</button></div>' +
-        (registerDraft.asStaff ? '<p class="hint" style="margin:-6px 0 14px;">Регистрируйтесь на email, на который вам отправили приглашение, и введите код сотрудника — его называет пригласивший. Специализация не нужна.</p>' : '') +
+        (registerDraft.asStaff ? '<p class="hint" style="margin:-.375rem 0 .875rem;">Регистрируйтесь на email, на который вам отправили приглашение, и введите код сотрудника — его называет пригласивший. Специализация не нужна.</p>' : '') +
         '<form id="registerForm">' +
           '<div class="field"><label>Имя и фамилия</label><input class="input" id="registerName" required placeholder="Например, Анна Ковалёва" value="'+escapeHtml(registerDraft.name)+'"></div>' +
           (registerDraft.asStaff ? '' : renderSpecPicker("register-current", "Текущая специализация", null, registerDraft.specializationIds)+
@@ -2863,7 +2863,7 @@ function renderStudentShell(){
       '<button class="btn btn-sm" data-action="impersonate-stop">Вернуться в панель</button></div>'));
   }
   if(previewMode){
-    main.appendChild(el('<div style="background:var(--accent);color:#1B1A14;text-align:center;padding:10px 16px;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px;">'+icon("eye")+' Режим просмотра «глазами врача» — изменения не сохраняются</div>'));
+    main.appendChild(el('<div style="background:var(--accent);color:#1B1A14;text-align:center;padding:.625rem 1rem;font-size:.875rem;font-weight:600;display:flex;align-items:center;justify-content:center;gap:.5rem;">'+icon("eye")+' Режим просмотра «глазами врача» — изменения не сохраняются</div>'));
   }
   if(course && studentState.tab === "lesson") addSideFlow(main);
   // Внизу «Моего прогресса» под карточками — анимированная спираль ДНК (декор).
@@ -2912,7 +2912,7 @@ function renderStudentShell(){
 // Показывается только когда врач записан больше чем на один курс — переключает
 // activeCourseId и перезагружает GET /course/content/:courseId целиком.
 function renderCourseSwitcher(){
-  var html = '<div class="tabs" style="margin-bottom:14px;">';
+  var html = '<div class="tabs" style="margin-bottom:.875rem;">';
   studentEnrollments.forEach(function(en){
     html += '<button type="button" class="tab'+(en.courseId===activeCourseId?' active':'')+'" data-action="switch-course" data-course-id="'+en.courseId+'">'+escapeHtml(en.title)+'</button>';
   });
@@ -2987,7 +2987,7 @@ function renderStudentSchedule(){
 
   var html = '<div class="page-wide"><b class="page-h">Ближайшие эфиры</b>';
   if(!upcoming.length){
-    html += '<div class="sched-top"><div class="card empty-state" style="padding:40px 20px;">Пока эфиры не запланированы.</div>'+monthCalendar()+'</div>';
+    html += '<div class="sched-top"><div class="card empty-state" style="padding:2.5rem 1.25rem;">Пока эфиры не запланированы.</div>'+monthCalendar()+'</div>';
   } else {
     var nx = upcoming[0], nxLive = isLiveNow(nx);
     // Карточка по зонам: статус и отсчёт → что за эфир → факты подписанными
@@ -3018,13 +3018,13 @@ function renderStudentSchedule(){
       monthCalendar() +
     '</div>';
     if(upcoming.length>1){
-      html += '<b class="page-h" style="margin-top:24px;">Дальше</b><div class="card sched-list">';
+      html += '<b class="page-h" style="margin-top:1.5rem;">Дальше</b><div class="card sched-list">';
       upcoming.slice(1).forEach(function(ev){ html += row(ev, true); });
       html += '</div>';
     }
   }
   if(past.length){
-    html += '<b class="page-h" style="margin-top:24px;">Прошедшие</b><div class="card sched-list">';
+    html += '<b class="page-h" style="margin-top:1.5rem;">Прошедшие</b><div class="card sched-list">';
     past.slice(-5).reverse().forEach(function(ev){ html += row(ev, false); });
     html += '</div>';
   }
@@ -3051,15 +3051,15 @@ function renderOnboardingCard(){
   var items = onboardingChecklistItems();
   var doneCount = items.filter(function(i){ return i.done; }).length;
   if(doneCount===items.length) return "";
-  var html = '<div class="card" style="padding:18px 20px;margin-bottom:14px;">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">' +
-      '<b style="font-size:14px;">Первые шаги ('+doneCount+'/'+items.length+')</b>' +
+  var html = '<div class="card" style="padding:1.125rem 1.25rem;margin-bottom:.875rem;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.625rem;">' +
+      '<b style="font-size:.875rem;">Первые шаги ('+doneCount+'/'+items.length+')</b>' +
       '<button class="btn btn-sm btn-ghost" data-action="dismiss-onboarding">Скрыть</button>' +
     '</div>';
   items.forEach(function(i,idx){
-    html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;'+(idx<items.length-1?'border-bottom:1px solid var(--line-2);':'')+(i.done?'':'cursor:pointer;')+'" '+(i.done?'':'data-action="'+i.action+'"'+(i.tab?' data-tab="'+i.tab+'"':''))+'>' +
-      '<span style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;background:'+(i.done?'var(--status-done)':'var(--line-2)')+';">'+(i.done?icon("check","ic-sm"):'')+'</span>' +
-      '<span style="font-size:14px;'+(i.done?'color:var(--muted);text-decoration:line-through;':'')+'">'+escapeHtml(i.label)+'</span>' +
+    html += '<div style="display:flex;align-items:center;gap:.625rem;padding:.5rem 0;'+(idx<items.length-1?'border-bottom:1px solid var(--line-2);':'')+(i.done?'':'cursor:pointer;')+'" '+(i.done?'':'data-action="'+i.action+'"'+(i.tab?' data-tab="'+i.tab+'"':''))+'>' +
+      '<span style="width:1.25rem;height:1.25rem;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;background:'+(i.done?'var(--status-done)':'var(--line-2)')+';">'+(i.done?icon("check","ic-sm"):'')+'</span>' +
+      '<span style="font-size:.875rem;'+(i.done?'color:var(--muted);text-decoration:line-through;':'')+'">'+escapeHtml(i.label)+'</span>' +
     '</div>';
   });
   html += '</div>';
@@ -3102,7 +3102,7 @@ function renderWelcomeHome(){
   var L = course.lessons, first = L[0] || {}, q = first.quiz ? first.quiz.length : 0;
   var name = (me.name||"").trim().split(/\s+/)[0] || "";
   var step = function(n, ic, title, text){ return '<div class="wl-step"><em>'+n+'</em><span class="wl-si">'+icon(ic)+'</span><b>'+title+'</b><span>'+text+'</span></div>'; };
-  return '<div class="home-grid wl-mode '+homeFxClass()+homeBgClass()+'" style="margin-top:10px;">'+homeBgLayer() +
+  return '<div class="home-grid wl-mode '+homeFxClass()+homeBgClass()+'" style="margin-top:.625rem;">'+homeBgLayer() +
     '<div class="wl" id="welcomeHome">' +
       '<div class="card course-hero wl-hello"><div class="hero-aurora aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
         '<span class="wl-kick">Демо-курс «'+escapeHtml(course.course.title)+'»</span>' +
@@ -3132,13 +3132,13 @@ function renderStudentHome(){
   // куратор, эфир и прочее «сбоку». На узком всё идёт одной колонкой.
   var enter = homeEnterAnim; homeEnterAnim = false;
   // Следующий шаг — первым; анкета и чеклист «Первые шаги» идут после «Потом».
-  var html = '<div class="home-grid '+homeFxClass()+homeBgClass()+(enter?' home-enter':'')+'" style="margin-top:10px;">'+homeBgLayer()+'<div class="home-main">';
+  var html = '<div class="home-grid '+homeFxClass()+homeBgClass()+(enter?' home-enter':'')+'" style="margin-top:.625rem;">'+homeBgLayer()+'<div class="home-main">';
   var curIdx = -1;
   course.lessons.forEach(function(l,i){ if(curIdx<0 && doneIds.indexOf(l.id)===-1) curIdx = i; });
   if(lock.locked){
     html += '<div class="card course-hero" style="background:var(--status-blocked-tint);">' +
       magnet("blocked", "Доступ ограничен") +
-      '<h2 style="margin-top:14px;">'+escapeHtml(course.course.title)+'</h2>' +
+      '<h2 style="margin-top:.875rem;">'+escapeHtml(course.course.title)+'</h2>' +
       '<p>'+(lock.reason==="blocked" ? 'Куратор временно ограничил ваш доступ к демо-курсу.' : 'Срок доступа к демо-курсу истёк.')+' Чтобы продолжить обучение, напишите куратору в Telegram-группе потока — он может продлить или снять ограничение.</p>' +
       '<button class="btn btn-primary" data-action="open-telegram-modal">Написать куратору</button></div>';
   } else {
@@ -3183,7 +3183,7 @@ function renderStudentHome(){
     var issued = pr.certificate_status==="issued";
     html += '<div class="card board-tile ho-1">' + cardHead("Сертификат", "") +
       '<div class="tile-row"><b class="tile-num">'+pr.quiz_score+'%</b><span class="tile-sub">результат теста</span></div>' +
-      '<div style="margin-top:6px;">'+magnet(issued?"done":"attention", issued?"выдан":"на проверке")+'</div></div>';
+      '<div style="margin-top:.375rem;">'+magnet(issued?"done":"attention", issued?"выдан":"на проверке")+'</div></div>';
   }
 
   if(done > 0 || pr.completed){
@@ -3362,7 +3362,7 @@ function renderStudentMaterials(){
     if(mine.length) html += '<div class="courses-head nb-sec"><b class="page-h" style="margin:0;">В моих записях</b><span class="courses-count">'+mine.length+'</span></div>' + mine.join("");
     html += '<div class="courses-head nb-sec"><b class="page-h" style="margin:0;">В уроках</b><span class="courses-count">'+lessons.length+'</span></div>';
     if(!lessons.length && !mine.length){
-      html += '<div class="card empty-state" style="padding:30px 20px;">Ничего не нашлось по запросу «'+escapeHtml(q)+'».</div>';
+      html += '<div class="card empty-state" style="padding:1.875rem 1.25rem;">Ничего не нашлось по запросу «'+escapeHtml(q)+'».</div>';
     } else if(lessons.length){
       html += '<div class="mat-grid">' + lessons.map(function(it){
         var l = it.lesson, locked = l.dripLockedForMe;
@@ -3511,8 +3511,8 @@ function renderCoursePlayer(){
   if(lesson.hiddenForMe || lesson.dripLockedForMe){
     var lockedText = lesson.hiddenForMe ? 'Этот урок временно недоступен.<br>Куратор откроет его позже.' : 'Этот урок ещё не открылся.<br>Станет доступен '+fmtDate(lesson.availableAt)+'.';
     var lockedBody = '<div class="lesson-body"><button class="back-link" data-action="close-course">← К курсу</button>' +
-      '<div class="empty-state" style="padding:60px 10px;"><div class="big">'+icon("lock","ic-lg")+'</div>'+lockedText+'</div></div>';
-    return el('<div class="player" style="margin-top:6px;">'+nav+lockedBody+'</div>');
+      '<div class="empty-state" style="padding:3.75rem .625rem;"><div class="big">'+icon("lock","ic-lg")+'</div>'+lockedText+'</div></div>';
+    return el('<div class="player" style="margin-top:.375rem;">'+nav+lockedBody+'</div>');
   }
 
   var isDoneAlready = doneIds.indexOf(lesson.id)!==-1;
@@ -3533,7 +3533,7 @@ function renderCoursePlayer(){
     var stageLabels = { intro:"Материал", video:"Видео", quiz:"Тест", task:"Задание" };
     body += '<div class="lesson-tabs-row">';
     if(stages.length>1){
-      body += '<div class="tabs" style="margin:14px 0 4px;">';
+      body += '<div class="tabs" style="margin:.875rem 0 .25rem;">';
       stages.forEach(function(sKey){
         body += '<button type="button" class="tab'+(stage===sKey?' active':'')+'" data-action="lesson-stage" data-stage="'+sKey+'">'+stageLabels[sKey]+'</button>';
       });
@@ -3549,8 +3549,8 @@ function renderCoursePlayer(){
       (previewMode ? '' : '<p class="sel-hint">'+icon("star","ic-sm")+' Выделите фрагмент текста — его можно отметить маркером, добавить в заметку или задать по нему вопрос куратору.</p>') +
       '<div class="lesson-note">' +
         '<label>Ваша заметка к уроку <span style="font-weight:400;color:var(--muted-2);">(видна только вам)</span></label>' +
-        '<textarea class="input" id="lessonNoteInput" style="height:64px;font-size:14px;" placeholder="Например: спросить куратора про дозировки">'+escapeHtml(noteVal)+'</textarea>' +
-        '<button class="btn btn-sm btn-ghost" style="margin-top:8px;" data-action="save-lesson-note" data-id="'+lesson.id+'">Сохранить заметку</button>' +
+        '<textarea class="input" id="lessonNoteInput" style="height:4rem;font-size:.875rem;" placeholder="Например: спросить куратора про дозировки">'+escapeHtml(noteVal)+'</textarea>' +
+        '<button class="btn btn-sm btn-ghost" style="margin-top:.5rem;" data-action="save-lesson-note" data-id="'+lesson.id+'">Сохранить заметку</button>' +
       '</div>';
     if(stages.length>1){
       body += '<div class="lesson-footer"><span></span><button class="btn btn-primary" data-action="lesson-stage" data-stage="'+stages[1]+'">Далее → '+stageLabels[stages[1]]+'</button></div>';
@@ -3570,7 +3570,7 @@ function renderCoursePlayer(){
   }
 
   body += '</div>';
-  return el('<div class="player" style="margin-top:6px;">'+nav+body+'</div>');
+  return el('<div class="player" style="margin-top:.375rem;">'+nav+body+'</div>');
 }
 
 // «Вход» в материал урока: без него вкладки сразу переходили в сплошной текст и
@@ -3634,7 +3634,7 @@ function renderLessonVideoStage(lesson, stages, isDoneAlready){
     // только без диапазонов. Дублировали один и тот же список глав дважды подряд,
     // убрал: список диапазонов ниже кликабелен точно так же (тот же chapter-item
     // и data-action) и вдобавок показывает конец каждой главы.
-    html += '<div id="lessonChapterSummary" class="prose" style="min-height:24px;">'+renderPlainToProse(tcs[0].summary||'')+'</div>';
+    html += '<div id="lessonChapterSummary" class="prose" style="min-height:1.5rem;">'+renderPlainToProse(tcs[0].summary||'')+'</div>';
     html += '<div class="video-timecodes">';
     tcs.forEach(function(tc,i){
       var next = tcs[i+1];
@@ -3998,7 +3998,7 @@ function renderModuleGate(){
   var body = '<div class="lesson-body">' +
     (studentState.moduleGateStage==="quiz" ? renderModuleQuizStage(mod) : renderModuleFeedbackStage(mod)) +
   '</div>';
-  return el('<div class="player" style="margin-top:6px;grid-template-columns:minmax(0,1fr);">'+body+'</div>');
+  return el('<div class="player" style="margin-top:.375rem;grid-template-columns:minmax(0,1fr);">'+body+'</div>');
 }
 
 function renderModuleQuizStage(mod){
@@ -4008,8 +4008,8 @@ function renderModuleQuizStage(mod){
       '<div><b class="qz-res-title">Тест модуля пройден</b><p class="qz-res-sub">Итоговый тест модуля «'+escapeHtml(mod.title)+'» — для закрепления материала.</p></div></div>' +
       '<div class="qz-nav"><span></span><span></span><button class="btn btn-primary" data-action="module-gate-to-feedback">Далее → короткий отзыв</button></div></div>';
   }
-  return '<div class="meta" style="margin-bottom:2px;">Модуль «'+escapeHtml(mod.title)+'» пройден</div>' +
-    '<h3 style="margin:4px 0 14px;">Итоговый тест модуля</h3>' +
+  return '<div class="meta" style="margin-bottom:.125rem;">Модуль «'+escapeHtml(mod.title)+'» пройден</div>' +
+    '<h3 style="margin:.25rem 0 .875rem;">Итоговый тест модуля</h3>' +
     renderQuizRunner("module:"+mod.id, mod.quiz || [], { hint: 'для закрепления материала' });
 }
 
@@ -4017,17 +4017,17 @@ function renderModuleQuizStage(mod){
 // (обязателен) + необязательный комментарий. Кнопка недоступна, пока не выбрана оценка.
 function renderModuleFeedbackStage(mod){
   var rating = studentState.moduleFeedbackRating || 0;
-  var html = '<div class="meta" style="margin-bottom:2px;">Модуль «'+escapeHtml(mod.title)+'» пройден</div>' +
-    '<h3 style="margin-top:4px;">Как вам этот модуль?</h3>' +
+  var html = '<div class="meta" style="margin-bottom:.125rem;">Модуль «'+escapeHtml(mod.title)+'» пройден</div>' +
+    '<h3 style="margin-top:.25rem;">Как вам этот модуль?</h3>' +
     '<p class="meta">Оцените и, если хотите, добавьте пару слов — куратор это увидит.</p>' +
-    '<div style="display:flex;gap:4px;margin:18px 0 14px;">';
+    '<div style="display:flex;gap:.25rem;margin:1.125rem 0 .875rem;">';
   for(var i=1;i<=5;i++){
     html += '<button type="button" class="star-btn'+(i<=rating?' active':'')+'" data-action="set-module-feedback-rating" data-value="'+i+'" aria-label="'+i+' из 5">'+icon("star","ic-lg")+'</button>';
   }
   html += '</div>' +
-    '<textarea class="input" id="moduleFeedbackComment" style="height:80px;" placeholder="Комментарий необязателен">'+escapeHtml(studentState.moduleFeedbackComment||"")+'</textarea>' +
-    '<button class="btn btn-primary" style="margin-top:14px;" data-action="submit-module-feedback" data-module-id="'+mod.id+'"'+(rating?'':' disabled')+'>Отправить и продолжить</button>' +
-    (rating?'':'<p class="hint" style="margin-top:6px;">Выберите оценку, чтобы продолжить.</p>');
+    '<textarea class="input" id="moduleFeedbackComment" style="height:5rem;" placeholder="Комментарий необязателен">'+escapeHtml(studentState.moduleFeedbackComment||"")+'</textarea>' +
+    '<button class="btn btn-primary" style="margin-top:.875rem;" data-action="submit-module-feedback" data-module-id="'+mod.id+'"'+(rating?'':' disabled')+'>Отправить и продолжить</button>' +
+    (rating?'':'<p class="hint" style="margin-top:.375rem;">Выберите оценку, чтобы продолжить.</p>');
   return html;
 }
 
@@ -4035,9 +4035,9 @@ function renderQuizOrCert(){
   var pr = course.progress || {};
   if(pr.completed && !studentState.quizSubmitted) return renderCertificate();
   if(course.quizHiddenForMe){
-    return el('<div class="player" style="margin-top:6px;grid-template-columns:minmax(0,1fr);"><div class="lesson-body">' +
+    return el('<div class="player" style="margin-top:.375rem;grid-template-columns:minmax(0,1fr);"><div class="lesson-body">' +
       '<button class="back-link" data-action="close-course">← К курсу</button>' +
-      '<div class="empty-state" style="padding:60px 10px;"><div class="big">'+icon("lock","ic-lg")+'</div>Итоговый тест временно недоступен.<br>Куратор откроет его позже.</div></div></div>');
+      '<div class="empty-state" style="padding:3.75rem .625rem;"><div class="big">'+icon("lock","ic-lg")+'</div>Итоговый тест временно недоступен.<br>Куратор откроет его позже.</div></div></div>');
   }
 
   // Стоп-уроки держат итоговый тест (сервер тоже не примет ответы) — говорим об
@@ -4047,9 +4047,9 @@ function renderQuizOrCert(){
     return a && a.required && !x.l.hiddenForMe && !(sub && sub.status==="accepted");
   });
   if(stopPending.length){
-    var sh = '<div class="player" style="margin-top:6px;grid-template-columns:minmax(0,1fr);"><div class="lesson-body">' +
+    var sh = '<div class="player" style="margin-top:.375rem;grid-template-columns:minmax(0,1fr);"><div class="lesson-body">' +
       '<button class="back-link" data-action="close-course">← К курсу</button>' +
-      '<h3>Итоговый тест</h3><div class="task-state pending" style="margin-top:14px;"><b>'+icon("lock","ic-sm")+' Откроется, когда куратор примет обязательные задания</b></div>';
+      '<h3>Итоговый тест</h3><div class="task-state pending" style="margin-top:.875rem;"><b>'+icon("lock","ic-sm")+' Откроется, когда куратор примет обязательные задания</b></div>';
     stopPending.forEach(function(x){
       var sub = (course.assignments||{})[x.l.id];
       var st = !sub ? "ответ ещё не отправлен" : (sub.status==="pending" ? "на проверке" : "вернули на доработку");
@@ -4061,8 +4061,8 @@ function renderQuizOrCert(){
   // Только что сдали — итог (без разбора: итоговый тест правильные ответы не раскрывает).
   if(studentState.quizSubmitted && typeof pr.quiz_score==="number"){
     var fsc = pr.quiz_score, passed = fsc>=60, certsOnF = course.course && course.course.certificatesEnabled;
-    return el('<div class="player" style="margin-top:6px;grid-template-columns:minmax(0,1fr);"><div class="lesson-body">' +
-      '<button class="back-link" data-action="close-course">← К курсу</button><h3 style="margin-bottom:14px;">Итоговый тест</h3>' +
+    return el('<div class="player" style="margin-top:.375rem;grid-template-columns:minmax(0,1fr);"><div class="lesson-body">' +
+      '<button class="back-link" data-action="close-course">← К курсу</button><h3 style="margin-bottom:.875rem;">Итоговый тест</h3>' +
       '<div class="qz qz-result"><div class="qz-res-head"><div class="progress-ring qz-ring'+(passed?'':' low')+'" data-anim="ring" style="--ring-p:'+fsc+'%;"><div class="progress-ring-inner"><span data-count="'+fsc+'" data-suffix="%">'+fsc+'%</span></div></div>' +
         '<div><b class="qz-res-title">'+(passed?'Тест сдан':'Пока не хватило баллов')+'</b><p class="qz-res-sub">'+(passed
           ? (certsOnF ? 'Куратор проверит результат и выдаст сертификат — вы получите уведомление.' : 'Курс пройден — теперь доступна скидка 10% на полное обучение.')
@@ -4070,9 +4070,9 @@ function renderQuizOrCert(){
       '<div class="qz-nav">'+(passed ? '<span></span><span></span><button class="btn btn-primary" data-action="final-quiz-done">'+(certsOnF?'К сертификату →':'Готово →')+'</button>'
         : '<button class="btn btn-ghost" data-action="close-course">К урокам</button><span></span><button class="btn btn-primary" data-action="final-quiz-retry">Пройти ещё раз</button>')+'</div></div></div></div>');
   }
-  var html = '<div class="player" style="margin-top:6px;grid-template-columns:minmax(0,1fr);"><div class="lesson-body">' +
+  var html = '<div class="player" style="margin-top:.375rem;grid-template-columns:minmax(0,1fr);"><div class="lesson-body">' +
     '<button class="back-link" data-action="close-course">← К курсу</button>' +
-    '<h3 style="margin-bottom:14px;">Итоговый тест</h3>' +
+    '<h3 style="margin-bottom:.875rem;">Итоговый тест</h3>' +
     renderQuizRunner("final", course.quiz || [], { hint: 'нужно набрать от 60%', submitLabel: 'Завершить тест' });
   html += '</div></div>';
   return el(html);
@@ -4081,7 +4081,7 @@ function renderQuizOrCert(){
 function renderCertificate(){
   var pr = course.progress || {};
   var certsOn = course && course.course && course.course.certificatesEnabled;
-  var html = '<div class="player" style="margin-top:6px;grid-template-columns:minmax(0,1fr);"><div class="cert">';
+  var html = '<div class="player" style="margin-top:.375rem;grid-template-columns:minmax(0,1fr);"><div class="cert">';
 
   if(!certsOn){
     // Текущий курс — демо: сертификат за него не выдаётся, вместо этого предлагаем
@@ -4089,14 +4089,14 @@ function renderCertificate(){
     var requested = !!pr.requested_full_access;
     html += '<div class="seal">'+icon("badge","ic-lg")+'</div>' +
       '<h2>Поздравляем с прохождением демо-курса!</h2>' +
-      '<p style="color:var(--muted);font-size:14px;">'+escapeHtml(me.name)+', «'+escapeHtml(course.course.title)+'»</p>' +
+      '<p style="color:var(--muted);font-size:.875rem;">'+escapeHtml(me.name)+', «'+escapeHtml(course.course.title)+'»</p>' +
       '<div class="score">'+pr.quiz_score+'%</div>' +
-      '<p style="color:var(--muted);font-size:13px;margin-bottom:24px;">правильных ответов в итоговом тесте</p>' +
-      '<p style="font-size:14px;color:var(--muted);max-width:380px;margin:0 auto 24px;">Вы получили скидку 10% на обучение по курсу «Медицина Долголетия». Желаете присоединиться к полноценному обучению?</p>';
+      '<p style="color:var(--muted);font-size:.8125rem;margin-bottom:1.5rem;">правильных ответов в итоговом тесте</p>' +
+      '<p style="font-size:.875rem;color:var(--muted);max-width:23.75rem;margin:0 auto 1.5rem;">Вы получили скидку 10% на обучение по курсу «Медицина Долголетия». Желаете присоединиться к полноценному обучению?</p>';
     if(requested){
-      html += '<div style="margin-bottom:16px;">'+magnet("done","Заявка отправлена")+'</div>';
+      html += '<div style="margin-bottom:1rem;">'+magnet("done","Заявка отправлена")+'</div>';
     } else {
-      html += '<button class="btn btn-primary" data-action="request-full" style="margin-right:8px;">Да, хочу полное обучение</button>';
+      html += '<button class="btn btn-primary" data-action="request-full" style="margin-right:.5rem;">Да, хочу полное обучение</button>';
     }
     html += '<button class="btn" data-action="close-course">Вернуться к курсу</button></div></div>';
     return el(html);
@@ -4105,16 +4105,16 @@ function renderCertificate(){
   var issued = pr.certificate_status === "issued";
   html += '<div class="seal'+(issued?'':' pending')+'">'+icon(issued?"badge":"clock","ic-lg")+'</div>' +
     '<h2>'+(issued?'Сертификат выдан':'Тест сдан — сертификат на проверке')+'</h2>' +
-    '<p style="color:var(--muted);font-size:14px;">'+escapeHtml(me.name)+', «'+escapeHtml(course.course.title)+'»</p>' +
+    '<p style="color:var(--muted);font-size:.875rem;">'+escapeHtml(me.name)+', «'+escapeHtml(course.course.title)+'»</p>' +
     '<div class="score">'+pr.quiz_score+'%</div>' +
-    '<p style="color:var(--muted);font-size:13px;margin-bottom:24px;">правильных ответов в итоговом тесте</p>';
+    '<p style="color:var(--muted);font-size:.8125rem;margin-bottom:1.5rem;">правильных ответов в итоговом тесте</p>';
   if(!issued){
-    html += '<p style="font-size:14px;color:var(--muted);max-width:360px;margin:0 auto 24px;">Куратор проверит результат и выдаст сертификат — он появится здесь автоматически.</p>';
+    html += '<p style="font-size:.875rem;color:var(--muted);max-width:22.5rem;margin:0 auto 1.5rem;">Куратор проверит результат и выдаст сертификат — он появится здесь автоматически.</p>';
   } else {
-    html += '<p style="font-size:13px;color:var(--muted);margin:0 0 24px;">Выдан '+fmtDate(pr.certificate_issued_at)+(pr.certificate_issued_by?(' · '+escapeHtml(pr.certificate_issued_by)):'')+'</p>';
+    html += '<p style="font-size:.8125rem;color:var(--muted);margin:0 0 1.5rem;">Выдан '+fmtDate(pr.certificate_issued_at)+(pr.certificate_issued_by?(' · '+escapeHtml(pr.certificate_issued_by)):'')+'</p>';
   }
   if(issued){
-    html += '<a class="btn btn-primary" href="api/course/certificate/download?courseId='+encodeURIComponent(activeCourseId)+'" target="_blank" rel="noopener" style="margin-right:8px;">'+icon("download")+' Скачать сертификат (PDF)</a>';
+    html += '<a class="btn btn-primary" href="api/course/certificate/download?courseId='+encodeURIComponent(activeCourseId)+'" target="_blank" rel="noopener" style="margin-right:.5rem;">'+icon("download")+' Скачать сертификат (PDF)</a>';
   }
   html += '<button class="btn'+(issued?'':' btn-primary')+'" data-action="close-course">Вернуться к курсу</button></div></div>';
   return el(html);
@@ -4123,13 +4123,13 @@ function renderCertificate(){
 // Три ступени вместо одной планки "всё или ничего" — врач видит скидку,
 // которую уже заслужил, и сколько очков осталось до следующей ступени.
 function renderPointTiers(points){
-  var html = '<div style="display:flex;flex-direction:column;gap:2px;margin-bottom:4px;">';
+  var html = '<div style="display:flex;flex-direction:column;gap:.125rem;margin-bottom:.25rem;">';
   POINT_TIERS.forEach(function(t,idx){
     var unlocked = points >= t.points;
-    html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;'+(idx<POINT_TIERS.length-1?'border-bottom:1px solid var(--line-2);':'')+'">' +
-      '<span style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;background:'+(unlocked?'var(--status-done)':'var(--line-2)')+';">'+(unlocked?icon("check","ic-sm"):'')+'</span>' +
-      '<span style="font-size:14px;flex:1;'+(unlocked?'':'color:var(--muted);')+'">'+t.points+' очков</span>' +
-      '<b style="font-size:14px;'+(unlocked?'color:var(--ink);':'color:var(--muted);')+'">скидка '+t.discount+'%</b>' +
+    html += '<div style="display:flex;align-items:center;gap:.625rem;padding:.5rem 0;'+(idx<POINT_TIERS.length-1?'border-bottom:1px solid var(--line-2);':'')+'">' +
+      '<span style="width:1.25rem;height:1.25rem;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;background:'+(unlocked?'var(--status-done)':'var(--line-2)')+';">'+(unlocked?icon("check","ic-sm"):'')+'</span>' +
+      '<span style="font-size:.875rem;flex:1;'+(unlocked?'':'color:var(--muted);')+'">'+t.points+' очков</span>' +
+      '<b style="font-size:.875rem;'+(unlocked?'color:var(--ink);':'color:var(--muted);')+'">скидка '+t.discount+'%</b>' +
     '</div>';
   });
   html += '</div>';
@@ -4141,13 +4141,13 @@ function renderPointTiersCta(points){
   var next = POINT_TIERS.filter(function(t){ return points<t.points; })[0];
   var html = '';
   if(current){
-    html += '<div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
+    html += '<div style="margin-top:.625rem;display:flex;align-items:center;gap:.625rem;flex-wrap:wrap;">' +
       magnet("done","Доступна скидка "+current.discount+"%") +
       '<button class="btn btn-sm btn-primary" data-action="open-telegram-modal">Написать куратору, чтобы оформить скидку '+current.discount+'%</button>' +
     '</div>';
-    if(next) html += '<p style="font-size:13px;color:var(--muted-2);margin:10px 0 0;">Ещё '+(next.points-points)+' очков — и скидка вырастет до '+next.discount+'%.</p>';
+    if(next) html += '<p style="font-size:.8125rem;color:var(--muted-2);margin:.625rem 0 0;">Ещё '+(next.points-points)+' очков — и скидка вырастет до '+next.discount+'%.</p>';
   } else {
-    html += '<p style="font-size:13px;color:var(--muted-2);margin:0;">Наберите '+POINT_TIERS[0].points+' очков, чтобы открыть первую скидку — '+POINT_TIERS[0].discount+'%. Осталось '+(POINT_TIERS[0].points-points)+'.</p>';
+    html += '<p style="font-size:.8125rem;color:var(--muted-2);margin:0;">Наберите '+POINT_TIERS[0].points+' очков, чтобы открыть первую скидку — '+POINT_TIERS[0].discount+'%. Осталось '+(POINT_TIERS[0].points-points)+'.</p>';
   }
   return html;
 }
@@ -4212,17 +4212,17 @@ function renderProtocolCard(p, isForYou, readerMode){
   var activeSpecId = protocolGuideTab[p.id] || (defaultGuide ? defaultGuide.specializationId : (p.guides[0] ? p.guides[0].specializationId : null));
   var activeGuide = p.guides.find(function(g){ return g.specializationId===activeSpecId; });
 
-  var html = readerMode ? '<div>' : '<div class="card" style="padding:18px 20px;margin-bottom:12px;">' +
-    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;cursor:pointer;" data-action="toggle-protocol" data-id="'+p.id+'">' +
-      '<div><b style="font-size:15px;display:block;">'+escapeHtml(p.title)+'</b>' +
-        (p.summary ? '<p style="font-size:13px;color:var(--muted);margin:4px 0 0;">'+renderPlainToProse(p.summary)+'</p>' : '') +
+  var html = readerMode ? '<div>' : '<div class="card" style="padding:1.125rem 1.25rem;margin-bottom:.75rem;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem;cursor:pointer;" data-action="toggle-protocol" data-id="'+p.id+'">' +
+      '<div><b style="font-size:.9375rem;display:block;">'+escapeHtml(p.title)+'</b>' +
+        (p.summary ? '<p style="font-size:.8125rem;color:var(--muted);margin:.25rem 0 0;">'+renderPlainToProse(p.summary)+'</p>' : '') +
       '</div>' +
       '<button type="button" class="btn btn-sm btn-ghost" style="flex-shrink:0;">'+(expanded?'Свернуть':'Открыть гайд')+'</button>' +
     '</div>';
 
   if(expanded){
     if(!p.guides.length){
-      html += '<p class="hint" style="margin-top:12px;">Гайд применения ещё не добавлен куратором.</p>';
+      html += '<p class="hint" style="margin-top:.75rem;">Гайд применения ещё не добавлен куратором.</p>';
     } else {
       // Специализация — спокойный переключатель «Гайд для: …», а не ряд крупных кнопок.
       html += '<div class="gd-for"><span>Гайд для</span>' + (p.guides.length>1
@@ -4289,7 +4289,7 @@ function renderProtocolsPage(){
   additional.forEach(function(p){ grid += tile(p, "extra", n++); });
   upcoming.forEach(function(p){ grid += tile(p, "locked", n++); });
   grid += '</div>';
-  html += '<div class="courses-head proto-legend-row" style="margin-top:22px;"><b class="page-h" style="margin:0;">Все протоколы</b>' +
+  html += '<div class="courses-head proto-legend-row" style="margin-top:1.375rem;"><b class="page-h" style="margin:0;">Все протоколы</b>' +
     '<span class="courses-count">'+opened+' '+ruPluralClient(opened,"открыт","открыто","открыто")+(upcoming.length?' · '+upcoming.length+' скоро':'')+'</span></div>' + grid;
   html += '</div>';
   return el(html);
@@ -4329,13 +4329,13 @@ function renderMyProgressPage(){
   var left = '<div class="pp-col">' +
     '<div class="card pp-summary">' +
       '<div class="progress-ring" data-anim="ring" style="--ring-p:'+pct+'%;"><div class="progress-ring-inner"><span data-count="'+pct+'" data-suffix="%">'+pct+'%</span></div></div>' +
-      '<div style="flex:1;min-width:0;"><b style="font-size:15px;display:block;">Прогресс по курсу</b>' +
-      '<span style="font-size:13px;color:var(--muted);">'+done+' из '+total+' уроков'+(quizDone?' · тест сдан':'')+'</span></div>' +
+      '<div style="flex:1;min-width:0;"><b style="font-size:.9375rem;display:block;">Прогресс по курсу</b>' +
+      '<span style="font-size:.8125rem;color:var(--muted);">'+done+' из '+total+' уроков'+(quizDone?' · тест сдан':'')+'</span></div>' +
       '<div class="pp-streak">'+icon("flame","ic-sm streak-flame")+'<b data-count="'+(gam.currentStreak||0)+'">'+(gam.currentStreak||0)+'</b>' +
         '<span>'+(gam.currentStreak===1?"день подряд":"дней подряд")+'<br>рекорд: '+(gam.longestStreak||0)+'</span></div>' +
     '</div>' +
     '<div class="card pp-points'+(maxedOut?' maxed':'')+'">' +
-      '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;">' +
+      '<div style="display:flex;align-items:baseline;justify-content:space-between;gap:.625rem;">' +
         magnet(anyDiscountUnlocked?"done":"neutral","Очки") +
         '<div class="pp-points-num"><b data-count="'+points+'">'+points+'</b> / '+POINTS_MAX+'</div>' +
       '</div>' +
@@ -4555,7 +4555,7 @@ function renderMyProfilePage(){
       (stats.length ? '<div class="profile-stats">'+stats.map(function(x){ return '<div><b>'+x[0]+'</b><span>'+x[1]+'</span></div>'; }).join("")+'</div>' : '') +
     '</div></div>';
 
-  html += '<div class="team-row" style="margin-top:18px;">';
+  html += '<div class="team-row" style="margin-top:1.125rem;">';
   html += '<div class="team-cell"><div class="card co-card"><b class="co-card-title">Личные данные</b>' +
     '<form id="profileEditorForm">' +
       '<div class="field"><label>Имя и фамилия</label><input class="input" id="profileEditorName" required value="'+escapeHtml(profileEditor.name)+'"></div>' +
@@ -4563,19 +4563,19 @@ function renderMyProfilePage(){
       '<div class="profile-2f"><div class="field"><label>Телефон</label><input class="input" type="tel" id="profileEditorPhone" value="'+escapeHtml(profileEditor.phone)+'"></div>' +
       (isStudent ? '<div class="field"><label>Место работы</label><input class="input" id="profileEditorWorkplace" value="'+escapeHtml(profileEditor.workplace)+'"></div>' : '<div class="field"><label>Email</label><div class="input input-ro">'+escapeHtml(me.email||"")+'</div></div>') + '</div>' +
       (isStudent ? '<div class="field"><label>Email</label><div class="input input-ro">'+escapeHtml(me.email||"")+'</div></div>' : '') +
-      '<p class="hint" style="margin-top:-4px;">Email нельзя изменить самостоятельно — обратитесь к куратору.</p>' +
+      '<p class="hint" style="margin-top:-.25rem;">Email нельзя изменить самостоятельно — обратитесь к куратору.</p>' +
       '<div class="err-text" id="profileEditorError" style="display:none;"></div>' +
       '<button class="btn btn-primary" type="submit">Сохранить изменения</button>' +
     '</form>' +
     (isStudent ? renderMyProductBlock() : '') +
   '</div></div>';
-  html += '<div class="team-cell"><div class="card co-card"><b class="co-card-title" style="margin-bottom:4px;">Ваши доступы</b>' +
-    '<p class="hint" style="margin:0 0 10px;">Что доступно при роли «'+escapeHtml(roleLabel(me.role))+'».</p>';
+  html += '<div class="team-cell"><div class="card co-card"><b class="co-card-title" style="margin-bottom:.25rem;">Ваши доступы</b>' +
+    '<p class="hint" style="margin:0 0 .625rem;">Что доступно при роли «'+escapeHtml(roleLabel(me.role))+'».</p>';
   caps.forEach(function(c){
     html += '<div class="cap-row'+(c.allowed?'':' off')+'"><span class="cap-dot">'+(c.allowed?icon("check","ic-sm"):'')+'</span><span>'+escapeHtml(c.label)+'</span></div>';
   });
   if(isStudent) html += renderMyOrdersBlock();
-  html += '<button class="btn btn-sm btn-ghost btn-block" style="margin-top:14px;" data-action="sidebar-nav" data-key="settings">Пароль, сеансы и тема — в «Настройках» →</button>';
+  html += '<button class="btn btn-sm btn-ghost btn-block" style="margin-top:.875rem;" data-action="sidebar-nav" data-key="settings">Пароль, сеансы и тема — в «Настройках» →</button>';
   html += '</div></div></div></div>';
   return el(html);
 }
@@ -4668,7 +4668,7 @@ function renderSettingsPage(){
   var right = '<div class="pp-col"><div class="card co-card set-account">' +
     userAvatar(me,'set-av') +
     '<b class="set-name">'+escapeHtml(me.name||"")+'</b><span class="set-mail">'+escapeHtml(me.email||"")+'</span>' +
-    '<span class="team-role" style="margin-top:6px;">'+escapeHtml(roleLabel(me.role))+'</span>' +
+    '<span class="team-role" style="margin-top:.375rem;">'+escapeHtml(roleLabel(me.role))+'</span>' +
     '<div class="set-facts">' +
       (me.phone?'<div><span>Телефон</span><b>'+escapeHtml(me.phone)+'</b></div>':'') +
       (me.workplace?'<div><span>Место работы</span><b>'+escapeHtml(me.workplace)+'</b></div>':'') +
@@ -4764,7 +4764,7 @@ function renderStaffShell(){
 
   if(staffState.selectedStudentId){
     content.innerHTML = "";
-    if(!staffState.selectedStudent) content.appendChild(el('<div class="page-wide"><div class="card empty-state" style="padding:40px;">Загрузка профиля…</div></div>'));
+    if(!staffState.selectedStudent) content.appendChild(el('<div class="page-wide"><div class="card empty-state" style="padding:2.5rem;">Загрузка профиля…</div></div>'));
     else content.appendChild(renderStudentDrawer());
   }
   if(calendarState.eventModalMode){
@@ -4802,7 +4802,7 @@ function renderStaffNotificationsPage(){
   feed.sort(function(a,b){ return b.t-a.t; });
   var html = '<div class="page-wide pp-grid"><div class="pp-col"><div class="card co-card"><div class="co-head"><b>Лента событий</b><span class="courses-count">за 14 дней</span></div>';
   if(!feed.length){
-    html += '<div class="empty-state" style="padding:40px 10px;">За две недели событий не было.</div>';
+    html += '<div class="empty-state" style="padding:2.5rem .625rem;">За две недели событий не было.</div>';
   } else {
     var lastDay = "";
     feed.slice(0,40).forEach(function(f){
@@ -4827,7 +4827,7 @@ function renderStaffNotificationsPage(){
   var evs = (calendarState.events||[]).filter(function(ev){ return new Date(ev.event_date+"T"+(ev.event_time||"00:00"))>=now; })
     .sort(function(a,b){ return (a.event_date+a.event_time).localeCompare(b.event_date+b.event_time); }).slice(0,4);
   html += '<div class="card co-card"><div class="co-head"><b>Ближайшие эфиры</b><button class="btn btn-sm btn-ghost" data-action="sidebar-nav" data-key="calendar">Расписание →</button></div>';
-  if(!evs.length) html += '<p class="set-muted" style="margin-top:12px;">Эфиры не запланированы.</p>';
+  if(!evs.length) html += '<p class="set-muted" style="margin-top:.75rem;">Эфиры не запланированы.</p>';
   evs.forEach(function(ev){
     var d = new Date(ev.event_date+"T00:00:00"), st = ev.stream_id ? calendarState.streams.find(function(x){ return x.id===ev.stream_id; }) : null;
     html += '<div class="sched-row"><div class="sched-date"><b>'+d.getDate()+'</b><span>'+d.toLocaleDateString("ru-RU",{month:"short"}).replace(".","")+'</span></div>' +
@@ -4899,12 +4899,12 @@ function renderStaffHome(container){
   });
   var streamKeys = Object.keys(byStream);
 
-  var streamsHtml = '<b style="font-size:15px;display:block;margin-bottom:10px;">Ваши потоки</b>';
+  var streamsHtml = '<b style="font-size:.9375rem;display:block;margin-bottom:.625rem;">Ваши потоки</b>';
   if(!streamKeys.length){
-    streamsHtml += '<div class="card empty-state" style="padding:32px 20px;">' +
-      '<div class="tile-icon" style="background:var(--primary-tint);color:var(--primary);margin:0 auto 12px;">'+icon("users")+'</div>' +
-      '<b style="font-size:14px;display:block;color:var(--ink);">Врачей пока нет</b>' +
-      '<p style="font-size:13px;margin:4px 0 0;">Как только куратор добавит первого врача в поток, здесь появится карточка с его прогрессом.</p>' +
+    streamsHtml += '<div class="card empty-state" style="padding:2rem 1.25rem;">' +
+      '<div class="tile-icon" style="background:var(--primary-tint);color:var(--primary);margin:0 auto .75rem;">'+icon("users")+'</div>' +
+      '<b style="font-size:.875rem;display:block;color:var(--ink);">Врачей пока нет</b>' +
+      '<p style="font-size:.8125rem;margin:.25rem 0 0;">Как только куратор добавит первого врача в поток, здесь появится карточка с его прогрессом.</p>' +
     '</div>';
   } else {
     streamsHtml += '<div class="board-strip">';
@@ -4914,31 +4914,31 @@ function renderStaffHome(container){
       var name = stream ? stream.name : "Без потока";
       var activeCount = list.filter(function(s){ return (s.completed_lessons||[]).length>0 && !s.completed; }).length;
       var avgPct = Math.round(list.reduce(function(sum,s){ return sum + Math.min(100, Math.round(((s.completed_lessons||[]).length/totalLessons)*100)); },0) / list.length);
-      streamsHtml += '<div class="card" style="padding:18px;">' +
-        '<div style="display:flex;align-items:center;gap:12px;">' +
-          '<div class="progress-ring" data-anim="ring" style="width:46px;height:46px;--ring-p:'+avgPct+'%;"><div class="progress-ring-inner" style="width:34px;height:34px;font-size:11px;"><span data-count="'+avgPct+'" data-suffix="%">'+avgPct+'%</span></div></div>' +
+      streamsHtml += '<div class="card" style="padding:1.125rem;">' +
+        '<div style="display:flex;align-items:center;gap:.75rem;">' +
+          '<div class="progress-ring" data-anim="ring" style="width:2.875rem;height:2.875rem;--ring-p:'+avgPct+'%;"><div class="progress-ring-inner" style="width:2.125rem;height:2.125rem;font-size:.6875rem;"><span data-count="'+avgPct+'" data-suffix="%">'+avgPct+'%</span></div></div>' +
           '<div>' +
-            '<b style="font-size:14px;display:block;">'+escapeHtml(name)+'</b>' +
-            '<span style="font-size:12px;color:var(--muted);">средний прогресс</span>' +
+            '<b style="font-size:.875rem;display:block;">'+escapeHtml(name)+'</b>' +
+            '<span style="font-size:.75rem;color:var(--muted);">средний прогресс</span>' +
           '</div>' +
         '</div>' +
-        '<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line-2);display:flex;align-items:baseline;gap:6px;">' +
-          '<span style="font-family:var(--sans);font-weight:700;font-size:22px;" data-count="'+list.length+'">'+list.length+'</span>' +
-          '<span style="font-size:12px;color:var(--muted);">врачей · '+activeCount+' активных</span>' +
+        '<div style="margin-top:.75rem;padding-top:.625rem;border-top:1px solid var(--line-2);display:flex;align-items:baseline;gap:.375rem;">' +
+          '<span style="font-family:var(--sans);font-weight:700;font-size:1.375rem;" data-count="'+list.length+'">'+list.length+'</span>' +
+          '<span style="font-size:.75rem;color:var(--muted);">врачей · '+activeCount+' активных</span>' +
         '</div>' +
       '</div>';
     });
     streamsHtml += '</div>';
   }
-  container.appendChild(el('<div style="margin-top:6px;">'+streamsHtml+'</div>'));
+  container.appendChild(el('<div style="margin-top:.375rem;">'+streamsHtml+'</div>'));
 
   var inbox = staffState.inbox || {inactive:[],pendingCertificates:[]};
   var pendingTasks = (toolsState.assign.counts||{}).pending||0, overdueOrders = (toolsState.orders.summary||{}).overdueOrders||0;
   var totalTasks = inbox.inactive.length + inbox.pendingCertificates.length + pendingTasks + overdueOrders;
   container.appendChild(el(
-    '<div style="display:flex;align-items:center;gap:10px;margin:20px 0 10px;">' +
+    '<div style="display:flex;align-items:center;gap:.625rem;margin:1.25rem 0 .625rem;">' +
       '<div class="tile-icon" style="background:var(--status-attention-tint);color:var(--status-attention);">'+icon("clipboard")+'</div>' +
-      '<b style="font-size:15px;">Задачи на сегодня</b>' +
+      '<b style="font-size:.9375rem;">Задачи на сегодня</b>' +
     '</div>'
   ));
   if(pendingTasks || overdueOrders){
@@ -4949,59 +4949,59 @@ function renderStaffHome(container){
   }
   if(inbox.inactive.length + inbox.pendingCertificates.length) container.appendChild(renderInboxCard());
   else if(!totalTasks) container.appendChild(el(
-    '<div class="card empty-state" style="padding:32px 20px;">' +
-      '<div class="tile-icon" style="background:var(--status-active-tint);color:var(--status-active);margin:0 auto 12px;">'+icon("check")+'</div>' +
-      '<b style="font-size:14px;display:block;color:var(--ink);">Всё разобрано</b>' +
-      '<p style="font-size:13px;margin:4px 0 0;">Никто не ждёт ответа и не завис без активности — новые задачи появятся здесь сами.</p>' +
+    '<div class="card empty-state" style="padding:2rem 1.25rem;">' +
+      '<div class="tile-icon" style="background:var(--status-active-tint);color:var(--status-active);margin:0 auto .75rem;">'+icon("check")+'</div>' +
+      '<b style="font-size:.875rem;display:block;color:var(--ink);">Всё разобрано</b>' +
+      '<p style="font-size:.8125rem;margin:.25rem 0 0;">Никто не ждёт ответа и не завис без активности — новые задачи появятся здесь сами.</p>' +
     '</div>'
   ));
 
-  if(isAdminRole() && (staffState.materials||[]).length) container.appendChild(el('<div style="margin-top:14px;">'+renderContentIssuesCard()+'</div>'));
+  if(isAdminRole() && (staffState.materials||[]).length) container.appendChild(el('<div style="margin-top:.875rem;">'+renderContentIssuesCard()+'</div>'));
 
   var reminders = upcomingEventReminders();
-  var gridHtml = '<div class="grid-2" style="margin-top:20px;">';
-  gridHtml += '<div class="card home-tile" style="padding:18px 20px;">' +
-    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">' +
+  var gridHtml = '<div class="grid-2" style="margin-top:1.25rem;">';
+  gridHtml += '<div class="card home-tile" style="padding:1.125rem 1.25rem;">' +
+    '<div style="display:flex;align-items:center;gap:.625rem;margin-bottom:.75rem;">' +
       '<div class="tile-icon" style="background:var(--primary-tint);color:var(--primary);">'+icon("bell")+'</div>' +
-      '<b style="font-size:14px;">Уведомления</b>' +
+      '<b style="font-size:.875rem;">Уведомления</b>' +
     '</div>';
   if(!reminders.length){
-    gridHtml += '<div style="display:flex;align-items:center;gap:8px;color:var(--status-active);">'+icon("check","ic-sm")+'<p style="font-size:13px;color:var(--muted);margin:0;">Ближайших эфиров и дедлайнов не запланировано — тут спокойно.</p></div>';
+    gridHtml += '<div style="display:flex;align-items:center;gap:.5rem;color:var(--status-active);">'+icon("check","ic-sm")+'<p style="font-size:.8125rem;color:var(--muted);margin:0;">Ближайших эфиров и дедлайнов не запланировано — тут спокойно.</p></div>';
   } else {
     reminders.slice(0,3).forEach(function(n){
-      gridHtml += '<div style="padding:8px 0;border-bottom:1px solid var(--line-2);"><b style="font-size:13px;display:block;">'+escapeHtml(n.title)+'</b></div>';
+      gridHtml += '<div style="padding:.5rem 0;border-bottom:1px solid var(--line-2);"><b style="font-size:.8125rem;display:block;">'+escapeHtml(n.title)+'</b></div>';
     });
   }
   gridHtml += '</div>';
-  gridHtml += '<div class="card home-tile" style="padding:18px 20px;">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
-      '<div style="display:flex;align-items:center;gap:10px;">' +
+  gridHtml += '<div class="card home-tile" style="padding:1.125rem 1.25rem;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;">' +
+      '<div style="display:flex;align-items:center;gap:.625rem;">' +
         '<div class="tile-icon" style="background:var(--primary-tint);color:var(--primary);">'+icon("message")+'</div>' +
-        '<b style="font-size:14px;">Общение</b>' +
+        '<b style="font-size:.875rem;">Общение</b>' +
       '</div>' +
       '<button class="btn btn-sm btn-ghost" data-action="open-telegram-modal">Открыть →</button>' +
     '</div>' +
-    '<p style="font-size:13px;color:var(--muted);margin:0;">Врачи, кураторы и преподаватели — в Telegram-группах потоков.</p>' +
+    '<p style="font-size:.8125rem;color:var(--muted);margin:0;">Врачи, кураторы и преподаватели — в Telegram-группах потоков.</p>' +
   '</div></div>';
   container.appendChild(el(gridHtml));
 
   var d = staffState.digest;
-  var digestHtml = '<div class="card home-tile" style="padding:18px 20px;margin-top:20px;">' +
-    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">' +
+  var digestHtml = '<div class="card home-tile" style="padding:1.125rem 1.25rem;margin-top:1.25rem;">' +
+    '<div style="display:flex;align-items:center;gap:.625rem;margin-bottom:.75rem;">' +
       '<div class="tile-icon" style="background:var(--status-done-tint);color:var(--status-done);">'+icon("chartbar")+'</div>' +
-      '<b style="font-size:14px;">ИИ-ассистент — отчёт за вчера</b>' +
+      '<b style="font-size:.875rem;">ИИ-ассистент — отчёт за вчера</b>' +
     '</div>';
   if(!d){
-    digestHtml += '<div style="display:flex;align-items:center;gap:8px;color:var(--muted-2);">'+icon("clock","ic-sm")+'<p style="font-size:13px;color:var(--muted);margin:0;">Ещё не готов — соберёт итоги дня и появится здесь к 9:00 по МСК.</p></div>';
+    digestHtml += '<div style="display:flex;align-items:center;gap:.5rem;color:var(--muted-2);">'+icon("clock","ic-sm")+'<p style="font-size:.8125rem;color:var(--muted);margin:0;">Ещё не готов — соберёт итоги дня и появится здесь к 9:00 по МСК.</p></div>';
   } else {
-    digestHtml += '<p style="font-size:14px;margin:0;line-height:1.5;">'+escapeHtml(d.summary)+'</p>';
+    digestHtml += '<p style="font-size:.875rem;margin:0;line-height:1.5;">'+escapeHtml(d.summary)+'</p>';
   }
   digestHtml += '</div>';
   container.appendChild(el(digestHtml));
 }
 
 function renderCalendarTab(){
-  return el('<div style="margin-top:6px;">' + renderMonthCalendar() + '</div>');
+  return el('<div style="margin-top:.375rem;">' + renderMonthCalendar() + '</div>');
 }
 
 function renderStreamsPanel(){
@@ -5009,20 +5009,20 @@ function renderStreamsPanel(){
   var countsByStream = {};
   staffState.students.forEach(function(s){ var sid=s.stream_id||""; countsByStream[sid]=(countsByStream[sid]||0)+1; });
 
-  var html = '<div class="card" style="padding:18px 20px;margin-bottom:20px;">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">' +
-      '<b style="font-size:15px;">Потоки обучения</b>' +
+  var html = '<div class="card" style="padding:1.125rem 1.25rem;margin-bottom:1.25rem;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;flex-wrap:wrap;gap:.625rem;">' +
+      '<b style="font-size:.9375rem;">Потоки обучения</b>' +
       '<button class="btn btn-sm btn-ghost" data-action="toggle-stream-form">'+(calendarState.showStreamForm?'Скрыть':'+ Новый поток')+'</button>' +
     '</div>';
   if(calendarState.showStreamForm){
-    html += '<form id="streamForm" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;">' +
-      '<div class="field" style="margin-bottom:0;min-width:220px;flex:1;"><label>Название потока</label><input class="input" name="name" required placeholder="Например, Поток «Октябрь 2026»"></div>' +
+    html += '<form id="streamForm" style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1rem;">' +
+      '<div class="field" style="margin-bottom:0;min-width:13.75rem;flex:1;"><label>Название потока</label><input class="input" name="name" required placeholder="Например, Поток «Октябрь 2026»"></div>' +
       '<div class="field" style="margin-bottom:0;"><label>Дата старта</label><input class="input" type="date" name="startDate"></div>' +
-      '<div class="field" style="margin-bottom:0;min-width:220px;flex:1;"><label>Ссылка на Telegram-группу (можно позже)</label><input class="input" name="telegramUrl" type="text" inputmode="url" placeholder="https://t.me/..."></div>' +
+      '<div class="field" style="margin-bottom:0;min-width:13.75rem;flex:1;"><label>Ссылка на Telegram-группу (можно позже)</label><input class="input" name="telegramUrl" type="text" inputmode="url" placeholder="https://t.me/..."></div>' +
       '<button class="btn btn-primary" type="submit">Создать</button></form>';
   }
   if(!streams.length){
-    html += '<p style="font-size:13px;color:var(--muted);margin:0;">Пока нет ни одного потока.</p>';
+    html += '<p style="font-size:.8125rem;color:var(--muted);margin:0;">Пока нет ни одного потока.</p>';
   } else {
     // Компактная карточка: название, старт, число врачей, Telegram одной строкой.
     // Поле ссылки открывается по «Изменить», «Изменить»/«Удалить» — по наведению.
@@ -5062,10 +5062,10 @@ function renderMonthCalendar(){
   var eventsByDate = {};
   calendarState.events.forEach(function(ev){ (eventsByDate[ev.event_date]=eventsByDate[ev.event_date]||[]).push(ev); });
 
-  var html = '<div class="card" style="padding:18px 20px;"><div class="cal-header">' +
-    '<div style="display:flex;align-items:center;gap:10px;">' +
+  var html = '<div class="card" style="padding:1.125rem 1.25rem;"><div class="cal-header">' +
+    '<div style="display:flex;align-items:center;gap:.625rem;">' +
       '<button class="btn btn-sm btn-ghost" data-action="cal-prev">←</button>' +
-      '<b style="font-size:16px;text-transform:capitalize;">'+monthLabel(md)+'</b>' +
+      '<b style="font-size:1rem;text-transform:capitalize;">'+monthLabel(md)+'</b>' +
       '<button class="btn btn-sm btn-ghost" data-action="cal-next">→</button></div>' +
     '<button class="btn btn-sm btn-primary" data-action="open-event-form" data-date="'+isoDate(new Date())+'">+ Добавить эфир</button></div>' +
     '<div class="cal-grid cal-grid-head">';
@@ -5095,39 +5095,39 @@ function renderMonthCalendar(){
 
 function renderEventModal(){
   if(calendarState.eventModalMode === "create"){
-    var body = '<div class="drawer-head"><b style="font-size:16px;">Новый прямой эфир</b><button class="btn btn-ghost btn-sm" data-action="close-event-modal">Закрыть ✕</button></div>' +
+    var body = '<div class="drawer-head"><b style="font-size:1rem;">Новый прямой эфир</b><button class="btn btn-ghost btn-sm" data-action="close-event-modal">Закрыть ✕</button></div>' +
       '<div class="drawer-body"><form id="eventForm">' +
         '<div class="field"><label>Тема эфира</label><input class="input" name="title" required></div>' +
-        '<div style="display:flex;gap:10px;">' +
+        '<div style="display:flex;gap:.625rem;">' +
           '<div class="field" style="flex:1;"><label>Дата</label><input class="input" type="date" name="date" required value="'+escapeHtml(calendarState.eventModalDate||"")+'"></div>' +
           '<div class="field" style="flex:1;"><label>Время</label><input class="input" type="time" name="time" required value="18:00"></div></div>' +
         '<div class="field"><label>Длительность, мин</label><input class="input" type="number" name="duration" value="60" min="10" step="5"></div>' +
         '<div class="field"><label>Спикер</label><input class="input" name="speaker"></div>' +
         '<div class="field"><label>Поток</label><select class="input" name="streamId">'+buildStreamOptions("", "Все потоки")+'</select></div>' +
         '<div class="field"><label>Ссылка на подключение</label><input class="input" name="joinUrl" placeholder="Zoom / YouTube"></div>' +
-        '<div class="field"><label>Описание</label><textarea class="input" name="description" style="height:70px;"></textarea></div>' +
-        '<label style="display:flex;align-items:center;gap:8px;margin-bottom:'+(calendarState.recurring?'10px':'20px')+';cursor:pointer;">' +
+        '<div class="field"><label>Описание</label><textarea class="input" name="description" style="height:4.375rem;"></textarea></div>' +
+        '<label style="display:flex;align-items:center;gap:.5rem;margin-bottom:'+(calendarState.recurring?'10px':'20px')+';cursor:pointer;">' +
           '<input type="checkbox" name="recurring" data-action="toggle-recurring"'+(calendarState.recurring?' checked':'')+' style="accent-color:var(--primary);">' +
-          '<span style="font-size:14px;">Повторять еженедельно</span></label>' +
+          '<span style="font-size:.875rem;">Повторять еженедельно</span></label>' +
         (calendarState.recurring ? '<div class="field"><label>Повторять до</label><input class="input" type="date" name="recurrenceUntil" required></div>' : '') +
         '<button class="btn btn-primary btn-block" type="submit">Добавить в расписание</button></form></div>';
-    return el('<div class="overlay" data-action="overlay-close-event"><div class="drawer" data-stop="1" style="width:min(480px,100%);">'+body+'</div></div>');
+    return el('<div class="overlay" data-action="overlay-close-event"><div class="drawer" data-stop="1" style="width:min(30rem,100%);">'+body+'</div></div>');
   }
   var ev = calendarState.events.filter(function(x){ return x.id===calendarState.eventModalId; })[0];
   if(!ev) return el('<div></div>');
   var stream = calendarState.streams.filter(function(s){ return s.id===ev.stream_id; })[0];
-  var body2 = '<div class="drawer-head"><b style="font-size:16px;">'+escapeHtml(ev.title)+'</b><button class="btn btn-ghost btn-sm" data-action="close-event-modal">Закрыть ✕</button></div>' +
-    '<div class="drawer-body"><p style="font-size:14px;color:var(--muted);margin:0 0 4px;">'+fmtDate(ev.event_date)+' в '+escapeHtml(ev.event_time||"—")+' · '+(ev.duration_min||60)+' мин</p>' +
-    (ev.speaker?'<p style="font-size:14px;margin:0 0 4px;">Спикер: '+escapeHtml(ev.speaker)+'</p>':'') +
-    '<p style="font-size:14px;margin:0 0 4px;">Поток: '+(stream?escapeHtml(stream.name):'Все потоки')+'</p>' +
-    (ev.recurrence_group_id ? '<p style="font-size:13px;color:var(--accent);margin:0 0 4px;display:flex;align-items:center;gap:5px;">'+icon("repeat","ic-sm")+' Часть серии повторов</p>' : '') +
-    (ev.join_url?'<p style="font-size:14px;margin:0 0 12px;"><a href="'+escapeHtml(ev.join_url)+'" target="_blank" rel="noopener" style="color:var(--primary-dark);">Ссылка на подключение →</a></p>':'') +
-    (ev.description?'<p style="font-size:14px;color:var(--muted);margin:0 0 16px;">'+escapeHtml(ev.description)+'</p>':'') +
-    '<div style="display:flex;gap:10px;flex-wrap:wrap;">' +
+  var body2 = '<div class="drawer-head"><b style="font-size:1rem;">'+escapeHtml(ev.title)+'</b><button class="btn btn-ghost btn-sm" data-action="close-event-modal">Закрыть ✕</button></div>' +
+    '<div class="drawer-body"><p style="font-size:.875rem;color:var(--muted);margin:0 0 .25rem;">'+fmtDate(ev.event_date)+' в '+escapeHtml(ev.event_time||"—")+' · '+(ev.duration_min||60)+' мин</p>' +
+    (ev.speaker?'<p style="font-size:.875rem;margin:0 0 .25rem;">Спикер: '+escapeHtml(ev.speaker)+'</p>':'') +
+    '<p style="font-size:.875rem;margin:0 0 .25rem;">Поток: '+(stream?escapeHtml(stream.name):'Все потоки')+'</p>' +
+    (ev.recurrence_group_id ? '<p style="font-size:.8125rem;color:var(--accent);margin:0 0 .25rem;display:flex;align-items:center;gap:.3125rem;">'+icon("repeat","ic-sm")+' Часть серии повторов</p>' : '') +
+    (ev.join_url?'<p style="font-size:.875rem;margin:0 0 .75rem;"><a href="'+escapeHtml(ev.join_url)+'" target="_blank" rel="noopener" style="color:var(--primary-dark);">Ссылка на подключение →</a></p>':'') +
+    (ev.description?'<p style="font-size:.875rem;color:var(--muted);margin:0 0 1rem;">'+escapeHtml(ev.description)+'</p>':'') +
+    '<div style="display:flex;gap:.625rem;flex-wrap:wrap;">' +
       '<button class="btn btn-ghost" data-action="delete-event" data-id="'+ev.id+'">Удалить эфир</button>' +
       (ev.recurrence_group_id ? '<button class="btn btn-ghost" data-action="delete-event-series" data-id="'+ev.id+'">Удалить всю серию</button>' : '') +
     '</div></div>';
-  return el('<div class="overlay" data-action="overlay-close-event"><div class="drawer" data-stop="1" style="width:min(480px,100%);">'+body2+'</div></div>');
+  return el('<div class="overlay" data-action="overlay-close-event"><div class="drawer" data-stop="1" style="width:min(30rem,100%);">'+body2+'</div></div>');
 }
 
 var AUDIT_ACTION_LABELS = {
@@ -5240,21 +5240,21 @@ function auditExportUrl(){
 }
 
 function renderAuditLogTab(){
-  var html = '<div class="card" style="padding:18px 20px;margin-top:6px;">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
-      '<b style="font-size:15px;">Журнал действий персонала</b>' +
+  var html = '<div class="card" style="padding:1.125rem 1.25rem;margin-top:.375rem;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.625rem;">' +
+      '<b style="font-size:.9375rem;">Журнал действий персонала</b>' +
       '<a class="btn btn-sm btn-ghost" href="'+auditExportUrl()+'" target="_blank" rel="noopener">'+icon("download","ic-sm")+' Экспорт CSV</a>' +
     '</div>' +
-    '<p style="font-size:13px;color:var(--muted);margin:4px 0 16px;">Последние 100 действий (с учётом фильтров ниже) — экспорт выгружает те же фильтры, до 5000 строк. '+(me.role==="super_admin"?'Обратимые действия можно откатить — это вернёт состояние к тому, что было до изменения.':'')+'</p>';
+    '<p style="font-size:.8125rem;color:var(--muted);margin:.25rem 0 1rem;">Последние 100 действий (с учётом фильтров ниже) — экспорт выгружает те же фильтры, до 5000 строк. '+(me.role==="super_admin"?'Обратимые действия можно откатить — это вернёт состояние к тому, что было до изменения.':'')+'</p>';
 
   var actorOpts = auditActorOptions();
-  html += '<div class="dash-filters-grid" style="margin-bottom:16px;">' +
+  html += '<div class="dash-filters-grid" style="margin-bottom:1rem;">' +
     '<div class="dash-field" style="grid-column:span 2;"><label>Поиск</label><input class="input" id="auditSearchInput" placeholder="Кто или что" value="'+escapeHtml(auditFilters.q)+'"></div>' +
-    '<div class="dash-field"><label>Действие</label><select class="input" id="auditActionFilter" style="padding:8px 9px;font-size:13px;">' +
+    '<div class="dash-field"><label>Действие</label><select class="input" id="auditActionFilter" style="padding:.5rem .5625rem;font-size:.8125rem;">' +
       '<option value="">Все</option>' +
       auditActionsList.map(function(a){ return '<option value="'+escapeHtml(a)+'"'+(auditFilters.action===a?' selected':'')+'>'+escapeHtml(auditActionLabel(a))+'</option>'; }).join('') +
     '</select></div>' +
-    '<div class="dash-field"><label>Кто</label><select class="input" id="auditActorFilter" style="padding:8px 9px;font-size:13px;">' +
+    '<div class="dash-field"><label>Кто</label><select class="input" id="auditActorFilter" style="padding:.5rem .5625rem;font-size:.8125rem;">' +
       '<option value="">Все</option>' +
       actorOpts.map(function(p){ return '<option value="'+p.id+'"'+(auditFilters.actorId===p.id?' selected':'')+'>'+escapeHtml(p.name)+'</option>'; }).join('') +
     '</select></div>' +
@@ -5274,10 +5274,10 @@ function renderAuditLogTab(){
     html += '<div style="overflow-x:auto;"><table class="roster"><thead><tr><th>Когда</th><th>Кто</th><th>Действие</th><th>Кого/чего касается</th><th></th></tr></thead><tbody>';
     staffState.auditLog.forEach(function(l){
       var canRevert = me.role==="super_admin" && l.revertible && !l.reverted_at;
-      var statusNote = l.reverted_at ? '<span style="font-size:11px;color:var(--muted-2);display:block;">откачено '+fmtDate(l.reverted_at)+(l.reverted_by?(' · '+escapeHtml(l.reverted_by)):'')+'</span>' : '';
+      var statusNote = l.reverted_at ? '<span style="font-size:.6875rem;color:var(--muted-2);display:block;">откачено '+fmtDate(l.reverted_at)+(l.reverted_by?(' · '+escapeHtml(l.reverted_by)):'')+'</span>' : '';
       html += '<tr>' +
         '<td class="audit-when">'+fmtDate(l.created_at)+' '+fmtTime(l.created_at)+'</td>' +
-        '<td>'+escapeHtml(l.actor_name)+(l.actor_role?(' <span style="color:var(--muted);font-size:12px;">('+roleLabel(l.actor_role)+')</span>'):'')+'</td>' +
+        '<td>'+escapeHtml(l.actor_name)+(l.actor_role?(' <span style="color:var(--muted);font-size:.75rem;">('+roleLabel(l.actor_role)+')</span>'):'')+'</td>' +
         '<td>'+magnet(auditActionKind(l.action), auditActionLabel(l.action))+statusNote+'</td>' +
         '<td style="color:var(--muted);">'+escapeHtml(l.target_name||l.target_id||"—")+'</td>' +
         '<td style="text-align:right;">'+(canRevert ? '<button class="btn btn-sm btn-ghost" data-action="revert-log" data-id="'+l.id+'" data-label="'+escapeHtml(auditActionLabel(l.action))+'">Откатить</button>' : '')+'</td>' +
@@ -5380,7 +5380,7 @@ function renderLessonsTab(){
       '<button class="btn btn-primary" type="submit">Добавить модуль</button><button type="button" class="btn btn-ghost" data-action="toggle-module-create">Отмена</button></form>';
   }
   if(!list.length){
-    html += '<div class="card empty-state" style="padding:36px 16px;">В курсе пока нет уроков.'+(admin?' Нажмите «+ Урок», чтобы добавить первый.':'')+'</div>';
+    html += '<div class="card empty-state" style="padding:2.25rem 1rem;">В курсе пока нет уроков.'+(admin?' Нажмите «+ Урок», чтобы добавить первый.':'')+'</div>';
   }
   var shown = 0;
   runs.forEach(function(r){
@@ -5414,7 +5414,7 @@ function renderLessonsTab(){
     items.forEach(function(x){ html += lsRow(x.l, x.i, admin, mods); });
     html += '</div>';
   });
-  if(q && !shown) html += '<div class="card empty-state" style="padding:28px 16px;">Уроков с «'+escapeHtml(staffState.lsQuery)+'» в названии нет.</div>';
+  if(q && !shown) html += '<div class="card empty-state" style="padding:1.75rem 1rem;">Уроков с «'+escapeHtml(staffState.lsQuery)+'» в названии нет.</div>';
   if(list.length && !q){
     var qHidden = (courseVisibility.quiz||[]).length, qn = (staffState.quizAdmin||[]).length;
     html += '<div class="card ls-sec ls-final"><div class="ls-row" data-action="open-lesson-page" data-id="quiz">' +
@@ -5527,14 +5527,14 @@ var LP_HINTS = {
 function renderFinalQuizQuestions(){
   var html = '<div class="lp-qhead"><div><b>Вопросы итогового теста</b><span>Врач проходит его после всех уроков — по нему выдаётся сертификат.</span></div>' +
     '<button type="button" class="btn btn-sm btn-primary" data-action="open-quiz-creator">+ Вопрос</button></div>';
-  if(!(staffState.quizAdmin||[]).length) return html + '<div class="empty-state" style="padding:24px 10px;">Вопросов пока нет.</div>';
+  if(!(staffState.quizAdmin||[]).length) return html + '<div class="empty-state" style="padding:1.5rem .625rem;">Вопросов пока нет.</div>';
   staffState.quizAdmin.forEach(function(q, i){
     var qIsFirst = i===0, qIsLast = i===staffState.quizAdmin.length-1;
-    html += '<div class="adm-row" style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line-2);">' +
-      '<div style="display:flex;flex-direction:column;gap:2px;">' +
-        '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-quiz-question" data-id="'+q.id+'" data-dir="up"'+(qIsFirst?' disabled':'')+' title="Выше">↑</button>' +
-        '<button class="btn btn-sm btn-ghost" style="padding:2px 7px;" data-action="move-quiz-question" data-id="'+q.id+'" data-dir="down"'+(qIsLast?' disabled':'')+' title="Ниже">↓</button></div>' +
-      '<div style="flex:1;min-width:0;"><b style="font-size:14px;display:block;">'+(i+1)+'. '+escapeHtml(q.question)+'</b><span style="font-size:12px;color:var(--muted);">'+describeQuizQuestion(q)+'</span></div>' +
+    html += '<div class="adm-row" style="display:flex;align-items:center;gap:.625rem;padding:.625rem 0;border-bottom:1px solid var(--line-2);">' +
+      '<div style="display:flex;flex-direction:column;gap:.125rem;">' +
+        '<button class="btn btn-sm btn-ghost" style="padding:.125rem .4375rem;" data-action="move-quiz-question" data-id="'+q.id+'" data-dir="up"'+(qIsFirst?' disabled':'')+' title="Выше">↑</button>' +
+        '<button class="btn btn-sm btn-ghost" style="padding:.125rem .4375rem;" data-action="move-quiz-question" data-id="'+q.id+'" data-dir="down"'+(qIsLast?' disabled':'')+' title="Ниже">↓</button></div>' +
+      '<div style="flex:1;min-width:0;"><b style="font-size:.875rem;display:block;">'+(i+1)+'. '+escapeHtml(q.question)+'</b><span style="font-size:.75rem;color:var(--muted);">'+describeQuizQuestion(q)+'</span></div>' +
       '<button class="btn btn-sm btn-ghost" data-action="open-quiz-editor" data-id="'+q.id+'">Редактировать</button>' +
       '<button class="btn btn-sm btn-ghost" data-action="delete-quiz-question" data-id="'+q.id+'" title="Удалить вопрос">'+icon("trash","ic-sm")+'</button></div>';
   });
@@ -5582,7 +5582,7 @@ function renderLessonPage(){
   if(tab==="questions"){
     panel.appendChild(el('<div>'+renderFinalQuizQuestions()+'</div>'));
   } else if(!lpEnsure(tab) || (tab==="quiz" && !lessonQuizManager.loaded) || (tab==="content" && !lessonEditor.loaded)){
-    panel.appendChild(el('<div class="empty-state" style="padding:30px 10px;">Загрузка…</div>'));
+    panel.appendChild(el('<div class="empty-state" style="padding:1.875rem .625rem;">Загрузка…</div>'));
   } else {
     var node = tab==="content" ? renderLessonEditorModal() : tab==="video" ? renderVideoEditorModal() : tab==="quiz" ? renderLessonQuizManagerDrawer()
       : tab==="assign" ? renderAssignEditorModal() : tab==="schedule" ? renderScheduleModal() : renderMaterialsPickerModal();
@@ -5600,29 +5600,29 @@ function renderMaterialsPickerModal(){
   var allIds = staffState.students.map(function(s){ return s.id; });
   var allSelected = allIds.length>0 && allIds.every(function(id){ return materialsPicker.selectedIds.indexOf(id)!==-1; });
 
-  var body = '<div class="drawer-head"><b style="font-size:16px;">Скрыть «'+escapeHtml(materialsPicker.targetTitle)+'» от</b><button class="btn btn-ghost btn-sm" data-action="close-materials-picker">Закрыть ✕</button></div>' +
+  var body = '<div class="drawer-head"><b style="font-size:1rem;">Скрыть «'+escapeHtml(materialsPicker.targetTitle)+'» от</b><button class="btn btn-ghost btn-sm" data-action="close-materials-picker">Закрыть ✕</button></div>' +
     '<div class="drawer-body">' +
-      '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius-s);margin-bottom:14px;cursor:pointer;background:var(--primary-tint);">' +
+      '<label style="display:flex;align-items:center;gap:.625rem;padding:.625rem .75rem;border:1px solid var(--line);border-radius:var(--radius-s);margin-bottom:.875rem;cursor:pointer;background:var(--primary-tint);">' +
         '<input type="checkbox" data-action="toggle-picker-all"'+(allSelected?' checked':'')+'>' +
-        '<span style="font-size:14px;font-weight:600;">Скрыть от всех врачей</span></label>' +
-      '<input class="input" id="materialsPickerSearch" placeholder="Поиск по имени, email или телефону" value="'+escapeHtml(materialsPicker.search)+'" style="margin-bottom:12px;">' +
-      '<div style="max-height:320px;overflow-y:auto;">';
+        '<span style="font-size:.875rem;font-weight:600;">Скрыть от всех врачей</span></label>' +
+      '<input class="input" id="materialsPickerSearch" placeholder="Поиск по имени, email или телефону" value="'+escapeHtml(materialsPicker.search)+'" style="margin-bottom:.75rem;">' +
+      '<div style="max-height:20rem;overflow-y:auto;">';
   if(!students.length){
-    body += '<div class="empty-state" style="padding:24px 10px;">Никого не нашлось.</div>';
+    body += '<div class="empty-state" style="padding:1.5rem .625rem;">Никого не нашлось.</div>';
   } else {
     students.forEach(function(s){
       var checked = materialsPicker.selectedIds.indexOf(s.id)!==-1;
-      body += '<label style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--line-2);cursor:pointer;">' +
+      body += '<label style="display:flex;align-items:center;gap:.625rem;padding:.5rem .25rem;border-bottom:1px solid var(--line-2);cursor:pointer;">' +
         '<input type="checkbox" data-action="toggle-picker-student" data-id="'+s.id+'"'+(checked?' checked':'')+'>' +
-        userAvatar(s,null,'width:26px;height:26px;font-size:11px;') +
-        '<div style="flex:1;"><b style="font-size:14px;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:12px;color:var(--muted);">'+escapeHtml(s.email||s.phone||"—")+'</span></div></label>';
+        userAvatar(s,null,'width:1.625rem;height:1.625rem;font-size:.6875rem;') +
+        '<div style="flex:1;"><b style="font-size:.875rem;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:.75rem;color:var(--muted);">'+escapeHtml(s.email||s.phone||"—")+'</span></div></label>';
     });
   }
-  body += '</div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;">' +
-    '<span style="font-size:13px;color:var(--muted);">Выбрано: '+materialsPicker.selectedIds.length+'</span>' +
+  body += '</div><div style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem;">' +
+    '<span style="font-size:.8125rem;color:var(--muted);">Выбрано: '+materialsPicker.selectedIds.length+'</span>' +
     '<button class="btn btn-primary" data-action="apply-materials-picker">Сохранить</button></div></div>';
 
-  return el('<div class="overlay" data-action="overlay-close-materials"><div class="drawer" data-stop="1" style="width:min(440px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay" data-action="overlay-close-materials"><div class="drawer" data-stop="1" style="width:min(27.5rem,100%);">'+body+'</div></div>');
 }
 
 // Куратор назначает дату открытия урока — конкретным врачам или всем сразу
@@ -5637,31 +5637,31 @@ function renderScheduleModal(){
   var scheduleByStudent = {};
   scheduleModal.schedule.forEach(function(r){ scheduleByStudent[r.student_id]=r.unlock_at; });
 
-  var body = '<div class="drawer-head"><b style="font-size:16px;">Расписание урока «'+escapeHtml(scheduleModal.lessonTitle)+'»</b><button class="btn btn-ghost btn-sm" data-action="close-schedule-modal">Закрыть ✕</button></div>' +
+  var body = '<div class="drawer-head"><b style="font-size:1rem;">Расписание урока «'+escapeHtml(scheduleModal.lessonTitle)+'»</b><button class="btn btn-ghost btn-sm" data-action="close-schedule-modal">Закрыть ✕</button></div>' +
     '<div class="drawer-body">' +
       '<div class="field"><label>Дата открытия</label><input class="input" type="date" id="scheduleUnlockDate" value="'+escapeHtml(scheduleModal.unlockDate)+'"></div>' +
-      '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--radius-s);margin-bottom:14px;cursor:pointer;background:var(--primary-tint);">' +
+      '<label style="display:flex;align-items:center;gap:.625rem;padding:.625rem .75rem;border:1px solid var(--line);border-radius:var(--radius-s);margin-bottom:.875rem;cursor:pointer;background:var(--primary-tint);">' +
         '<input type="checkbox" data-action="toggle-schedule-all"'+(scheduleModal.applyToAll?' checked':'')+'>' +
-        '<span style="font-size:14px;font-weight:600;">Применить ко всем врачам</span></label>' +
+        '<span style="font-size:.875rem;font-weight:600;">Применить ко всем врачам</span></label>' +
       (!scheduleModal.applyToAll ?
-        '<input class="input" id="scheduleSearch" placeholder="Поиск по имени или email" value="'+escapeHtml(scheduleModal.search)+'" style="margin-bottom:12px;">' +
-        '<div style="max-height:220px;overflow-y:auto;margin-bottom:14px;">' +
+        '<input class="input" id="scheduleSearch" placeholder="Поиск по имени или email" value="'+escapeHtml(scheduleModal.search)+'" style="margin-bottom:.75rem;">' +
+        '<div style="max-height:13.75rem;overflow-y:auto;margin-bottom:.875rem;">' +
         (students.length ? students.map(function(s){
           var checked = scheduleModal.selectedIds.indexOf(s.id)!==-1;
           var current = scheduleByStudent[s.id];
-          return '<label style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--line-2);cursor:pointer;">' +
+          return '<label style="display:flex;align-items:center;gap:.625rem;padding:.5rem .25rem;border-bottom:1px solid var(--line-2);cursor:pointer;">' +
             '<input type="checkbox" data-action="toggle-schedule-student" data-id="'+s.id+'"'+(checked?' checked':'')+'>' +
-            userAvatar(s,null,'width:26px;height:26px;font-size:11px;') +
-            '<div style="flex:1;"><b style="font-size:14px;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:12px;color:var(--muted);">'+(current?'открыт с '+fmtDate(current):'по дрипу')+'</span></div></label>';
-        }).join('') : '<div class="empty-state" style="padding:24px 10px;">Никого не нашлось.</div>') +
+            userAvatar(s,null,'width:1.625rem;height:1.625rem;font-size:.6875rem;') +
+            '<div style="flex:1;"><b style="font-size:.875rem;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:.75rem;color:var(--muted);">'+(current?'открыт с '+fmtDate(current):'по дрипу')+'</span></div></label>';
+        }).join('') : '<div class="empty-state" style="padding:1.5rem .625rem;">Никого не нашлось.</div>') +
         '</div>'
-      : '<p class="hint" style="margin-top:-6px;">Затронет всех врачей в вашей зоне ответственности ('+staffState.students.length+').</p>') +
-      '<div style="display:flex;gap:10px;flex-wrap:wrap;">' +
+      : '<p class="hint" style="margin-top:-.375rem;">Затронет всех врачей в вашей зоне ответственности ('+staffState.students.length+').</p>') +
+      '<div style="display:flex;gap:.625rem;flex-wrap:wrap;">' +
         '<button class="btn btn-primary" data-action="apply-schedule">Назначить дату</button>' +
         '<button class="btn btn-ghost" data-action="clear-schedule">Сбросить на автоматический дрип</button>' +
       '</div>' +
     '</div>';
-  return el('<div class="overlay" data-action="overlay-close-schedule"><div class="drawer" data-stop="1" style="width:min(460px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay" data-action="overlay-close-schedule"><div class="drawer" data-stop="1" style="width:min(28.75rem,100%);">'+body+'</div></div>');
 }
 
 /* ============================= РЕНДЕР: DASHBOARD (срезы по параметрам) ============================= */
@@ -5865,7 +5865,7 @@ function renderHBarChart(items){
 }
 
 function renderQuizStackChart(stats){
-  if(!stats.length) return '<div class="empty-state" style="padding:24px 10px;">Вопросов пока нет.</div>';
+  if(!stats.length) return '<div class="empty-state" style="padding:1.5rem .625rem;">Вопросов пока нет.</div>';
   var html = '<div class="chart-legend">' +
     '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:var(--status-active);"></span>Верно</div>' +
     '<div class="chart-legend-item"><span class="chart-legend-swatch" style="background:var(--status-blocked);"></span>Неверно</div>' +
@@ -5933,11 +5933,11 @@ function renderAnalyticsSection(filtered){
 
   // Без вопросов теста (не admin/super_admin) второй график остаётся один —
   // тогда сетку в 2 колонки не открываем вовсе, а не оставляем пустую половину.
-  html += quizStats ? '<div class="chart-grid">' : '<div style="margin-bottom:16px;">';
+  html += quizStats ? '<div class="chart-grid">' : '<div style="margin-bottom:1rem;">';
   html += '<div class="card chart-card">' +
     '<b class="chart-card-title">Отсев по урокам</b>' +
     '<p class="chart-card-sub">Сколько врачей дошло хотя бы до этого урока</p>' +
-    (dropoff.length ? renderHBarChart(dropoff) : '<div class="empty-state" style="padding:24px 10px;">Уроков пока нет.</div>') +
+    (dropoff.length ? renderHBarChart(dropoff) : '<div class="empty-state" style="padding:1.5rem .625rem;">Уроков пока нет.</div>') +
   '</div>';
   if(quizStats){
     html += '<div class="card chart-card">' +
@@ -5960,9 +5960,9 @@ function renderDashboardTab(){
 
   var filtered = computeFilteredStudents();
 
-  var html = '<div style="margin-top:6px;"><div class="card" style="padding:18px 20px;margin-bottom:20px;">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">' +
-      '<b style="font-size:15px;">Фильтры</b><button class="btn btn-sm btn-ghost" data-action="reset-dash-filters">Сбросить всё</button></div>';
+  var html = '<div style="margin-top:.375rem;"><div class="card" style="padding:1.125rem 1.25rem;margin-bottom:1.25rem;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.875rem;">' +
+      '<b style="font-size:.9375rem;">Фильтры</b><button class="btn btn-sm btn-ghost" data-action="reset-dash-filters">Сбросить всё</button></div>';
 
   html += '<div class="dash-filters-grid">';
 
@@ -5986,9 +5986,9 @@ function renderDashboardTab(){
 
   html += renderAnalyticsSection(filtered);
 
-  html += '<div class="card" style="padding:18px 20px;">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">' +
-      '<b style="font-size:15px;">Найдено: '+filtered.length+' из '+staffState.students.length+'</b>' +
+  html += '<div class="card" style="padding:1.125rem 1.25rem;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.875rem;flex-wrap:wrap;gap:.625rem;">' +
+      '<b style="font-size:.9375rem;">Найдено: '+filtered.length+' из '+staffState.students.length+'</b>' +
       '<button class="btn btn-sm btn-ghost" data-action="export-dash-csv"'+(!filtered.length?' disabled':'')+'>Экспорт в CSV</button></div>';
 
   if(!filtered.length){
@@ -6039,8 +6039,8 @@ function renderInboxCard(){
   var total = inbox.inactive.length + inbox.pendingCertificates.length;
   if(!total) return el('<div></div>');
 
-  var html = '<div class="card" style="padding:18px 20px;margin-bottom:20px;">' +
-    '<b style="font-size:15px;display:block;margin-bottom:14px;">Требует внимания ('+total+')</b>';
+  var html = '<div class="card" style="padding:1.125rem 1.25rem;margin-bottom:1.25rem;">' +
+    '<b style="font-size:.9375rem;display:block;margin-bottom:.875rem;">Требует внимания ('+total+')</b>';
 
   if(inbox.inactive.length){
     html += '<div class="inbox-group">'+magnet("attention","Неактивны 7+ дней");
@@ -6064,7 +6064,7 @@ function renderInboxCard(){
     inbox.pendingCertificates.forEach(function(r){
       html += '<div class="inbox-row">' +
         userAvatar(r) +
-        '<div style="flex:1;"><b style="font-size:14px;display:block;">'+escapeHtml(r.name)+'</b><span style="font-size:12px;color:var(--muted);">тест: '+r.quiz_score+'%</span></div>' +
+        '<div style="flex:1;"><b style="font-size:.875rem;display:block;">'+escapeHtml(r.name)+'</b><span style="font-size:.75rem;color:var(--muted);">тест: '+r.quiz_score+'%</span></div>' +
         '<button class="btn btn-sm btn-primary" data-action="issue-certificate" data-id="'+r.id+'">Выдать</button>' +
       '</div>';
     });
@@ -6106,18 +6106,18 @@ function renderCertificateQueue(){
   var pendingIds = pending.map(function(s){ return s.id; });
   var selected = staffState.certSelectedIds.filter(function(id){ return pendingIds.indexOf(id)!==-1; });
   var allSelected = selected.length>0 && selected.length===pending.length;
-  var html = '<div class="card" style="padding:18px 20px;margin-bottom:20px;">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">' +
-      '<label style="display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;cursor:pointer;">' +
+  var html = '<div class="card" style="padding:1.125rem 1.25rem;margin-bottom:1.25rem;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem;flex-wrap:wrap;gap:.625rem;">' +
+      '<label style="display:flex;align-items:center;gap:.5rem;font-size:.9375rem;font-weight:600;cursor:pointer;">' +
         '<input type="checkbox" data-action="toggle-cert-select-all"'+(allSelected?' checked':'')+' style="accent-color:var(--primary);">Очередь сертификатов</label>' +
       (selected.length ? '<button class="btn btn-sm btn-primary" data-action="bulk-issue-certificates">Выдать выбранным ('+selected.length+')</button>' : '') +
     '</div>';
   pending.forEach(function(s){
     var checked = selected.indexOf(s.id)!==-1;
-    html += '<div class="adm-row" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line-2);">' +
+    html += '<div class="adm-row" style="display:flex;align-items:center;gap:.625rem;padding:.5rem 0;border-bottom:1px solid var(--line-2);">' +
       '<input type="checkbox" data-action="toggle-cert-select" data-id="'+s.id+'"'+(checked?' checked':'')+' style="accent-color:var(--primary);">' +
       userAvatar(s) +
-      '<div style="flex:1;"><b style="font-size:14px;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:12px;color:var(--muted);">тест: '+s.quiz_score+'%</span></div>' +
+      '<div style="flex:1;"><b style="font-size:.875rem;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:.75rem;color:var(--muted);">тест: '+s.quiz_score+'%</span></div>' +
       '<button class="btn btn-sm btn-ghost" data-action="open-student" data-id="'+s.id+'">Открыть</button>' +
       '<button class="btn btn-sm btn-primary" data-action="issue-certificate" data-id="'+s.id+'">Выдать</button>' +
     '</div>';
@@ -6137,8 +6137,8 @@ function renderRoster(){
   var selected = staffState.selectedIds.filter(function(id){ return visibleIds.indexOf(id)!==-1; });
   var allSelected = students.length>0 && selected.length===students.length;
 
-  var html = '<div class="card" style="padding:18px 18px 6px;">' +
-    '<div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;"><input class="input" id="rosterSearch" placeholder="Поиск по имени, специализации, email или телефону" value="'+escapeHtml(staffState.search)+'" style="max-width:320px;">' +
+  var html = '<div class="card" style="padding:1.125rem 1.125rem .375rem;">' +
+    '<div style="display:flex;gap:.625rem;margin-bottom:.875rem;flex-wrap:wrap;"><input class="input" id="rosterSearch" placeholder="Поиск по имени, специализации, email или телефону" value="'+escapeHtml(staffState.search)+'" style="max-width:20rem;">' +
     '<button class="btn btn-sm btn-ghost" data-action="toggle-invite-student">'+(staffState.showInviteStudent?'Скрыть':'+ Пригласить врача')+'</button>' +
     '<button class="btn btn-sm btn-ghost" data-action="toggle-import-students">'+(staffState.showImportStudents?'Скрыть импорт':'Импорт из CSV')+'</button>' +
     '<a class="btn btn-sm btn-ghost" href="api/staff/students/export.csv?courseId='+encodeURIComponent(staffState.activeCourseId||"")+'" target="_blank" rel="noopener">'+icon("download","ic-sm")+' Экспорт CSV</a>' +
@@ -6146,46 +6146,46 @@ function renderRoster(){
     '<button class="btn btn-sm btn-ghost" data-action="open-course-preview">'+icon("eye","ic-sm")+' Просмотреть как врач</button></div>';
 
   if(staffState.showImportStudents){
-    html += '<div class="card" style="padding:14px 16px;margin-bottom:16px;background:var(--surface-2);">' +
-      '<b style="font-size:14px;display:block;margin-bottom:6px;">Массовый импорт врачей</b>' +
-      '<p style="font-size:13px;color:var(--muted);margin:0 0 10px;">CSV с заголовком: Имя, Email, Телефон, Место работы, Специализация, Поток (последние три необязательны). Записывает сразу на курс «'+escapeHtml((staffState.coursesList.find(function(c){return c.id===staffState.activeCourseId;})||{}).title||"")+'» — переключите курс сверху, если нужен другой.</p>' +
-      '<form id="importStudentsForm" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
-        '<input class="input" type="file" name="file" accept=".csv,.txt" required style="max-width:360px;flex:1;">' +
+    html += '<div class="card" style="padding:.875rem 1rem;margin-bottom:1rem;background:var(--surface-2);">' +
+      '<b style="font-size:.875rem;display:block;margin-bottom:.375rem;">Массовый импорт врачей</b>' +
+      '<p style="font-size:.8125rem;color:var(--muted);margin:0 0 .625rem;">CSV с заголовком: Имя, Email, Телефон, Место работы, Специализация, Поток (последние три необязательны). Записывает сразу на курс «'+escapeHtml((staffState.coursesList.find(function(c){return c.id===staffState.activeCourseId;})||{}).title||"")+'» — переключите курс сверху, если нужен другой.</p>' +
+      '<form id="importStudentsForm" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;">' +
+        '<input class="input" type="file" name="file" accept=".csv,.txt" required style="max-width:22.5rem;flex:1;">' +
         '<button class="btn btn-sm btn-primary" type="submit">Загрузить</button>' +
       '</form>';
     if(staffState.importResult){
       var ir = staffState.importResult;
-      html += '<div style="margin-top:12px;font-size:13px;"><b>Создано: '+ir.created.length+'</b>'+(ir.skipped.length?' · <b>Пропущено: '+ir.skipped.length+'</b>':'')+'</div>';
+      html += '<div style="margin-top:.75rem;font-size:.8125rem;"><b>Создано: '+ir.created.length+'</b>'+(ir.skipped.length?' · <b>Пропущено: '+ir.skipped.length+'</b>':'')+'</div>';
       if(ir.created.length){
-        html += '<div style="overflow-x:auto;margin-top:8px;"><table class="roster"><thead><tr><th>Имя</th><th>Email</th><th>Временный пароль</th></tr></thead><tbody>';
+        html += '<div style="overflow-x:auto;margin-top:.5rem;"><table class="roster"><thead><tr><th>Имя</th><th>Email</th><th>Временный пароль</th></tr></thead><tbody>';
         ir.created.forEach(function(c){
           html += '<tr><td>'+escapeHtml(c.name)+'</td><td>'+escapeHtml(c.email)+'</td><td style="font-family:monospace;">'+escapeHtml(c.tempPassword)+'</td></tr>';
         });
         html += '</tbody></table></div><p class="hint">Сохраните пароли сейчас — повторно они не показываются, только через «Сбросить пароль».</p>';
       }
       if(ir.skipped.length){
-        html += '<div style="margin-top:8px;">'+ir.skipped.map(function(s){ return '<div style="font-size:13px;color:var(--muted);">Строка '+s.row+' ('+escapeHtml(s.email||"—")+'): '+escapeHtml(s.reason)+'</div>'; }).join("")+'</div>';
+        html += '<div style="margin-top:.5rem;">'+ir.skipped.map(function(s){ return '<div style="font-size:.8125rem;color:var(--muted);">Строка '+s.row+' ('+escapeHtml(s.email||"—")+'): '+escapeHtml(s.reason)+'</div>'; }).join("")+'</div>';
       }
     }
     html += '</div>';
   }
 
   if(staffState.showInviteStudent){
-    html += '<div class="tabs" style="margin-bottom:14px;">' +
+    html += '<div class="tabs" style="margin-bottom:.875rem;">' +
       '<button type="button" class="tab'+(staffState.inviteMode!=="bulk"?' active':'')+'" data-action="invite-mode" data-mode="single">Один email</button>' +
       '<button type="button" class="tab'+(staffState.inviteMode==="bulk"?' active':'')+'" data-action="invite-mode" data-mode="bulk">Список / CSV</button>' +
     '</div>';
     if(staffState.inviteMode==="bulk"){
-      html += '<form id="inviteBulkForm" style="margin-bottom:16px;">' +
+      html += '<form id="inviteBulkForm" style="margin-bottom:1rem;">' +
         '<div class="field"><label>Список email (по одному в строке, или вставьте из Excel/CSV)</label>' +
-        '<textarea class="input" name="emails" required style="height:110px;font-family:monospace;font-size:13px;" placeholder="doctor1@clinic.ru&#10;doctor2@clinic.ru&#10;doctor3@clinic.ru"></textarea></div>' +
+        '<textarea class="input" name="emails" required style="height:6.875rem;font-family:monospace;font-size:.8125rem;" placeholder="doctor1@clinic.ru&#10;doctor2@clinic.ru&#10;doctor3@clinic.ru"></textarea></div>' +
         '<div class="field"><label>Или загрузить .csv файл</label><input class="input" type="file" id="bulkCsvFile" accept=".csv,.txt"></div>' +
         '<div class="err-text" id="inviteBulkError" style="display:none;"></div>' +
         '<button class="btn btn-primary" type="submit">Пригласить всех</button>' +
       '</form>';
     } else {
-      html += '<form id="inviteStudentForm" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end;">' +
-        '<div class="field" style="flex:1;min-width:220px;margin-bottom:0;"><label>Email врача</label><input class="input" type="email" name="email" required></div>' +
+      html += '<form id="inviteStudentForm" style="display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap;align-items:flex-end;">' +
+        '<div class="field" style="flex:1;min-width:13.75rem;margin-bottom:0;"><label>Email врача</label><input class="input" type="email" name="email" required></div>' +
         '<button class="btn btn-primary" type="submit">Выдать доступ</button></form>';
     }
   }
@@ -6193,13 +6193,13 @@ function renderRoster(){
   if(selected.length>0){
     var bulkProductOpts = Object.keys(PRODUCTS).map(function(k){ return '<option value="'+k+'">'+escapeHtml(PRODUCTS[k])+'</option>'; }).join("");
     var bulkPaymentOpts = Object.keys(PAYMENT_LABELS).map(function(k){ return '<option value="'+k+'">'+escapeHtml(PAYMENT_LABELS[k])+'</option>'; }).join("");
-    html += '<div class="card" style="padding:10px 14px;margin-bottom:14px;background:var(--primary-tint);border-color:transparent;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
-      '<b style="font-size:14px;color:var(--primary-dark);">Выбрано: '+selected.length+'</b>' +
-      '<select class="input" id="bulkStreamSelect" style="width:auto;font-size:13px;padding:6px 10px;">'+buildStreamOptions("", "Без потока")+'</select>' +
+    html += '<div class="card" style="padding:.625rem .875rem;margin-bottom:.875rem;background:var(--primary-tint);border-color:transparent;display:flex;align-items:center;gap:.625rem;flex-wrap:wrap;">' +
+      '<b style="font-size:.875rem;color:var(--primary-dark);">Выбрано: '+selected.length+'</b>' +
+      '<select class="input" id="bulkStreamSelect" style="width:auto;font-size:.8125rem;padding:.375rem .625rem;">'+buildStreamOptions("", "Без потока")+'</select>' +
       '<button class="btn btn-sm btn-primary" data-action="apply-bulk-stream">В поток</button>' +
-      '<select class="input" id="bulkProductSelect" style="width:auto;font-size:13px;padding:6px 10px;">'+bulkProductOpts+'</select>' +
+      '<select class="input" id="bulkProductSelect" style="width:auto;font-size:.8125rem;padding:.375rem .625rem;">'+bulkProductOpts+'</select>' +
       '<button class="btn btn-sm btn-primary" data-action="apply-bulk-product">В продукт</button>' +
-      '<select class="input" id="bulkPaymentSelect" style="width:auto;font-size:13px;padding:6px 10px;">'+bulkPaymentOpts+'</select>' +
+      '<select class="input" id="bulkPaymentSelect" style="width:auto;font-size:.8125rem;padding:.375rem .625rem;">'+bulkPaymentOpts+'</select>' +
       '<button class="btn btn-sm btn-primary" data-action="apply-bulk-payment">Проставить оплату</button>' +
       '<button class="btn btn-sm btn-ghost" data-action="clear-selection">Снять выбор</button></div>';
   }
@@ -6207,7 +6207,7 @@ function renderRoster(){
   if(!students.length){
     html += '<div class="empty-state"><div class="big">'+icon("doctor","ic-lg")+'</div>Пока никто не зарегистрировался.</div>';
   } else {
-    html += '<div style="overflow-x:auto;"><table class="roster"><thead><tr><th style="width:32px;"><input type="checkbox" data-action="select-all-students"'+(allSelected?' checked':'')+'></th><th>Врач</th><th>Прогресс</th><th>Тест</th><th>Статус</th><th>Поток</th><th>Была в сети</th><th>Регистрация</th><th></th></tr></thead><tbody>';
+    html += '<div style="overflow-x:auto;"><table class="roster"><thead><tr><th style="width:2rem;"><input type="checkbox" data-action="select-all-students"'+(allSelected?' checked':'')+'></th><th>Врач</th><th>Прогресс</th><th>Тест</th><th>Статус</th><th>Поток</th><th>Была в сети</th><th>Регистрация</th><th></th></tr></thead><tbody>';
     students.forEach(function(s){
       var done = (s.completed_lessons||[]).length;
       var isChecked = staffState.selectedIds.indexOf(s.id)!==-1;
@@ -6218,8 +6218,8 @@ function renderRoster(){
         '<td class="nowrap" data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+done+'/'+((staffState.materials||[]).length||5)+'</td>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+(typeof s.quiz_score==="number"?s.quiz_score+'%':'—')+'</td>' +
         '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+status+'</td>' +
-        '<td><select class="input" style="font-size:13px;padding:5px 8px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" data-stream-select data-id="'+s.id+'">'+buildStreamOptions(s.stream_id||"", "Без потока")+'</select></td>' +
-        '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+(s.online?magnet("active","В сети"):'<span style="color:var(--muted);font-size:13px;">'+escapeHtml(timeSince(s.last_seen_at))+'</span>')+'</td>' +
+        '<td><select class="input" style="font-size:.8125rem;padding:.3125rem .5rem;max-width:9.375rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" data-stream-select data-id="'+s.id+'">'+buildStreamOptions(s.stream_id||"", "Без потока")+'</select></td>' +
+        '<td data-action="open-student" data-id="'+s.id+'" style="cursor:pointer;">'+(s.online?magnet("active","В сети"):'<span style="color:var(--muted);font-size:.8125rem;">'+escapeHtml(timeSince(s.last_seen_at))+'</span>')+'</td>' +
         '<td class="nowrap" style="color:var(--muted);">'+fmtDateShort(s.created_at)+'</td>' +
         '<td class="nowrap" style="text-align:right;"><button class="btn btn-sm btn-ghost row-open" data-action="open-student" data-id="'+s.id+'">Открыть →</button></td>' +
       '</tr>';
@@ -6307,7 +6307,7 @@ function glFoundText(found, homeId){
 function renderGlossaryAdminTab(){
   if(!glossaryAdmin.loaded || glossaryAdmin.courseId!==staffState.activeCourseId){
     glAdminLoad().then(render);
-    return el('<div class="card empty-state" style="padding:36px 16px;">Загрузка терминов…</div>');
+    return el('<div class="card empty-state" style="padding:2.25rem 1rem;">Загрузка терминов…</div>');
   }
   if(glossaryAdmin.edit) return renderGlossaryTermPage();
   var q = glossaryAdmin.q.trim().toLowerCase(), all = glossaryAdmin.list;
@@ -6315,8 +6315,8 @@ function renderGlossaryAdminTab(){
   var html = '<div class="ls-page"><div class="ls-bar"><p class="ls-sub">Термины подсвечиваются в тексте уроков — врач нажимает на слово и читает короткую статью. В своём уроке термин подсвечен всегда, в остальных — пока врач его ещё не открывал.</p>' +
     '<div class="ls-actions"><label class="ls-search">'+icon("search","ic-sm")+'<input id="glossarySearchInput" placeholder="Найти термин" value="'+escapeHtml(glossaryAdmin.q)+'" autocomplete="off"></label>' +
     '<button type="button" class="btn btn-primary" data-action="gl-new">+ Термин</button></div></div>';
-  if(!all.length) return el(html + '<div class="card empty-state" style="padding:36px 16px;">Терминов пока нет. Нажмите «+ Термин» — например, название болезни или методики из урока.</div></div>');
-  if(!list.length) html += '<div class="card empty-state" style="padding:28px 16px;">Ничего не нашлось.</div>';
+  if(!all.length) return el(html + '<div class="card empty-state" style="padding:2.25rem 1rem;">Терминов пока нет. Нажмите «+ Термин» — например, название болезни или методики из урока.</div></div>');
+  if(!list.length) html += '<div class="card empty-state" style="padding:1.75rem 1rem;">Ничего не нашлось.</div>';
   var groups = [], byLesson = {};
   lsLessons().forEach(function(l, i){ byLesson[l.id] = { title:"Урок "+(i+1)+" · "+l.title, items:[] }; groups.push(byLesson[l.id]); });
   var none = { title:"Без урока", items:[] };
@@ -6414,7 +6414,7 @@ function renderGlossaryTermPage(){
     '<div class="field" style="margin-bottom:0;"><label>Коротко, что это</label><textarea class="input" rows="2" data-gb="lead" placeholder="1–2 предложения под заголовком статьи">'+escapeHtml(d.lead)+'</textarea></div>');
   html += sec(2, "Главное", "Цветной блок по центру статьи: одно правило или число, которое важно запомнить. Шкала — если есть пороги или этапы.",
     '<div class="field"><label>Текст крупно</label><textarea class="input" rows="2" data-gb="key.text" placeholder="Например, «Общий тестостерон ниже 8 нмоль/л — гипогонадизм»">'+escapeHtml(d.key.text)+'</textarea></div>' +
-    '<div class="field" style="max-width:320px;"><label>Подпись над текстом</label><input class="input" data-gb="key.label" value="'+escapeHtml(d.key.label)+'" placeholder="Главное число"></div>' +
+    '<div class="field" style="max-width:20rem;"><label>Подпись над текстом</label><input class="input" data-gb="key.label" value="'+escapeHtml(d.key.label)+'" placeholder="Главное число"></div>' +
     '<label class="gl-sublab">Шкала — до 5 делений: значение, подпись и цвет (норма — фиолетовый, внимание — розовый, опасно — красный)</label>' + glRows(d.key.scale, "key.scale", [{ ph:"> 12,1", narrow:true }, { ph:"норма" }, { select:GL_TONE_CHOICES }], "деление шкалы"), true);
   html += sec(3, "Что это означает?", "Пояснение простым языком и, если есть, крупные цифры — распространённость, доли, пороги.",
     '<div class="field"><textarea class="input" rows="3" data-gb="meaning.text" placeholder="Что важно понимать про этот термин">'+escapeHtml(d.meaning.text)+'</textarea></div>' +
@@ -6516,7 +6516,7 @@ function lpPreviewHtml(tab){
   var duration = frm && frm.duration ? frm.duration.value : (lessonEditor.duration || l.duration || "");
   var head = '<div class="lesson-head"><h3>'+escapeHtml(title)+'</h3></div><div class="meta">Урок '+(idx+1)+' из '+list.length+(duration?' · '+escapeHtml(duration):'')+'</div>';
   if(stages.indexOf(stageKey)===-1) stages.push(stageKey);
-  head += '<div class="tabs" style="margin:14px 0 4px;">'+stages.map(function(k){ return '<button type="button" class="tab'+(k===stageKey?' active':'')+'">'+labels[k]+'</button>'; }).join('')+'</div>';
+  head += '<div class="tabs" style="margin:.875rem 0 .25rem;">'+stages.map(function(k){ return '<button type="button" class="tab'+(k===stageKey?' active':'')+'">'+labels[k]+'</button>'; }).join('')+'</div>';
   var body = "";
   if(tab==="content"){
     var op = lessonOpener({ html: lessonEditor.html || "" });
@@ -6589,17 +6589,17 @@ function prRefreshPreview(){
 // Специализации — фиксированный справочник (см. schema.sql «Этап 11»): отсюда админ
 // им управляет, отсюда же их читают форма регистрации и профиль врача.
 function renderSpecializationsCard(){
-  var html = '<div class="card" style="padding:18px 20px;margin-bottom:16px;">' +
-    '<b style="font-size:15px;display:block;margin-bottom:4px;">Специализации</b>' +
-    '<p style="font-size:13px;color:var(--muted);margin:0 0 14px;">Справочник, из которого врач выбирает специализацию при регистрации — на нём же основан подбор протоколов.</p>';
+  var html = '<div class="card" style="padding:1.125rem 1.25rem;margin-bottom:1rem;">' +
+    '<b style="font-size:.9375rem;display:block;margin-bottom:.25rem;">Специализации</b>' +
+    '<p style="font-size:.8125rem;color:var(--muted);margin:0 0 .875rem;">Справочник, из которого врач выбирает специализацию при регистрации — на нём же основан подбор протоколов.</p>';
   specializationsList.forEach(function(s){
-    html += '<div class="adm-row" style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--line-2);">' +
-      '<span style="flex:1;font-size:14px;">'+escapeHtml(s.name)+'</span>' +
+    html += '<div class="adm-row" style="display:flex;align-items:center;gap:.625rem;padding:.5rem 0;border-bottom:1px solid var(--line-2);">' +
+      '<span style="flex:1;font-size:.875rem;">'+escapeHtml(s.name)+'</span>' +
       '<button class="btn btn-sm btn-ghost" data-action="open-specialization-editor" data-id="'+s.id+'" data-name="'+escapeHtml(s.name)+'">Переименовать</button>' +
       '<button class="btn btn-sm btn-ghost" data-action="delete-specialization" data-id="'+s.id+'" data-name="'+escapeHtml(s.name)+'" title="Удалить">'+icon("trash","ic-sm")+'</button>' +
     '</div>';
   });
-  html += '<form id="specializationCreateForm" style="display:flex;gap:8px;margin-top:14px;">' +
+  html += '<form id="specializationCreateForm" style="display:flex;gap:.5rem;margin-top:.875rem;">' +
       '<input class="input" name="name" placeholder="Новая специализация" required style="flex:1;">' +
       '<button class="btn btn-sm btn-primary" type="submit">Добавить</button>' +
     '</form>' +
@@ -6629,10 +6629,10 @@ function renderProtocolsAdminTab(){
       (admin ? '<button type="button" class="btn btn-primary" data-action="open-protocol-creator">+ Протокол</button>' : '') + '</div></div>';
 
   if(!all.length){
-    html += '<div class="card empty-state" style="padding:36px 16px;">Протоколов пока нет.'+(admin?' Нажмите «+ Протокол», чтобы добавить первый.':'')+'</div>';
+    html += '<div class="card empty-state" style="padding:2.25rem 1rem;">Протоколов пока нет.'+(admin?' Нажмите «+ Протокол», чтобы добавить первый.':'')+'</div>';
     return el(html + '</div>');
   }
-  if(!list.length) html += '<div class="card empty-state" style="padding:28px 16px;">Ничего не нашлось.</div>';
+  if(!list.length) html += '<div class="card empty-state" style="padding:1.75rem 1rem;">Ничего не нашлось.</div>';
   html += '<div class="pr-grid">';
   list.forEach(function(p){
     var ll = prLessonLabels(p), bound = (p.lessonIds||[]).length>0, guides = p.guides||[];
@@ -6669,7 +6669,7 @@ function renderProtocolPage(){
   var bound = p.lessonIds.length>0;
   var html = '<div class="lp-page pr-page"><div class="lp-crumbs"><button type="button" class="link-btn" data-action="close-protocol-editor">← Протоколы</button><span>/</span><b>'+(isNew ? 'Новый протокол' : escapeHtml(p.title))+'</b></div>' +
     '<div class="lp-head"><div class="lp-head-main"><h1 class="lp-title">'+(isNew ? 'Новый протокол' : escapeHtml(p.title))+'</h1>' +
-      (isNew ? '<p class="lp-hint" style="margin:6px 0 0;">Сначала название и описание — после создания добавите уроки и гайды.</p>'
+      (isNew ? '<p class="lp-hint" style="margin:.375rem 0 0;">Сначала название и описание — после создания добавите уроки и гайды.</p>'
         : '<div class="ls-chips">'+(bound ? lsPill("ok","открывается врачам") : lsPill("warn","не привязан к уроку"))+lsPill("", p.guides.length+" "+ruPluralClient(p.guides.length,"гайд","гайда","гайдов"), "doctor")+'</div>') + '</div>' +
       '<div class="lp-head-acts">'+(admin && !isNew ? lsMenu("pp:"+p.id, [["delete-protocol","Удалить протокол","trash",' data-id="'+p.id+'" data-title="'+escapeHtml(p.title)+'"',"danger"]]) : '')+'</div></div>';
 
@@ -6686,11 +6686,11 @@ function renderProtocolPage(){
   if(admin){
     html += '<form id="protocolEditorForm">' +
       '<div class="field"><label>Название протокола</label><input class="input" name="title" required value="'+escapeHtml(p.title)+'"></div>' +
-      '<div class="field"><label>Краткое описание</label><textarea class="input" name="summary" style="height:84px;">'+escapeHtml(p.summary)+'</textarea></div>' +
+      '<div class="field"><label>Краткое описание</label><textarea class="input" name="summary" style="height:5.25rem;">'+escapeHtml(p.summary)+'</textarea></div>' +
       '<div class="err-text" id="protocolEditorError" style="display:none;"></div>' +
       '<button class="btn btn-primary" type="submit">'+(isNew?"Создать и продолжить":"Сохранить описание")+'</button></form>';
   } else {
-    html += '<b style="font-size:15px;display:block;">'+escapeHtml(p.title)+'</b>' + (p.summary ? '<p class="pr-sum" style="-webkit-line-clamp:unset;">'+escapeHtml(p.summary)+'</p>' : '');
+    html += '<b style="font-size:.9375rem;display:block;">'+escapeHtml(p.title)+'</b>' + (p.summary ? '<p class="pr-sum" style="-webkit-line-clamp:unset;">'+escapeHtml(p.summary)+'</p>' : '');
   }
   html += '</div>';
 
@@ -6703,11 +6703,11 @@ function renderProtocolPage(){
         var checked = p.lessonIds.indexOf(l.id)!==-1;
         html += '<label class="pr-lchk'+(checked?' on':'')+'"><input type="checkbox" data-action="toggle-protocol-lesson" data-id="'+l.id+'"'+(checked?' checked':'')+'><span>'+(i+1)+'. '+escapeHtml(l.title)+'</span></label>';
       });
-      html += '<button type="button" class="btn btn-ghost" style="margin-top:10px;" data-action="save-protocol-lessons">Сохранить уроки</button></div>';
+      html += '<button type="button" class="btn btn-ghost" style="margin-top:.625rem;" data-action="save-protocol-lessons">Сохранить уроки</button></div>';
     }
     // 3. Гайды
     html += '<div class="card pr-sec" id="prSec3"><div class="pr-sec-h"><i>'+(admin?3:2)+'</i><b>Гайды по специализациям</b></div><p class="pr-sec-s">Врач видит гайд своей специализации, остальные — только описание.</p>';
-    if(!p.guides.length) html += '<p class="hint" style="margin:0 0 6px;">Гайдов пока нет.</p>';
+    if(!p.guides.length) html += '<p class="hint" style="margin:0 0 .375rem;">Гайдов пока нет.</p>';
     p.guides.forEach(function(g){
       var editing = p.editSpec===g.specializationId, files = (g.files||[]).length;
       html += '<div class="pr-guide"><div class="pr-guide-h"><span class="pr-av">'+icon("doctor","ic-sm")+'</span><div class="ls-main"><b>'+escapeHtml(g.specializationName)+'</b>' +
@@ -6715,8 +6715,8 @@ function renderProtocolPage(){
           (editing ? '' : '<button type="button" class="btn btn-sm btn-ghost" data-action="edit-protocol-guide" data-spec="'+g.specializationId+'">Изменить текст</button>') +
           '<button type="button" class="btn btn-sm btn-ghost" data-action="delete-protocol-guide" data-spec="'+g.specializationId+'" title="Удалить гайд">'+icon("trash","ic-sm")+'</button></div>';
       if(editing){
-        html += '<textarea class="input" id="guideEditText" style="height:140px;margin-top:10px;">'+escapeHtml(g.guideHtml||"")+'</textarea>' +
-          '<div style="display:flex;gap:8px;margin-top:8px;"><button type="button" class="btn btn-sm btn-primary" data-action="save-protocol-guide-edit" data-spec="'+g.specializationId+'">Сохранить</button>' +
+        html += '<textarea class="input" id="guideEditText" style="height:8.75rem;margin-top:.625rem;">'+escapeHtml(g.guideHtml||"")+'</textarea>' +
+          '<div style="display:flex;gap:.5rem;margin-top:.5rem;"><button type="button" class="btn btn-sm btn-primary" data-action="save-protocol-guide-edit" data-spec="'+g.specializationId+'">Сохранить</button>' +
           '<button type="button" class="btn btn-sm btn-ghost" data-action="cancel-protocol-guide-edit">Отмена</button></div>';
       } else if(g.guideHtml){
         html += '<div class="prose pr-guide-text">'+renderPlainToProse(g.guideHtml)+'</div>';
@@ -6734,11 +6734,11 @@ function renderProtocolPage(){
     if(availableSpecs.length){
       var pre = p.newSpec && availableSpecs.some(function(s){ return s.id===p.newSpec; }) ? p.newSpec : (missing[0] ? missing[0].id : availableSpecs[0].id);
       html += '<div class="pr-add" id="prGuideAdd"><b>Новый гайд</b>' +
-        '<div class="field" style="margin:8px 0;"><label>Специализация</label><select class="input" id="newGuideSpec">' +
+        '<div class="field" style="margin:.5rem 0;"><label>Специализация</label><select class="input" id="newGuideSpec">' +
           availableSpecs.map(function(s){ return '<option value="'+s.id+'"'+(s.id===pre?' selected':'')+'>'+escapeHtml(s.name)+'</option>'; }).join('') +
         '</select></div>' +
-        '<div class="field" style="margin-bottom:8px;"><label>Текст гайда</label><textarea class="input" id="newGuideText" style="height:90px;" placeholder="Как применять этот протокол в рамках этой специализации"></textarea></div>' +
-        '<button type="button" class="btn btn-sm btn-primary" data-action="save-protocol-guide">Добавить гайд</button><p class="hint" style="margin:8px 0 0;">Файлы (PDF, схемы) прикрепляются к гайду после его создания.</p></div>';
+        '<div class="field" style="margin-bottom:.5rem;"><label>Текст гайда</label><textarea class="input" id="newGuideText" style="height:5.625rem;" placeholder="Как применять этот протокол в рамках этой специализации"></textarea></div>' +
+        '<button type="button" class="btn btn-sm btn-primary" data-action="save-protocol-guide">Добавить гайд</button><p class="hint" style="margin:.5rem 0 0;">Файлы (PDF, схемы) прикрепляются к гайду после его создания.</p></div>';
     } else {
       html += '<p class="hint">Гайды добавлены под все специализации из справочника.</p>';
     }
@@ -6771,25 +6771,25 @@ function renderUnlockCelebrationModal(){
 }
 
 function renderSpecializationEditorModal(){
-  var body = '<div class="drawer-head"><b style="font-size:16px;">Переименовать специализацию</b><button class="btn btn-ghost btn-sm" data-action="close-specialization-editor">Закрыть ✕</button></div>' +
+  var body = '<div class="drawer-head"><b style="font-size:1rem;">Переименовать специализацию</b><button class="btn btn-ghost btn-sm" data-action="close-specialization-editor">Закрыть ✕</button></div>' +
     '<div class="drawer-body"><form id="specializationEditorForm">' +
       '<div class="field"><label>Название</label><input class="input" name="name" required value="'+escapeHtml(specializationEditor.name)+'"></div>' +
       '<div class="err-text" id="specializationEditorError" style="display:none;"></div>' +
       '<button class="btn btn-primary btn-block" type="submit">Сохранить</button>' +
     '</form></div>';
-  return el('<div class="overlay overlay-center" data-action="overlay-close-specialization-editor"><div class="drawer modal" data-stop="1" style="width:min(420px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay overlay-center" data-action="overlay-close-specialization-editor"><div class="drawer modal" data-stop="1" style="width:min(26.25rem,100%);">'+body+'</div></div>');
 }
 
 function renderProtocolGuideFiles(g){
-  var html = '<div style="margin-top:10px;">';
+  var html = '<div style="margin-top:.625rem;">';
   (g.files||[]).forEach(function(f){
-    html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line-2);">' +
-      '<a href="'+f.url+'" target="_blank" rel="noopener" style="flex:1;font-size:13px;display:flex;align-items:center;gap:6px;min-width:0;color:var(--primary);text-decoration:underline;">'+icon("folder","ic-sm")+'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escapeHtml(f.originalName)+'</span></a>' +
+    html += '<div style="display:flex;align-items:center;gap:.5rem;padding:.375rem 0;border-top:1px solid var(--line-2);">' +
+      '<a href="'+f.url+'" target="_blank" rel="noopener" style="flex:1;font-size:.8125rem;display:flex;align-items:center;gap:.375rem;min-width:0;color:var(--primary);text-decoration:underline;">'+icon("folder","ic-sm")+'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escapeHtml(f.originalName)+'</span></a>' +
       '<button type="button" class="btn btn-sm btn-ghost" data-action="delete-protocol-guide-file" data-spec="'+g.specializationId+'" data-file-id="'+f.id+'" data-name="'+escapeHtml(f.originalName)+'" title="Удалить файл">'+icon("trash","ic-sm")+'</button>' +
     '</div>';
   });
-  html += '<div style="display:flex;gap:8px;align-items:center;margin-top:8px;">' +
-    '<input type="file" id="guideFileInput-'+g.specializationId+'" style="font-size:12px;flex:1;min-width:0;">' +
+  html += '<div style="display:flex;gap:.5rem;align-items:center;margin-top:.5rem;">' +
+    '<input type="file" id="guideFileInput-'+g.specializationId+'" style="font-size:.75rem;flex:1;min-width:0;">' +
     '<button type="button" class="btn btn-sm btn-ghost" data-action="upload-protocol-guide-file" data-spec="'+g.specializationId+'">Прикрепить файл</button>' +
   '</div></div>';
   return html;
@@ -6798,40 +6798,40 @@ function renderProtocolGuideFiles(g){
 function renderProtocolEditorModal(){
   var isNew = !protocolEditor.id;
   var isProtocolAdmin = me.role==="admin" || me.role==="super_admin";
-  var body = '<div class="drawer-head"><b style="font-size:16px;">'+(isNew?"Новый протокол":"Редактирование протокола")+'</b><button class="btn btn-ghost btn-sm" data-action="close-protocol-editor">Закрыть ✕</button></div>' +
+  var body = '<div class="drawer-head"><b style="font-size:1rem;">'+(isNew?"Новый протокол":"Редактирование протокола")+'</b><button class="btn btn-ghost btn-sm" data-action="close-protocol-editor">Закрыть ✕</button></div>' +
     '<div class="drawer-body">';
 
   if(isProtocolAdmin){
     body += '<form id="protocolEditorForm">' +
       '<div class="field"><label>Название протокола</label><input class="input" name="title" required value="'+escapeHtml(protocolEditor.title)+'"></div>' +
-      '<div class="field"><label>Краткое описание <span style="font-weight:400;color:var(--muted-2);">(видно всем, даже без гайда под их специализацию)</span></label><textarea class="input" name="summary" style="height:64px;">'+escapeHtml(protocolEditor.summary)+'</textarea></div>' +
+      '<div class="field"><label>Краткое описание <span style="font-weight:400;color:var(--muted-2);">(видно всем, даже без гайда под их специализацию)</span></label><textarea class="input" name="summary" style="height:4rem;">'+escapeHtml(protocolEditor.summary)+'</textarea></div>' +
       '<div class="err-text" id="protocolEditorError" style="display:none;"></div>' +
       '<button class="btn btn-primary" type="submit">'+(isNew?"Создать и продолжить":"Сохранить")+'</button>' +
     '</form>';
   } else {
-    body += '<b style="font-size:15px;display:block;">'+escapeHtml(protocolEditor.title)+'</b>' +
-      (protocolEditor.summary ? '<p style="font-size:13px;color:var(--muted);margin:6px 0 0;">'+escapeHtml(protocolEditor.summary)+'</p>' : '');
+    body += '<b style="font-size:.9375rem;display:block;">'+escapeHtml(protocolEditor.title)+'</b>' +
+      (protocolEditor.summary ? '<p style="font-size:.8125rem;color:var(--muted);margin:.375rem 0 0;">'+escapeHtml(protocolEditor.summary)+'</p>' : '');
   }
 
   if(!isNew){
-    body += '<div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line-2);">' +
-      '<b style="font-size:14px;display:block;margin-bottom:10px;">Гайды по специализациям</b>';
+    body += '<div style="margin-top:1.375rem;padding-top:1.125rem;border-top:1px solid var(--line-2);">' +
+      '<b style="font-size:.875rem;display:block;margin-bottom:.625rem;">Гайды по специализациям</b>';
     protocolEditor.guides.forEach(function(g){
-      body += '<div class="card" style="padding:12px 14px;margin-bottom:8px;">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><b style="font-size:13px;">'+escapeHtml(g.specializationName)+'</b>' +
+      body += '<div class="card" style="padding:.75rem .875rem;margin-bottom:.5rem;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.375rem;"><b style="font-size:.8125rem;">'+escapeHtml(g.specializationName)+'</b>' +
           '<button class="btn btn-sm btn-ghost" data-action="delete-protocol-guide" data-spec="'+g.specializationId+'" title="Удалить гайд">'+icon("trash","ic-sm")+'</button></div>' +
-        (g.guideHtml ? '<div class="prose" style="font-size:13px;">'+renderPlainToProse(g.guideHtml)+'</div>' : '<p class="hint" style="margin:0;">Текста пока нет — только файлы.</p>') +
+        (g.guideHtml ? '<div class="prose" style="font-size:.8125rem;">'+renderPlainToProse(g.guideHtml)+'</div>' : '<p class="hint" style="margin:0;">Текста пока нет — только файлы.</p>') +
         renderProtocolGuideFiles(g) +
       '</div>';
     });
     var usedSpecs = protocolEditor.guides.map(function(g){ return g.specializationId; });
     var availableSpecs = specializationsList.filter(function(s){ return usedSpecs.indexOf(s.id)===-1; });
     if(availableSpecs.length){
-      body += '<div class="card" style="padding:12px 14px;">' +
-        '<div class="field" style="margin-bottom:8px;"><label>Специализация</label><select class="input" id="newGuideSpec">' +
+      body += '<div class="card" style="padding:.75rem .875rem;">' +
+        '<div class="field" style="margin-bottom:.5rem;"><label>Специализация</label><select class="input" id="newGuideSpec">' +
           availableSpecs.map(function(s){ return '<option value="'+s.id+'">'+escapeHtml(s.name)+'</option>'; }).join('') +
         '</select></div>' +
-        '<div class="field" style="margin-bottom:8px;"><label>Текст гайда</label><textarea class="input" id="newGuideText" style="height:70px;" placeholder="Как применять этот протокол в рамках этой специализации"></textarea></div>' +
+        '<div class="field" style="margin-bottom:.5rem;"><label>Текст гайда</label><textarea class="input" id="newGuideText" style="height:4.375rem;" placeholder="Как применять этот протокол в рамках этой специализации"></textarea></div>' +
         '<button type="button" class="btn btn-sm btn-primary" data-action="save-protocol-guide">Добавить гайд</button>' +
       '</div>';
     } else {
@@ -6840,21 +6840,21 @@ function renderProtocolEditorModal(){
     body += '</div>';
 
     if(isProtocolAdmin){
-      body += '<div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--line-2);">' +
-        '<b style="font-size:14px;display:block;margin-bottom:10px;">Какие уроки открывают этот протокол</b>';
+      body += '<div style="margin-top:1.375rem;padding-top:1.125rem;border-top:1px solid var(--line-2);">' +
+        '<b style="font-size:.875rem;display:block;margin-bottom:.625rem;">Какие уроки открывают этот протокол</b>';
       (staffState.materials||[]).forEach(function(l){
         var checked = protocolEditor.lessonIds.indexOf(l.id)!==-1;
-        body += '<label style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line-2);cursor:pointer;">' +
+        body += '<label style="display:flex;align-items:center;gap:.625rem;padding:.4375rem 0;border-bottom:1px solid var(--line-2);cursor:pointer;">' +
           '<input type="checkbox" data-action="toggle-protocol-lesson" data-id="'+l.id+'"'+(checked?' checked':'')+'>' +
-          '<span style="font-size:13px;">'+escapeHtml(l.title)+'</span></label>';
+          '<span style="font-size:.8125rem;">'+escapeHtml(l.title)+'</span></label>';
       });
-      body += '<button class="btn btn-sm btn-ghost" style="margin-top:12px;" data-action="save-protocol-lessons">Сохранить привязку</button>' +
+      body += '<button class="btn btn-sm btn-ghost" style="margin-top:.75rem;" data-action="save-protocol-lessons">Сохранить привязку</button>' +
       '</div>';
     }
   }
 
   body += '</div>';
-  return el('<div class="overlay" data-action="overlay-close-protocol-editor"><div class="drawer" data-stop="1" style="width:min(600px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay" data-action="overlay-close-protocol-editor"><div class="drawer" data-stop="1" style="width:min(37.5rem,100%);">'+body+'</div></div>');
 }
 
 // Полоска переключения курса — видна на всех страницах персонала (не только там,
@@ -6863,9 +6863,9 @@ function renderProtocolEditorModal(){
 // выбора она безобидна и заодно показывает название курса).
 function renderStaffCourseSwitcher(){
   if(!staffState.coursesList.length){
-    return el('<p class="section-sub" style="margin-top:-2px;">Курсов пока нет — создайте первый на странице «Курсы».</p>');
+    return el('<p class="section-sub" style="margin-top:-.125rem;">Курсов пока нет — создайте первый на странице «Курсы».</p>');
   }
-  var html = '<div class="tabs" style="margin:2px 0 14px;flex-wrap:wrap;">';
+  var html = '<div class="tabs" style="margin:.125rem 0 .875rem;flex-wrap:wrap;">';
   staffState.coursesList.forEach(function(c){
     html += '<button type="button" class="tab'+(c.id===staffState.activeCourseId?' active':'')+'" data-action="switch-staff-course" data-course-id="'+c.id+'">'+escapeHtml(c.title)+'</button>';
   });
@@ -6888,14 +6888,14 @@ function renderCoursesTab(){
     html += '<div class="card course-tile'+(isEditing||isDeleting?' busy':'')+'">';
     if(isEditing){
       html += '<b class="course-tile-title">Изменить курс</b>' +
-        '<div class="field" style="margin:10px 0 8px;"><label>Название</label><input class="input" id="courseEditTitleInput" value="'+escapeHtml(staffState.courseEditorTitle)+'"></div>' +
+        '<div class="field" style="margin:.625rem 0 .5rem;"><label>Название</label><input class="input" id="courseEditTitleInput" value="'+escapeHtml(staffState.courseEditorTitle)+'"></div>' +
         '<label class="course-check"><input type="checkbox" id="courseEditCertsInput"'+(staffState.courseEditorCertsEnabled?' checked':'')+'> Выдавать сертификаты по этому курсу</label>' +
         '<div class="course-tile-btns"><button class="btn btn-sm btn-primary" data-action="save-course">Сохранить</button>' +
           '<button class="btn btn-sm btn-ghost" data-action="cancel-edit-course">Отмена</button></div>';
     } else if(isDeleting){
       html += '<b class="course-tile-title">Удалить курс?</b>' +
         '<p class="course-tile-warn">Вы уверены, что хотите удалить «'+escapeHtml(c.title)+'» безвозвратно вместе со всеми уроками, тестами и прогрессом '+c.enrolledCount+' '+ruPluralClient(c.enrolledCount,"врача","врачей","врачей")+'? Для подтверждения наберите название курса.</p>' +
-        '<input class="input" id="courseDeleteConfirmInput" placeholder="'+escapeHtml(c.title)+'" style="margin-bottom:10px;">' +
+        '<input class="input" id="courseDeleteConfirmInput" placeholder="'+escapeHtml(c.title)+'" style="margin-bottom:.625rem;">' +
         '<div class="course-tile-btns"><button class="btn btn-sm btn-danger" data-action="confirm-delete-course" data-id="'+c.id+'">Удалить курс</button>' +
           '<button class="btn btn-sm btn-ghost" data-action="cancel-delete-course">Отмена</button></div>';
     } else {
@@ -6914,7 +6914,7 @@ function renderCoursesTab(){
   });
   if(staffState.showCreateCourse){
     html += '<div class="card course-tile busy"><b class="course-tile-title">Новый курс</b>' +
-      '<form id="createCourseForm" style="margin-top:10px;"><div class="field"><label>Название</label><input class="input" name="title" required placeholder="Например, «Пептидная терапия»"></div>' +
+      '<form id="createCourseForm" style="margin-top:.625rem;"><div class="field"><label>Название</label><input class="input" name="title" required placeholder="Например, «Пептидная терапия»"></div>' +
       '<div class="course-tile-btns"><button class="btn btn-sm btn-primary" type="submit">Создать</button>' +
       '<button class="btn btn-sm btn-ghost" type="button" data-action="toggle-create-course">Отмена</button></div></form></div>';
   } else {
@@ -6937,7 +6937,7 @@ function renderCourseOverview(){
   h += '<div class="card co-lessons"><div class="co-head"><b>Уроки курса «'+escapeHtml(c.title)+'»</b>' +
     '<button class="btn btn-sm btn-ghost" data-action="sidebar-nav" data-key="materials">Редактировать →</button></div>';
   if(!lessons.length){
-    h += '<div class="empty-state" style="padding:28px 10px;">Уроков пока нет — добавьте их в «Учебных материалах».</div>';
+    h += '<div class="empty-state" style="padding:1.75rem .625rem;">Уроков пока нет — добавьте их в «Учебных материалах».</div>';
   } else {
     h += '<div class="co-lessons-sub">доля врачей курса, прошедших урок</div>';
     lessons.forEach(function(l, i){
@@ -6981,7 +6981,7 @@ function renderTeamTab(){
 
   var tiles = '';
   if(!staffState.staff.length){
-    tiles = '<div class="card empty-state" style="padding:30px 10px;">Пока только вы.</div>';
+    tiles = '<div class="card empty-state" style="padding:1.875rem .625rem;">Пока только вы.</div>';
   } else {
     tiles = '<div class="team-tiles">';
     staffState.staff.forEach(function(c){
@@ -7023,12 +7023,12 @@ function renderTeamTab(){
 
   var code = '';
   if(myOptions.length && staffState.inviteCode){
-    code = '<div class="card co-card team-code-card"><b class="co-card-title" style="margin-bottom:6px;">Код сотрудника</b>' +
+    code = '<div class="card co-card team-code-card"><b class="co-card-title" style="margin-bottom:.375rem;">Код сотрудника</b>' +
       '<div class="team-code">'+escapeHtml(staffState.inviteCode.code)+'</div>' +
       '<p class="team-hint">Продиктуйте его отдельно (не тем же письмом, где email) тому, кого приглашаете куратором или администратором — без кода регистрация по приглашению останется обычным врачом.</p>' +
       '<p class="team-hint team-code-foot">Сменится сам '+fmtDateShort(staffState.inviteCode.expiresAt)+' в '+fmtTime(staffState.inviteCode.expiresAt)+'</p></div>';
   } else if(!myOptions.length){
-    code = '<div class="card co-card"><p style="font-size:13px;color:var(--muted);margin:0;">Назначать роли может главный администратор или администратор.</p></div>';
+    code = '<div class="card co-card"><p style="font-size:.8125rem;color:var(--muted);margin:0;">Назначать роли может главный администратор или администратор.</p></div>';
   }
 
   var load = '';
@@ -7051,16 +7051,16 @@ function renderTeamTab(){
           '<div class="assign-who" data-action="open-student" data-id="'+st.id+'"><b>'+escapeHtml(st.name)+'</b><small>'+(specNames(st)?escapeHtml(specNames(st))+' · ':'')+'с '+fmtDateShort(st.created_at)+'</small></div>' +
           '<select class="input" data-field-select="curator" data-id="'+st.id+'">'+opts+'</select></div>';
       });
-      if(unassignedList.length>5) load += '<p class="team-hint" style="margin:10px 0 0;">И ещё '+(unassignedList.length-5)+' — во вкладке «Ученики».</p>';
+      if(unassignedList.length>5) load += '<p class="team-hint" style="margin:.625rem 0 0;">И ещё '+(unassignedList.length-5)+' — во вкладке «Ученики».</p>';
     } else {
-      load += '<p class="team-hint" style="margin:14px 0 0;">У всех врачей есть куратор.</p>';
+      load += '<p class="team-hint" style="margin:.875rem 0 0;">У всех врачей есть куратор.</p>';
     }
     load += '</div>';
   }
 
   var invite = '';
   if(myOptions.length){
-    invite = '<div class="card co-card"><b class="co-card-title" style="margin-bottom:10px;">Пригласить сотрудника</b>' +
+    invite = '<div class="card co-card"><b class="co-card-title" style="margin-bottom:.625rem;">Пригласить сотрудника</b>' +
       '<form id="inviteStaffForm">' +
         '<div class="field"><label>Email</label><input class="input" type="email" name="email" required placeholder="name@clinic.ru"></div>' +
         '<div class="field"><label>Роль</label><select class="input" name="role">' + myOptions.map(function(r){ return '<option value="'+r+'">'+roleLabel(r)+'</option>'; }).join("") + '</select></div>' +
@@ -7092,9 +7092,9 @@ function renderStudentDrawer(){
   var done = (s.completed_lessons||[]).length;
 
   var head = '<div class="drawer-head">' +
-    '<div style="display:flex;gap:12px;align-items:center;"><div class="avatar-wrap">'+userAvatar(s,null,'width:42px;height:42px;font-size:15px;')+''+(s.online?'<span class="presence-dot" title="Онлайн"></span>':'')+'</div>' +
-    '<div><b style="font-size:16px;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:13px;color:var(--muted);">'+escapeHtml(specNames(s)||"—")+'</span>' +
-    '<span style="font-size:12px;color:var(--muted-2);display:block;margin-top:2px;">'+(s.online?'<span style="color:var(--status-active);font-weight:600;">● В сети сейчас</span>':'Была в сети: '+escapeHtml(timeSince(s.last_seen_at)))+'</span></div></div>' +
+    '<div style="display:flex;gap:.75rem;align-items:center;"><div class="avatar-wrap">'+userAvatar(s,null,'width:2.625rem;height:2.625rem;font-size:.9375rem;')+''+(s.online?'<span class="presence-dot" title="Онлайн"></span>':'')+'</div>' +
+    '<div><b style="font-size:1rem;display:block;">'+escapeHtml(s.name)+'</b><span style="font-size:.8125rem;color:var(--muted);">'+escapeHtml(specNames(s)||"—")+'</span>' +
+    '<span style="font-size:.75rem;color:var(--muted-2);display:block;margin-top:.125rem;">'+(s.online?'<span style="color:var(--status-active);font-weight:600;">● В сети сейчас</span>':'Была в сети: '+escapeHtml(timeSince(s.last_seen_at)))+'</span></div></div>' +
     '<button class="btn btn-ghost btn-sm" data-action="close-drawer">Закрыть ✕</button></div>';
 
   var body = '<div class="drawer-body">' +
@@ -7110,10 +7110,10 @@ function renderStudentDrawer(){
     var notEnrolled = staffState.coursesList.filter(function(c){ return enrolledIds.indexOf(c.id)===-1; });
     body += '<div class="field"><label>Записан на курсы</label>' +
       (staffState.selectedStudentEnrollments.length
-        ? '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+staffState.selectedStudentEnrollments.map(function(e){ return magnet("neutral", e.title); }).join("")+'</div>'
+        ? '<div style="display:flex;flex-wrap:wrap;gap:.375rem;">'+staffState.selectedStudentEnrollments.map(function(e){ return magnet("neutral", e.title); }).join("")+'</div>'
         : '<p class="hint" style="margin:0;">Ни на один курс не записан.</p>') +
       (notEnrolled.length
-        ? '<div style="display:flex;gap:8px;margin-top:8px;">' +
+        ? '<div style="display:flex;gap:.5rem;margin-top:.5rem;">' +
             '<select class="input" id="enrollCourseSelect" style="flex:1;">' +
               notEnrolled.map(function(c){ return '<option value="'+c.id+'">'+escapeHtml(c.title)+'</option>'; }).join("") +
             '</select>' +
@@ -7124,21 +7124,21 @@ function renderStudentDrawer(){
     body += '<div class="progress-label">'+done+' из '+((staffState.materials||[]).length||done)+' уроков'+(typeof s.quiz_score==="number"?' · тест: '+s.quiz_score+'%':'')+'</div>';
     if(s.completed){
       if(staffState.certificatesEnabled){
-        body += '<div class="card" style="padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;">' +
-          '<b style="font-size:14px;">Сертификат: '+(s.certificate_status==="issued"?"выдан":"ожидает выдачи")+'</b>' +
+        body += '<div class="card" style="padding:.875rem 1rem;display:flex;justify-content:space-between;align-items:center;gap:.625rem;">' +
+          '<b style="font-size:.875rem;">Сертификат: '+(s.certificate_status==="issued"?"выдан":"ожидает выдачи")+'</b>' +
           (s.certificate_status==="issued"
             ? '<a class="btn btn-sm btn-ghost" href="api/staff/students/'+s.id+'/certificate/download?courseId='+encodeURIComponent(staffState.activeCourseId||"")+'" target="_blank" rel="noopener">'+icon("download","ic-sm")+' Скачать PDF</a>'
             : '<button class="btn btn-sm btn-primary" data-action="issue-certificate" data-id="'+s.id+'">Выдать сертификат</button>') +
         '</div>';
       } else {
-        body += '<div class="card" style="padding:14px 16px;">' +
-          '<b style="font-size:14px;">Демо-курс пройден · тест '+s.quiz_score+'%</b>' +
-          '<p style="font-size:13px;color:var(--muted);margin:4px 0 0;">Сертификаты на демо-курсе не выдаются.</p>' +
+        body += '<div class="card" style="padding:.875rem 1rem;">' +
+          '<b style="font-size:.875rem;">Демо-курс пройден · тест '+s.quiz_score+'%</b>' +
+          '<p style="font-size:.8125rem;color:var(--muted);margin:.25rem 0 0;">Сертификаты на демо-курсе не выдаются.</p>' +
         '</div>';
       }
     }
     if(s.requested_full_access){
-      body += '<div class="card" style="padding:14px 16px;margin-top:12px;background:var(--accent-tint);border-color:transparent;"><b style="font-size:14px;">Оставил(а) заявку на полную программу</b></div>';
+      body += '<div class="card" style="padding:.875rem 1rem;margin-top:.75rem;background:var(--accent-tint);border-color:transparent;"><b style="font-size:.875rem;">Оставил(а) заявку на полную программу</b></div>';
     }
   } else if(staffState.drawerTab === "access"){
     var expiresAtRaw = s.access_expires_at ? String(s.access_expires_at).slice(0,10) : "";
@@ -7147,15 +7147,15 @@ function renderStudentDrawer(){
     var isExpired = expiresAtRaw && expiresAtRaw < todayIso;
     var statusText = isBlocked ? "Доступ заблокирован" : (isExpired ? "Доступ истёк "+fmtDate(expiresAtRaw) : (expiresAtRaw ? "Доступ активен до "+fmtDate(expiresAtRaw) : "Доступ бессрочный"));
 
-    body += '<div class="card" style="padding:14px 16px;margin-bottom:16px;'+((isBlocked||isExpired)?'background:var(--danger-tint);':'background:var(--primary-tint);')+'border-color:transparent;"><b style="font-size:14px;">'+statusText+'</b></div>' +
-      '<div class="field"><label>Срок доступа к демо-курсу</label><div style="display:flex;gap:8px;">' +
+    body += '<div class="card" style="padding:.875rem 1rem;margin-bottom:1rem;'+((isBlocked||isExpired)?'background:var(--danger-tint);':'background:var(--primary-tint);')+'border-color:transparent;"><b style="font-size:.875rem;">'+statusText+'</b></div>' +
+      '<div class="field"><label>Срок доступа к демо-курсу</label><div style="display:flex;gap:.5rem;">' +
         '<input class="input" type="date" id="accessExpiryInput" value="'+escapeHtml(expiresAtRaw)+'">' +
         '<button class="btn btn-sm btn-ghost" data-action="save-access-expiry" data-id="'+s.id+'">Сохранить</button></div></div>' +
-      '<div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap;">' +
+      '<div style="display:flex;gap:.625rem;margin-top:.375rem;flex-wrap:wrap;">' +
         '<button class="btn btn-sm btn-ghost" data-action="extend-access" data-id="'+s.id+'" data-days="7">+7 дней</button>' +
         '<button class="btn btn-sm btn-ghost" data-action="extend-access" data-id="'+s.id+'" data-days="30">+30 дней</button>' +
         '<button class="btn btn-sm btn-ghost" data-action="clear-access-expiry" data-id="'+s.id+'">Сделать бессрочным</button></div>' +
-      '<div class="field" style="margin-top:18px;"><label>Немедленное ограничение</label>' +
+      '<div class="field" style="margin-top:1.125rem;"><label>Немедленное ограничение</label>' +
         (isBlocked ?
           '<button class="btn btn-primary" data-action="toggle-access-block" data-id="'+s.id+'" data-blocked="false">Снять блокировку</button>' :
           '<button class="btn btn-ghost" data-action="toggle-access-block" data-id="'+s.id+'" data-blocked="true">Заблокировать доступ к курсу</button>') +
@@ -7166,15 +7166,15 @@ function renderStudentDrawer(){
     body += renderStudentOrdersTab(s);
   } else if(staffState.drawerTab === "notes"){
     body += '<p class="hint" style="margin-top:0;">Видно только персоналу — врач эти записи не видит.</p>' +
-      '<div class="field"><textarea class="input" id="studentNoteInput" style="height:64px;" placeholder="Например: пропускает эфиры, стоит позвонить"></textarea></div>' +
+      '<div class="field"><textarea class="input" id="studentNoteInput" style="height:4rem;" placeholder="Например: пропускает эфиры, стоит позвонить"></textarea></div>' +
       '<button class="btn btn-sm btn-primary" data-action="add-student-note" data-id="'+s.id+'">Добавить заметку</button>' +
-      '<div style="margin-top:18px;">';
+      '<div style="margin-top:1.125rem;">';
     if(!staffState.notes.length){
       body += '<p class="hint">Заметок пока нет.</p>';
     } else {
       staffState.notes.forEach(function(n){
-        body += '<div style="padding:10px 0;border-bottom:1px solid var(--line-2);"><p style="font-size:14px;margin:0 0 4px;">'+escapeHtml(n.body)+'</p>' +
-          '<span style="font-size:12px;color:var(--muted-2);">'+escapeHtml(n.author_name||"")+' · '+fmtDate(n.created_at)+' '+fmtTime(n.created_at)+'</span></div>';
+        body += '<div style="padding:.625rem 0;border-bottom:1px solid var(--line-2);"><p style="font-size:.875rem;margin:0 0 .25rem;">'+escapeHtml(n.body)+'</p>' +
+          '<span style="font-size:.75rem;color:var(--muted-2);">'+escapeHtml(n.author_name||"")+' · '+fmtDate(n.created_at)+' '+fmtTime(n.created_at)+'</span></div>';
       });
     }
     body += '</div>';
@@ -7189,13 +7189,13 @@ function renderStudentDrawer(){
       '<div class="field"><label>Телефон</label><input class="input" id="studentProfilePhone" value="'+escapeHtml(staffState.editPhone)+'"></div>' +
       '<div class="field"><label>Место работы</label><input class="input" id="studentProfileWorkplace" value="'+escapeHtml(staffState.editWorkplace)+'"></div>' +
       '<button class="btn btn-sm btn-ghost" data-action="save-student-profile" data-id="'+s.id+'">Сохранить данные</button>' +
-      '<div class="field" style="margin-top:18px;"><label>Дата регистрации</label><div class="input" style="background:var(--line-2);">'+fmtDate(s.created_at)+'</div></div>' +
+      '<div class="field" style="margin-top:1.125rem;"><label>Дата регистрации</label><div class="input" style="background:var(--line-2);">'+fmtDate(s.created_at)+'</div></div>' +
       '<div class="field"><label>Продукт</label><select class="input" data-field-select="product" data-id="'+s.id+'">'+productSelectOpts+'</select></div>' +
       ((toolsState.orders.list||[]).some(function(o){ return o.user_id===s.id; })
         ? '<div class="field"><label>Оплата</label><div class="input input-ro pay-ro"><span>'+escapeHtml(PAYMENT_LABELS[s.payment_status||"unpaid"])+'</span><button type="button" class="link-btn" data-action="drawer-tab" data-tab="orders">по заказам →</button></div></div>'
         : '<div class="field"><label>Оплата</label><select class="input" data-field-select="payment" data-id="'+s.id+'">'+paymentSelectOpts+'</select></div>') +
       '<div class="field"><label>Ответственный куратор</label><select class="input" data-field-select="curator" data-id="'+s.id+'">'+curatorSelectOpts+'</select></div>' +
-      '<button class="btn btn-ghost" style="margin-top:6px;" data-action="reset-student-password" data-id="'+s.id+'" data-name="'+escapeHtml(s.name)+'">Сбросить пароль</button>';
+      '<button class="btn btn-ghost" style="margin-top:.375rem;" data-action="reset-student-password" data-id="'+s.id+'" data-name="'+escapeHtml(s.name)+'">Сбросить пароль</button>';
   }
   body += '</div>';
   // Полноценная страница врача (раньше — боковая панель): шапка с фото, данными
@@ -7482,7 +7482,7 @@ function renderAssignmentCard(s){
 // связано с черновиком/публикацией текста урока.
 function renderAssignEditorModal(){
   var a = toolsState.assignEditor;
-  var body = '<div class="drawer-head"><div><b style="font-size:16px;">Задание к уроку</b><div class="set-muted">'+escapeHtml(a.title)+'</div></div><button class="btn btn-ghost btn-sm" data-action="assign-editor-close">Закрыть ✕</button></div>' +
+  var body = '<div class="drawer-head"><div><b style="font-size:1rem;">Задание к уроку</b><div class="set-muted">'+escapeHtml(a.title)+'</div></div><button class="btn btn-ghost btn-sm" data-action="assign-editor-close">Закрыть ✕</button></div>' +
     '<div class="drawer-body">' +
       '<div class="field"><label>Что должен сделать врач</label><textarea class="input" rows="6" data-tbind="ae.prompt" placeholder="Например: разберите пациента из своей практики по схеме из урока — жалобы, анализы, что назначили бы">'+escapeHtml(a.prompt)+'</textarea>' +
         '<p class="hint">Врач увидит задание отдельным шагом урока и ответит текстом. Куратор примет ответ или вернёт с комментарием.</p></div>' +
@@ -7491,7 +7491,7 @@ function renderAssignEditorModal(){
         (a.hadTask ? '<button class="btn btn-ghost" data-action="assign-editor-remove">Убрать задание</button>' : '<span></span>') +
         '<button class="btn btn-primary" data-action="assign-editor-save">Сохранить</button></div>' +
     '</div>';
-  return el('<div class="overlay overlay-center" data-action="overlay-close-assign-editor"><div class="drawer modal" data-stop="1" style="width:min(560px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay overlay-center" data-action="overlay-close-assign-editor"><div class="drawer modal" data-stop="1" style="width:min(35rem,100%);">'+body+'</div></div>');
 }
 
 /* ---------- Лента ответов ---------- */
@@ -7603,7 +7603,7 @@ function renderOrdersTab(){
 
 function renderOrderDrawer(){
   var o = toolsState.orders.open;
-  var head = '<div class="drawer-head"><div><b style="font-size:16px;">Заказ №'+o.number+'</b><div class="set-muted">'+escapeHtml(o.title)+'</div></div><button class="btn btn-ghost btn-sm" data-action="order-close">Закрыть ✕</button></div>';
+  var head = '<div class="drawer-head"><div><b style="font-size:1rem;">Заказ №'+o.number+'</b><div class="set-muted">'+escapeHtml(o.title)+'</div></div><button class="btn btn-ghost btn-sm" data-action="order-close">Закрыть ✕</button></div>';
   var rest = o.amount - o.paid_amount, today = todayIso();
   var body = '<div class="drawer-body">' +
     '<div class="ord-who" data-action="order-to-student" data-id="'+o.user_id+'">'+userAvatar({ id:o.user_id, name:o.student_name, avatar_url:o.avatar_url })+'<div class="ow-t"><b>'+escapeHtml(o.student_name)+'</b><span>'+escapeHtml(o.student_email)+'</span></div><em>Профиль →</em></div>' +
@@ -7612,7 +7612,7 @@ function renderOrderDrawer(){
       '<div><span>Создан</span>'+fmtDateShort(o.created_at)+(o.created_by_name?' · '+escapeHtml(o.created_by_name):'')+'</div>' +
       (o.course_title?'<div><span>Доступ</span>'+(o.status==="paid"?'курс «'+escapeHtml(o.course_title)+'» открыт':'после полной оплаты откроется курс «'+escapeHtml(o.course_title)+'»')+'</div>':'') +
       (o.comment?'<div><span>Комментарий</span>'+escapeHtml(o.comment)+'</div>':'') + '</div>' +
-    '<b class="co-card-title" style="margin:22px 0 10px;">'+(o.payments.length>1?'График платежей':'Платёж')+'</b><div class="ord-sched">';
+    '<b class="co-card-title" style="margin:1.375rem 0 .625rem;">'+(o.payments.length>1?'График платежей':'Платёж')+'</b><div class="ord-sched">';
   o.payments.forEach(function(p,i){
     var paid = !!p.paid_at, overdue = !paid && p.due_date < today && o.status!=="cancelled";
     body += '<div class="ord-pay'+(paid?' paid':(overdue?' overdue':''))+'"><span class="ord-pay-n">'+(paid?icon("check","ic-sm"):(i+1))+'</span>' +
@@ -7625,7 +7625,7 @@ function renderOrderDrawer(){
   body += '</div>';
   if(o.status!=="cancelled") body += '<button class="btn btn-sm btn-ghost ord-cancel" data-action="order-cancel">Отменить заказ</button>';
   body += '</div>';
-  return el('<div class="overlay" data-action="overlay-close-order"><div class="drawer" data-stop="1" style="width:min(540px,100%);">'+head+body+'</div></div>');
+  return el('<div class="overlay" data-action="overlay-close-order"><div class="drawer" data-stop="1" style="width:min(33.75rem,100%);">'+head+body+'</div></div>');
 }
 
 function newOrderDraft(userId){ return { userId:userId||"", productId:"", title:"", amount:"", installments:"1", firstDueDate:todayIso(), paidNow:false, comment:"", error:"" }; }
@@ -7645,7 +7645,7 @@ function renderOrderCreateModal(){
     }).join('') + '</div>';
   }
   var instOpts = ''; for(var i=1;i<=maxInst;i++) instOpts += '<option value="'+i+'"'+(i===n?' selected':'')+'>'+(i===1?'Без рассрочки':i+' '+ruPluralClient(i,"платёж","платежа","платежей"))+'</option>';
-  var body = '<div class="drawer-head"><b style="font-size:16px;">Новый заказ</b><button class="btn btn-ghost btn-sm" data-action="order-draft-close">Закрыть ✕</button></div><div class="drawer-body">' +
+  var body = '<div class="drawer-head"><b style="font-size:1rem;">Новый заказ</b><button class="btn btn-ghost btn-sm" data-action="order-draft-close">Закрыть ✕</button></div><div class="drawer-body">' +
     '<div class="field"><label>Врач</label><select class="input" data-tbind="od.userId" data-rerender="1"><option value="">— выберите врача —</option>' +
       students.map(function(s){ return '<option value="'+s.id+'"'+(s.id===d.userId?' selected':'')+'>'+escapeHtml(s.name)+' — '+escapeHtml(s.email)+'</option>'; }).join('') + '</select></div>' +
     '<div class="field"><label>Продукт</label><select class="input" data-tbind="od.productId" data-rerender="1"><option value="">— без продукта, своё название —</option>' +
@@ -7661,7 +7661,7 @@ function renderOrderCreateModal(){
     '<div class="field"><label>Комментарий <span class="set-muted">(виден только персоналу)</span></label><textarea class="input" rows="2" data-tbind="od.comment">'+escapeHtml(d.comment)+'</textarea></div>' +
     (d.error?'<div class="err-text">'+escapeHtml(d.error)+'</div>':'') +
     '<div class="modal-actions"><button class="btn btn-ghost" data-action="order-draft-close">Отмена</button><button class="btn btn-primary" data-action="order-create"'+(toolsState.orders.busy?' disabled':'')+'>Создать заказ</button></div></div>';
-  return el('<div class="overlay overlay-center" data-action="overlay-close-order-draft"><div class="drawer modal" data-stop="1" style="width:min(600px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay overlay-center" data-action="overlay-close-order-draft"><div class="drawer modal" data-stop="1" style="width:min(37.5rem,100%);">'+body+'</div></div>');
 }
 
 /* ---------- Продукты ---------- */
@@ -7715,7 +7715,7 @@ function renderProductModal(){
   var p = toolsState.products.editing;
   var courseOpts = '<option value="">— не открывать курс —</option>' + (staffState.coursesList||[]).map(function(c){ return '<option value="'+c.id+'"'+(c.id===p.courseId?' selected':'')+'>'+escapeHtml(c.title)+'</option>'; }).join('');
   var instOpts = ''; [1,2,3,4,5,6,8,10,12,18,24].forEach(function(i){ instOpts += '<option value="'+i+'"'+(String(i)===String(p.maxInstallments)?' selected':'')+'>'+(i===1?'Без рассрочки':'До '+i+' '+ruPluralClient(i,"платежа","платежей","платежей"))+'</option>'; });
-  var body = '<div class="drawer-head"><b style="font-size:16px;">'+(p.id?'Продукт':'Новый продукт')+'</b><button class="btn btn-ghost btn-sm" data-action="product-close">Закрыть ✕</button></div><div class="drawer-body">' +
+  var body = '<div class="drawer-head"><b style="font-size:1rem;">'+(p.id?'Продукт':'Новый продукт')+'</b><button class="btn btn-ghost btn-sm" data-action="product-close">Закрыть ✕</button></div><div class="drawer-body">' +
     '<div class="field"><label>Название</label><input class="input" data-tbind="pd.title" value="'+escapeHtml(p.title)+'" placeholder="Медицина Долголетия — полный курс"></div>' +
     '<div class="profile-2f"><div class="field"><label>Цена, ₽</label><input class="input" type="number" min="0" step="1" data-tbind="pd.price" value="'+escapeHtml(p.price)+'"></div>' +
       '<div class="field"><label>Рассрочка</label><select class="input" data-tbind="pd.maxInstallments">'+instOpts+'</select></div></div>' +
@@ -7723,7 +7723,7 @@ function renderProductModal(){
     '<label class="check-line"><input type="checkbox" data-tbind="pd.active"'+(p.active?' checked':'')+'><span><b>В продаже</b>скрытый продукт нельзя выбрать в новом заказе</span></label>' +
     (p.error?'<div class="err-text">'+escapeHtml(p.error)+'</div>':'') +
     '<div class="modal-actions"><button class="btn btn-ghost" data-action="product-close">Отмена</button><button class="btn btn-primary" data-action="product-save">Сохранить</button></div></div>';
-  return el('<div class="overlay overlay-center" data-action="overlay-close-product"><div class="drawer modal" data-stop="1" style="width:min(520px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay overlay-center" data-action="overlay-close-product"><div class="drawer modal" data-stop="1" style="width:min(32.5rem,100%);">'+body+'</div></div>');
 }
 
 /* ---------- Анкеты ---------- */
@@ -7768,13 +7768,13 @@ function renderSurveysTab(){
 function renderSurveyBuilder(){
   var s = toolsState.surveys.editing;
   var courseOpts = '<option value="">Все врачи</option>' + (staffState.coursesList||[]).map(function(c){ return '<option value="'+c.id+'"'+(c.id===s.courseId?' selected':'')+'>Записанные на «'+escapeHtml(c.title)+'»</option>'; }).join('');
-  var head = '<div class="drawer-head"><b style="font-size:16px;">'+(s.id?'Анкета':'Новая анкета')+'</b><button class="btn btn-ghost btn-sm" data-action="survey-close">Закрыть ✕</button></div>';
+  var head = '<div class="drawer-head"><b style="font-size:1rem;">'+(s.id?'Анкета':'Новая анкета')+'</b><button class="btn btn-ghost btn-sm" data-action="survey-close">Закрыть ✕</button></div>';
   var body = '<div class="drawer-body">' +
     '<div class="field"><label>Название</label><input class="input" data-tbind="sv.title" value="'+escapeHtml(s.title)+'" placeholder="Например, опрос после эфира"></div>' +
     '<div class="field"><label>Пояснение для врача <span class="set-muted">(необязательно)</span></label><textarea class="input" rows="2" data-tbind="sv.description">'+escapeHtml(s.description||"")+'</textarea></div>' +
     '<div class="profile-2f"><div class="field"><label>Кому показывать</label><select class="input" data-tbind="sv.courseId">'+courseOpts+'</select></div>' +
       '<div class="field"><label class="sp-label">&nbsp;</label><label class="check-line"><input type="checkbox" data-tbind="sv.active"'+(s.active?' checked':'')+'><span>Собирать ответы</span></label></div></div>' +
-    '<b class="co-card-title" style="margin:10px 0 10px;">Вопросы</b>';
+    '<b class="co-card-title" style="margin:.625rem 0 .625rem;">Вопросы</b>';
   s.questions.forEach(function(q, qi){
     var typeOpts = ["single","multi","scale","text"].map(function(t){ return '<option value="'+t+'"'+(q.type===t?' selected':'')+'>'+SURVEY_TYPE_LABELS[t]+'</option>'; }).join('');
     body += '<div class="sq-card"><div class="sq-head"><span class="sq-n">'+(qi+1)+'</span><select class="input sq-type" data-tbind="sq.type" data-id="'+qi+'" data-rerender="1">'+typeOpts+'</select>' +
@@ -7797,7 +7797,7 @@ function renderSurveyBuilder(){
   body += '<div class="sq-add">' + ["single","multi","scale","text"].map(function(t){ return '<button type="button" class="btn btn-sm btn-ghost" data-action="sq-add" data-type="'+t+'">+ '+SURVEY_TYPE_LABELS[t]+'</button>'; }).join('') + '</div>' +
     (s.error?'<div class="err-text">'+escapeHtml(s.error)+'</div>':'') +
     '<div class="modal-actions"><button class="btn btn-ghost" data-action="survey-close">Отмена</button><button class="btn btn-primary" data-action="survey-save">'+(s.id?'Сохранить':'Создать и разослать')+'</button></div></div>';
-  return el('<div class="overlay" data-action="overlay-close-survey"><div class="drawer" data-stop="1" style="width:min(680px,100%);">'+head+body+'</div></div>');
+  return el('<div class="overlay" data-action="overlay-close-survey"><div class="drawer" data-stop="1" style="width:min(42.5rem,100%);">'+head+body+'</div></div>');
 }
 
 function renderSurveyResultsBody(){
@@ -7840,9 +7840,9 @@ function renderSurveyPeople(){
   var pend = R.pending || [];
   var h = '<div class="card co-card sv-people"><div class="sv-people-body">' +
     '<div class="co-head"><b>Кто ответил</b><span class="courses-count">'+R.responses.length+'</span></div>';
-  h += R.responses.length ? R.responses.map(function(r){ return person(r, timeSince(r.created_at)); }).join('') : '<p class="set-muted" style="margin:8px 0 0;">Пока никто.</p>';
-  h += '<div class="co-head" style="margin-top:18px;"><b>Ещё не ответили</b><span class="courses-count">'+pend.length+'</span></div>';
-  h += pend.length ? pend.map(function(r){ return person(r, "анкета ждёт на главной"); }).join('') : '<p class="set-muted" style="margin:8px 0 0;">Ответили все.</p>';
+  h += R.responses.length ? R.responses.map(function(r){ return person(r, timeSince(r.created_at)); }).join('') : '<p class="set-muted" style="margin:.5rem 0 0;">Пока никто.</p>';
+  h += '<div class="co-head" style="margin-top:1.125rem;"><b>Ещё не ответили</b><span class="courses-count">'+pend.length+'</span></div>';
+  h += pend.length ? pend.map(function(r){ return person(r, "анкета ждёт на главной"); }).join('') : '<p class="set-muted" style="margin:.5rem 0 0;">Ответили все.</p>';
   return h + '</div></div>';
 }
 
@@ -7889,7 +7889,7 @@ function renderSurveyFillModal(){
   var s = studentTools.surveys.find(function(x){ return x.id===studentTools.fillId; });
   if(!s) return el('<div></div>');
   var A = studentTools.answers;
-  var body = '<div class="drawer-head"><div><b style="font-size:16px;">'+escapeHtml(s.title)+'</b>'+(s.my_answers?'<div class="set-muted">Вы уже отвечали — можно изменить ответы</div>':'')+'</div><button class="btn btn-ghost btn-sm" data-action="sf-close">Закрыть ✕</button></div><div class="drawer-body">' +
+  var body = '<div class="drawer-head"><div><b style="font-size:1rem;">'+escapeHtml(s.title)+'</b>'+(s.my_answers?'<div class="set-muted">Вы уже отвечали — можно изменить ответы</div>':'')+'</div><button class="btn btn-ghost btn-sm" data-action="sf-close">Закрыть ✕</button></div><div class="drawer-body">' +
     (s.description?'<p class="sf-desc">'+escapeHtml(s.description)+'</p>':'');
   s.questions.forEach(function(q, qi){
     body += '<div class="sf-q'+(studentTools.missingQ===q.id?' missing':'')+'" id="sfq-'+q.id+'"><p class="qtext">'+(qi+1)+'. '+escapeHtml(q.text)+(q.required?' <span class="sf-req">*</span>':'')+'</p>';
@@ -7911,14 +7911,14 @@ function renderSurveyFillModal(){
   });
   body += (studentTools.surveyError?'<div class="err-text">'+escapeHtml(studentTools.surveyError)+'</div>':'') +
     '<div class="modal-actions"><button class="btn btn-ghost" data-action="sf-close">Позже</button><button class="btn btn-primary" data-action="sf-submit">Отправить</button></div></div>';
-  return el('<div class="overlay overlay-center" data-action="overlay-close-sf"><div class="drawer modal" data-stop="1" style="width:min(620px,100%);">'+body+'</div></div>');
+  return el('<div class="overlay overlay-center" data-action="overlay-close-sf"><div class="drawer modal" data-stop="1" style="width:min(38.75rem,100%);">'+body+'</div></div>');
 }
 
 function renderMyOrdersBlock(){
   var list = studentTools.orders || [];
   if(!list.length) return '';
   var today = todayIso();
-  var html = '<div class="my-orders"><b class="co-card-title" style="margin-bottom:10px;">Оплаты</b>';
+  var html = '<div class="my-orders"><b class="co-card-title" style="margin-bottom:.625rem;">Оплаты</b>';
   list.forEach(function(o){
     var pct = o.amount ? Math.round(o.paid_amount/o.amount*100) : 100;
     var next = o.payments.filter(function(p){ return !p.paid_at; })[0];
@@ -7936,14 +7936,14 @@ function renderMyOrdersBlock(){
 
 function renderStudentAssignTab(){
   var list = toolsState.studentAssign || [];
-  if(!list.length) return '<div class="empty-state" style="padding:30px 10px;">Врач пока не отвечал на задания.</div>';
+  if(!list.length) return '<div class="empty-state" style="padding:1.875rem .625rem;">Врач пока не отвечал на задания.</div>';
   return '<div class="tk-list tk-list-1">' + list.map(renderAssignmentCard).join('') + '</div>';
 }
 function renderStudentOrdersTab(s){
   var list = toolsState.orders.list.filter(function(o){ return o.user_id===s.id; });
-  var html = '<div class="co-head" style="margin-bottom:12px;"><b>Заказы</b><button class="btn btn-sm btn-primary" data-action="order-new" data-user="'+s.id+'">+ Новый заказ</button></div>';
+  var html = '<div class="co-head" style="margin-bottom:.75rem;"><b>Заказы</b><button class="btn btn-sm btn-primary" data-action="order-new" data-user="'+s.id+'">+ Новый заказ</button></div>';
   if(!toolsState.orders.loaded) return html + '<div class="empty-state">Загрузка…</div>';
-  if(!list.length) return html + '<div class="empty-state" style="padding:30px 10px;">Заказов нет. Статус оплаты можно выставить вручную во вкладке «Профиль» или создать заказ с графиком платежей.</div>';
+  if(!list.length) return html + '<div class="empty-state" style="padding:1.875rem .625rem;">Заказов нет. Статус оплаты можно выставить вручную во вкладке «Профиль» или создать заказ с графиком платежей.</div>';
   list.forEach(function(o){
     var pct = o.amount ? Math.round(o.paid_amount/o.amount*100) : 100;
     html += '<div class="my-order my-order-link" data-action="order-open" data-id="'+o.id+'"><div class="my-order-top"><b>№'+o.number+' · '+escapeHtml(o.title)+'</b>'+orderStatusMag(o)+'</div>' +
