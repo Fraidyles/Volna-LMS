@@ -219,7 +219,7 @@ var ICONS = {
   folder: '<path d="M3.5 7A1.5 1.5 0 0 1 5 5.5h4l2 2.5h8A1.5 1.5 0 0 1 20.5 9.5v8A1.5 1.5 0 0 1 19 19H5A1.5 1.5 0 0 1 3.5 17.5V7Z"/>',
   chartbar: '<path d="M5 20V10M12 20V4M19 20v-7"/>',
   message: '<path d="M4 5.5A2 2 0 0 1 6 3.5h12a2 2 0 0 1 2 2V15a2 2 0 0 1-2 2H9l-4.5 4V5.5Z"/>',
-  gear: '<circle cx="12" cy="12" r="3.2"/><path d="M12 4v2.4M12 17.6V20M4 12h2.4M17.6 12H20M6.3 6.3l1.7 1.7M16 16l1.7 1.7M17.7 6.3 16 8M8 16l-1.7 1.7"/>',
+  gear: '<path d="M10.3 3.3h3.4l.5 2.4a6.8 6.8 0 0 1 1.7 1l2.3-.8 1.7 2.9-1.8 1.6a6.9 6.9 0 0 1 0 2l1.8 1.6-1.7 2.9-2.3-.8a6.8 6.8 0 0 1-1.7 1l-.5 2.4h-3.4l-.5-2.4a6.8 6.8 0 0 1-1.7-1l-2.3.8-1.7-2.9 1.8-1.6a6.9 6.9 0 0 1 0-2L4.1 9.8l1.7-2.9 2.3.8a6.8 6.8 0 0 1 1.7-1z" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6"/>',
   logout: '<path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3M15 16l4-4-4-4M19 12H9"/>',
   task: '<rect x="4.5" y="3.5" width="15" height="17" rx="2"/><path d="M8.5 12.2l2.3 2.3 4.7-4.9"/><path d="M8.5 7.5h7"/>',
   wallet: '<path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="4" y="8" width="16.5" height="11.5" rx="2"/><path d="M16 13.8h1.5"/>',
@@ -1681,6 +1681,9 @@ function render(){
   }
   if(document.querySelector(".qz-mx")) qzMatchWires();
   if(document.getElementById("lessonBar")){ lessonTocSpy(); lessonBarSync(); }
+  // телефон: текущий урок в ленте над уроком — в зоне видимости
+  var stripAct = document.querySelector(".player > .lesson-nav .lesson-item.active");
+  if(stripAct && stripAct.parentElement.scrollWidth > stripAct.parentElement.clientWidth) stripAct.parentElement.scrollLeft = stripAct.getBoundingClientRect().left - stripAct.parentElement.getBoundingClientRect().left + stripAct.parentElement.scrollLeft - 12;
   if(view==="student") tourMaybeStart(); else if(tour) closeTour(true);
   syncNavHistory();
 }
@@ -3610,13 +3613,8 @@ function lessonLecturer(html){
   var initials = (parts[0][0] + (parts.length>1 ? parts[parts.length-1][0] : "")).toUpperCase();
   return { full:m[1].trim(), short:short, initials:initials };
 }
-// Время чтения материала: ~180 слов в минуту.
-function lxReadMin(html){
-  var words = String(html||"").replace(/<[^>]+>/g," ").split(/\s+/).filter(Boolean).length;
-  return Math.max(1, Math.round(words/180));
-}
 // Неразрывный пробел после коротких слов — заголовок не оставляет «у», «в», «и» в конце строки.
-function lxNbsp(t){ return String(t||"").replace(/(^|\s)(в|у|с|к|о|и|а|на|по|из|за|до|не|от|об|для)\s/gi, "$1$2 "); }
+function lxNbsp(t){ return String(t||"").replace(/(^|\s)(в|у|с|к|о|и|а|на|по|из|за|до|не|от|об|для)\s/gi, "$1$2\u00A0").replace(/([A-Za-zА-Яа-яЁё])-([A-Za-zА-Яа-яЁё])/g, "$1\u2011$2"); }
 function lessonStagesFor(lesson){
   var stages = ["intro"];
   if(lesson.videoUrl) stages.push("video");
@@ -3763,7 +3761,8 @@ function renderCoursePlayer(){
 
   var tocMenu = stage==="intro" ? lessonTocMenu(lessonToc(lesson.html)) : "";
   if(stages.length>1 || tocMenu){
-    var stageSub = { intro: lxReadMin(lesson.html)+" мин чтения", video:"видеолекция", quiz:(lesson.quiz||[]).length+" "+ruPluralClient((lesson.quiz||[]).length,"вопрос","вопроса","вопросов"), task:"практика" };
+    var ltoc0 = lessonToc(lesson.html), nSec = ltoc0.filter(function(x){ return !x.cheat; }).length, hasCheat = ltoc0.some(function(x){ return x.cheat; });
+    var stageSub = { intro: nSec ? nSec+" "+ruPluralClient(nSec,"раздел","раздела","разделов")+(hasCheat?" и шпаргалка":"") : "текст урока", video:"видеолекция", quiz:(lesson.quiz||[]).length+" "+ruPluralClient((lesson.quiz||[]).length,"вопрос","вопроса","вопросов"), task:"практика" };
     body += '<div class="lesson-tabs-row">';
     if(stages.length>1){
       body += '<nav class="lx-steps" style="--n:'+stages.length+'" aria-label="Шаги урока">';
@@ -3933,13 +3932,15 @@ function qzAnswered(def, val){
   if(t==="single") return typeof val==="number";
   if(t==="multi") return Array.isArray(val) && val.length>0;
   if(t==="number") return qzParseNum(val)!==null;
-  if(t==="order") return true;
+  if(t==="order") return Array.isArray(val);
   if(t==="match") return !!val && (def.left||[]).every(function(_, i){ return !!val[i]; });
   return false;
 }
 function qzQuestionDone(q, answers){
   if(q.type==="case") return (q.steps||[]).every(function(st, i){ return qzAnswered(st, answers[q.id+"#"+i]); });
-  if(q.type==="order") return true;
+  // «Порядок» засчитан, когда врач до него дошёл (порядок фиксируется при показе) —
+  // иначе ещё не открытый вопрос подсвечивался в полосе как пройденный.
+  if(q.type==="order") return Array.isArray(answers[q.id]);
   return qzAnswered(q, answers[q.id]);
 }
 // Ответы в том виде, какой ждёт сервер.

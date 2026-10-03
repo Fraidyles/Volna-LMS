@@ -2685,7 +2685,8 @@ body.qz-ord-dragging{cursor:grabbing;user-select:none;-webkit-user-select:none;}
 .lb-stat .lb-v{font-size:1.3125rem;color:var(--primary);line-height:1.2;margin-bottom:.125rem;}
 .lb-card > p{margin:.75rem 0 0;font-size:.9063rem;line-height:1.6;}
 .lb-steps{display:flex;flex-direction:column;gap:.5rem;}
-.lb-step{position:relative;min-height:2.5rem;border-radius:.875rem;padding:.75rem .875rem .75rem 4.25rem;background:var(--surface-2);font-size:.8438rem;color:var(--rose);line-height:1.4;display:flex;flex-direction:column;justify-content:center;}
+.lb-step{position:relative;min-height:2.5rem;border-radius:.875rem;padding:.75rem .875rem .75rem 4.25rem;background:var(--surface-2);font-size:.8438rem;color:var(--rose);line-height:1.4;display:block;min-height:4rem;}
+/* текст шага — обычный поток: термины глоссария внутри не рвут строку на части */
 .lb-step::before{content:"";position:absolute;left:.875rem;top:50%;margin-top:-1.25rem;width:2.5rem;height:2.5rem;border-radius:.75rem;background:var(--primary-tint);}
 .lb-step::after{content:"";position:absolute;left:1.5rem;top:50%;margin-top:-.625rem;width:1.25rem;height:1.25rem;background:var(--primary);-webkit-mask:var(--lbi) center/contain no-repeat;mask:var(--lbi) center/contain no-repeat;}
 .lb-step .lb-v{font-size:.9375rem;font-weight:600;line-height:1.35;}
@@ -3149,12 +3150,25 @@ body.qz-ord-dragging{cursor:grabbing;user-select:none;-webkit-user-select:none;}
 .lesson-body.lx #lessonProse{counter-reset:lxsec;}
 .lesson-body.lx #lessonProse h4::before{content:counter(lxsec, decimal-leading-zero);display:inline-block;margin-right:.875rem;font:700 .9375rem var(--sans);color:var(--primary);letter-spacing:.02em;vertical-align:.25em;}
 .lesson-body.lx #lessonProse .lb{border-radius:1.25rem;margin:1.75rem 0;}
-.lesson-body.lx #lessonProse .lb-key{background:none;border:none;padding:0;text-align:left;}
-.lesson-body.lx #lessonProse .lb-key .lb-lab{background:none;padding:0;color:var(--muted);font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;}
+.lesson-body.lx #lessonProse .lb-key{background:color-mix(in srgb,var(--primary) 7%,transparent);border:none;border-left:3px solid var(--primary);border-radius:.25rem 1.25rem 1.25rem .25rem;padding:1.25rem 1.5rem;text-align:left;}
+.lesson-body.lx #lessonProse .lb-key .lb-big{font-size:1.125rem;line-height:1.5;}
+.lesson-body.lx #lessonProse .lb-key > p{font-size:.9375rem;line-height:1.6;margin-top:.625rem;}
+/* подписи блоков — одним стилем: мелкие прописные без «таблетки» */
+.lesson-body.lx #lessonProse .lb-lab{display:block;background:none;padding:0;margin-bottom:.625rem;border-radius:0;font-size:.6875rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+.lesson-body.lx #lessonProse .lb-key .lb-lab{color:var(--primary);}
+.lesson-body.lx #lessonProse .lb-warn .lb-lab{color:var(--rose);}
+.lesson-body.lx #lessonProse .lb-cheat .lb-lab{color:var(--primary);}
+.lesson-body.lx #lessonProse .lb-lab .gl-term{background:none;border-bottom-color:currentColor;}
 .lesson-body.lx #lessonProse .lb-seg{background:color-mix(in srgb,var(--ink) 4%,transparent);border-top:none;border-radius:1rem;padding:1rem 1.125rem;}
 .lesson-body.lx #lessonProse .lb-seg::before{content:"";display:block;width:.5rem;height:.5rem;border-radius:50%;background:var(--seg);margin-bottom:.625rem;box-shadow:0 0 0 3px color-mix(in srgb,var(--seg) 22%,transparent);}
 .lesson-body.lx #lessonProse .lb-card{background:none;border:none;padding:0;}
 .lesson-body.lx #lessonProse .lb-card > h5{font-size:1.0625rem;}
+.lesson-body.lx #lessonProse .lb-card > p{font-size:1rem;line-height:1.7;max-width:44rem;}
+.lesson-body.lx #lessonProse .lb-card > * + *{margin-top:1rem;}
+.lesson-body.lx #lessonProse .lb-note{font-size:.9375rem;line-height:1.65;}
+.lesson-body.lx #lessonProse .lb-note > p{max-width:44rem;}
+/* термины глоссария в заголовках — только пунктир, без подложки маркером */
+.lesson-body.lx #lessonProse :is(h4,h5,.lb-v,.lb-big) .gl-term{background:none;}
 .lesson-body.lx #lessonProse .lb-step{color:var(--muted);background:color-mix(in srgb,var(--ink) 4%,transparent);}
 .lesson-body.lx #lessonProse .lb-step .lb-v{color:var(--ink);}
 .lesson-body.lx #lessonProse .lb-step::before{background:color-mix(in srgb,var(--primary) 14%,transparent);}
@@ -3199,10 +3213,21 @@ body.qz-ord-dragging{cursor:grabbing;user-select:none;-webkit-user-select:none;}
   .lx-hero{grid-template-columns:minmax(0,1fr);gap:1rem;}
   .lx-num{width:3.25rem;height:3.25rem;border-radius:1rem;font-size:1.375rem;}
   .lesson-body.lx .lesson-head h3{font-size:1.75rem;}
-  .lx-steps{gap:.375rem;} .lx-step{flex-direction:column;align-items:flex-start;gap:.5rem;padding:.625rem;} .lx-n{flex:none;width:1.75rem;height:1.75rem;} .lx-st{max-width:100%;} .lx-st b{font-size:.8125rem;overflow:hidden;text-overflow:ellipsis;} .lx-step::after{display:none;} .lx-st small{display:none;}
+  .lx-steps{gap:.375rem;} .lx-step{gap:.375rem;padding:.625rem .375rem;justify-content:center;} .lx-n{display:none;} .lx-step.ok .lx-st b::before{content:"✓ ";color:var(--primary);} .lx-st{min-width:0;} .lx-st b{font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .lesson-body.lx #lessonProse .lb-key{padding:1rem 1.125rem;} .lesson-body.lx #lessonProse .lb-key .lb-big{font-size:1rem;} .lx-step::after{display:none;} .lx-st small{display:none;}
   .lx-barw{margin:0 -.5rem;top:.5rem;} .lx-bar .lx-pill{display:none;}
   .lesson-body.lx #lessonProse > p:first-child{font-size:1.0625rem;}
   .lesson-body.lx #lessonProse h4{font-size:1.3125rem;margin-top:2.5rem;}
   .lx-next{flex-wrap:wrap;} .lx-go{width:100%;}
 }
 @media (prefers-reduced-motion:reduce){ .lx-bar,.lx-pg i{transition:none;} }
+/* телефон: лента уроков над уроком — компактные «таблетки» в одну строку */
+@media (max-width:800px){
+  .player:has(.lesson-body.lx) > .lesson-nav{gap:.375rem;padding:.75rem .75rem .625rem;scrollbar-width:none;}
+  .player:has(.lesson-body.lx) > .lesson-nav::-webkit-scrollbar{display:none;}
+  .player:has(.lesson-body.lx) > .lesson-nav .lesson-item{flex:0 0 auto;max-width:13rem;width:auto;margin:0;padding:.5rem .75rem .5rem .5rem;align-items:center;gap:.5rem;border-radius:2rem;background:color-mix(in srgb,var(--ink) 5%,transparent);}
+  .player:has(.lesson-body.lx) > .lesson-nav .lesson-item.active{background:color-mix(in srgb,var(--primary) 18%,transparent);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--primary) 45%,transparent);}
+  .player:has(.lesson-body.lx) > .lesson-nav .lesson-item > div{min-width:0;}
+  .player:has(.lesson-body.lx) > .lesson-nav .lesson-item b{font-size:.8125rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .player:has(.lesson-body.lx) > .lesson-nav .lesson-item > div > span,.player:has(.lesson-body.lx) > .lesson-nav .lesson-sub{display:none;}
+}
