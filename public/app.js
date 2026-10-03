@@ -835,6 +835,170 @@ function runEntranceAnimations(){
   runStep(0);
 }
 
+/* ============================= ЗНАКОМСТВО С ПЛАТФОРМОЙ («голо-карта») ============================= */
+// Два коротких показа: главная (5 шагов) и страница урока (6 шагов). Слева — объёмная
+// схема экрана, нужная зона поднимается и светится; справа — текст и список шагов.
+// Карточка живёт в body (вне #app): render() её не трогает. Каждый показ — один раз
+// (progress.tour_home_seen / tour_lesson_seen), повторить можно из «Настроек».
+var tour = null; // { kind, i, root, timers }
+var tourPending = false;
+var TOUR = {
+  home: {
+    kicker: "Знакомство с платформой",
+    blocks: { sbTop:[0,0,5,2.6], nav0:[.4,3.2,4.2,.75], nav1:[.4,4.25,4.2,.75], nav2:[.4,5.3,4.2,.75], nav3:[.4,6.35,4.2,.75], nav4:[.4,7.75,4.2,.75], nav5:[.4,8.8,4.2,.75],
+      sbNext:[0,11.2,5,3.2], sbMe:[0,15,5,2], hero:[6,0,12,5.5], list:[6,6.5,12,4], survey:[6,11.5,12,2.3], steps:[6,14.6,12,2.4],
+      curator:[19,0,6,3.8], efir:[19,4.6,6,2.8], progress:[19,8.2,6,4.2], notifs:[19,13.2,6,3.8] },
+    steps: function(){
+      var n = course && course.lessons ? course.lessons.length : 0;
+      return [
+        { t:"Прогресс курса", p:"Кольцо в меню показывает, какая часть курса уже позади. "+(n ? n+" "+ruPluralClient(n,"урок","урока","уроков")+" и итоговый тест — это 100%." : "Все уроки и итоговый тест — это 100%."), tag:"Кольцо прогресса", at:"sbTop", w:{sbTop:1}, cam:[-30,3,2.5,1.04] },
+        { t:"Ваш следующий шаг", p:"Главная всегда начинается с урока, на котором вы остановились. Нажмите «Начать урок» — и продолжите с того же места.", tag:"Следующий шаг", at:"hero", w:{hero:1}, cam:[-34,0,2.5,1.04] },
+        { t:"Урок и разделы", p:"В уроке меню превращается в список уроков с разделами. Выделите фразу в тексте — появятся маркер, заметка и вопрос куратору.", tag:"Уроки и разделы", at:"nav0", w:{nav0:1,nav1:1,nav2:1,nav3:1,nav4:.9,nav5:.9,hero:.45,list:.45,survey:.45,steps:.45}, cam:[-28,2.5,-.5,1] },
+        { t:"Мой конспект", p:"Все маркеры и заметки собираются в «Моём конспекте» — по урокам и с поиском. Ничего не потеряется.", tag:"Мой конспект", at:"nav1", w:{nav1:1}, cam:[-31,4,.5,1.1] },
+        { t:"Эфиры и куратор", p:"Ближайший эфир и связь с куратором — справа на главной. Расписание и чат потока в Telegram — в меню.", tag:"Эфиры и куратор", at:"curator", w:{curator:1,efir:1,nav4:.7,nav5:.7}, cam:[-36,-4,2.5,1.06] }
+      ];
+    }
+  },
+  lesson: {
+    kicker: "Как устроен урок",
+    blocks: { card:[6,0,19,17], sbTop:[0,0,5,2.4],
+      L1:[.3,2.9,4.4,.8], L2:[.3,3.95,4.4,.8], L3:[.3,5,4.4,.8], L4:[.3,6.05,4.4,.8], L5:[.3,7.1,4.4,.8], L6:[.3,8.15,4.4,.8],
+      S1:[.9,9.1,3.8,.42], S2:[.9,9.72,3.8,.42], S3:[.9,10.34,3.8,.42], L7:[.3,11.1,4.4,.8], L8:[.3,12.15,4.4,.8], sbMe:[0,15,5,2],
+      back:[6.8,.55,2,.45], title:[6.8,1.25,11,1.15], save:[21.4,1.35,2.8,.9],
+      T1:[6.8,3,2.2,.7], T2:[9.3,3,2.2,.7], T3:[11.8,3,2.2,.7],
+      P1:[6.8,4.3,17,.32], P2:[6.8,4.9,16.2,.32], P3:[6.8,5.5,17,.32], P4:[6.8,6.1,10,.32], term:[11.2,4.86,3.4,.4],
+      B1:[6.8,7,5.4,3], B2:[12.6,7,5.4,3], B3:[18.4,7,5.4,3],
+      P5:[6.8,10.6,17,.32], P6:[6.8,11.2,16,.32], P7:[6.8,11.8,12,.32], hl:[9,11.16,8.5,.4],
+      cheat:[6.8,12.7,17,2.3], foot:[19.4,15.6,4.4,.9],
+      pop:[10.6,3.55,7,1.15], tool:[9.4,9.95,8.2,.85] },
+    steps: function(){
+      return [
+        { t:"Уроки курса", p:"В уроке меню превращается в список уроков: галочки у пройденных, под текущим — его разделы. «Главное меню» вернёт обычные пункты.", tag:"Уроки и разделы", at:"L1", w:{L1:1,L2:1,L3:1,L4:1,L5:1,L6:1,L7:1,L8:1,S1:1,S2:1,S3:1}, cam:[-30,5,1,1.12] },
+        { t:"Этапы урока", p:"Урок идёт по шагам: материал, видео, тест. Кнопка внизу сама ведёт к следующему этапу — ничего не нужно искать.", tag:"Материал · Видео · Тест", at:"T2", w:{T1:1,T2:1,T3:1,foot:.55}, cam:[-33,0,3,1.12] },
+        { t:"Термины", p:"Слова, подчёркнутые пунктиром, — термины курса. Наведите на них, и появится короткое определение.", tag:"Термин", at:"pop", w:{term:1}, show:["pop"], cam:[-29,-.5,2,1.2] },
+        { t:"Выделение текста", p:"Выделите фразу — появится панель: маркер, заметка, вопрос куратору, поиск по курсу. Маркеры сохраняются навсегда.", tag:"Маркер · заметка · вопрос", at:"tool", w:{P6:.5}, show:["hl","tool"], cam:[-31,-.5,-1.5,1.18] },
+        { t:"Сохранить и шпаргалка", p:"«★ Сохранить» кладёт урок в «Мой конспект». В конце каждого урока — шпаргалка: главное на одном экране.", tag:"Шпаргалка", at:"cheat", w:{save:1,cheat:1}, cam:[-35,-1,-.5,1.04] },
+        { t:"Тест и следующий урок", p:"Короткий тест проверяет главное. «Урок пройден» — галочка в списке, кольцо прогресса растёт, следующий урок открыт.", tag:"Урок пройден", at:"L6", w:{foot:1,sbTop:1,L6:.8}, done:true, cam:[-30,3.5,-.5,1.06] }
+      ];
+    }
+  }
+};
+var TOUR_DEMO = { pop:1, hl:1, tool:1 };
+function tourCoursePct(){
+  var pr = (course && course.progress) || {}, total = course && course.lessons ? course.lessons.length : 0;
+  return total ? Math.round(((pr.completed_lessons||[]).length + (pr.completed?1:0)) / (total+1) * 100) : 0;
+}
+// Вызывается после каждого render(): открывает нужный показ, если врач его ещё не видел.
+function tourMaybeStart(){
+  if(tour || tourPending || previewMode || (me && me.impersonator) || view!=="student" || !course || !course.progress || (course.locked||{}).locked) return;
+  var pr = course.progress, kind = null;
+  if(studentState.tab==="lesson" && !studentState.quizMode && !studentState.moduleGateStage && !pr.tour_lesson_seen && document.getElementById("lessonProse")) kind = "lesson";
+  else if(studentState.tab==="course" && !pr.tour_home_seen && document.querySelector(".hs-h") && !document.querySelector('[data-action="welcome-start"]')) kind = "home";
+  if(!kind) return;
+  tourPending = true;
+  setTimeout(function(){
+    tourPending = false;
+    // за это время врач мог уйти с экрана
+    if(kind==="lesson" ? !document.getElementById("lessonProse") : !document.querySelector(".hs-h")) return;
+    openTour(kind);
+  }, kind==="home" ? 1100 : 700);
+}
+function openTour(kind){
+  closeTour(true);
+  var def = TOUR[kind], steps = def.steps(), B = def.blocks;
+  var root = document.createElement("div"); root.className = "tour"; root.setAttribute("data-kind", kind);
+  var pct = tourCoursePct(), next = Math.min(100, pct + Math.round(100 / ((course.lessons||[]).length + 1)));
+  root.innerHTML = '<div class="tour-veil"></div>' +
+    '<div class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tourTitle"><div class="tour-in"><span class="tour-sheen"></span>' +
+      '<div class="tour-stage" aria-hidden="true"><div class="tour-float"><div class="tour-plane"><div class="tour-floor"></div>' +
+        Object.keys(B).map(function(k){
+          var b = B[k];
+          return '<div class="tb tb-'+k+(TOUR_DEMO[k]?' tb-demo':'')+'" data-k="'+k+'" style="left:'+b[0]+'rem;top:'+b[1]+'rem;width:'+b[2]+'rem;height:'+b[3]+'rem">' +
+            (k==="sbTop" ? '<span class="tb-ring" style="--tp:'+pct+'%"><b>'+pct+'%</b></span>' : '') + '<span class="tb-beam"></span></div>';
+        }).join("") +
+      '</div></div><span class="tour-scan"></span><span class="tour-lines"></span><span class="tour-tag"></span></div>' +
+      '<div class="tour-side"><div class="tour-k"></div><div class="tour-txt"><h3 id="tourTitle"></h3><p></p></div>' +
+        '<ol class="tour-list">'+steps.map(function(s, i){ return '<li><b>'+(i+1)+'</b><span>'+escapeHtml(s.t)+'</span></li>'; }).join("")+'</ol>' +
+        '<div class="tour-foot"><span class="tour-dots">'+steps.map(function(){ return '<i></i>'; }).join("")+'</span><span class="tour-sp"></span>' +
+          '<button type="button" class="tour-btn tour-back" data-tour="back" aria-label="Назад" title="Назад">←</button>' +
+          '<button type="button" class="tour-btn" data-tour="skip">Пропустить</button>' +
+          '<button type="button" class="tour-btn tour-next" data-tour="next"></button></div></div></div></div>';
+  document.body.appendChild(root);
+  tour = { kind:kind, i:-1, root:root, steps:steps, timers:[], next:next };
+  root.addEventListener("click", function(e){
+    var b = e.target.closest("[data-tour]"); if(!b) return;
+    var a = b.getAttribute("data-tour");
+    if(a==="next"){ if(tour.i >= tour.steps.length-1) finishTour(); else tourGo(tour.i+1); }
+    else if(a==="back"){ if(tour.i>0) tourGo(tour.i-1); }
+    else if(a==="skip") finishTour();
+  });
+  requestAnimationFrame(function(){ root.classList.add("open"); tourGo(0); var n = root.querySelector(".tour-next"); if(n) n.focus({ preventScroll:true }); });
+}
+function tourGo(i){
+  if(!tour) return;
+  var root = tour.root, s = tour.steps[i], first = tour.i < 0, B = TOUR[tour.kind].blocks;
+  tour.timers.forEach(clearTimeout); tour.timers = [];
+  tour.i = i;
+  // камера и подъём блоков — CSS-переходы (см. .tour-plane, .tb)
+  root.querySelector(".tour-plane").style.transform = "translate("+s.cam[1]+"rem,"+s.cam[2]+"rem) scale("+s.cam[3]+") rotateX(55deg) rotateZ("+s.cam[0]+"deg)";
+  Object.keys(B).forEach(function(k){
+    var b = root.querySelector('.tb[data-k="'+k+'"]'), w = s.w[k] || 0;
+    b.style.setProperty("--tw", w);
+    b.classList.toggle("on", w >= .9);
+    if(TOUR_DEMO[k]) b.classList.toggle("show", !!(s.show && s.show.indexOf(k)!==-1));
+  });
+  var l6 = root.querySelector('.tb[data-k="L6"]'); if(l6) l6.classList.toggle("done", !!s.done);
+  var ring = root.querySelector(".tb-ring");
+  if(ring){ var pv = s.done ? tour.next : tourCoursePct(); ring.style.setProperty("--tp", pv+"%"); ring.classList.toggle("grow", !!s.done);
+    tour.timers.push(setTimeout(function(){ var b = ring.querySelector("b"); if(b) b.textContent = pv+"%"; }, s.done ? 2400 : 0)); }
+  // текст: уходит старый, приходит новый
+  var txt = root.querySelector(".tour-txt");
+  var fill = function(){
+    root.querySelector(".tour-k").textContent = TOUR[tour.kind].kicker + " · " + (i+1) + " / " + tour.steps.length;
+    root.querySelector(".tour-txt h3").textContent = s.t; root.querySelector(".tour-txt p").textContent = s.p;
+    txt.classList.remove("out"); txt.classList.add("in");
+  };
+  if(first) fill(); else { txt.classList.remove("in"); txt.classList.add("out"); tour.timers.push(setTimeout(fill, 220)); }
+  root.querySelectorAll(".tour-list li").forEach(function(li, k){ li.className = k<i ? "ok" : (k===i ? "on" : ""); });
+  root.querySelectorAll(".tour-dots i").forEach(function(d, k){ d.className = k<i ? "ok" : (k===i ? "on" : ""); });
+  root.querySelector(".tour-next").textContent = i===tour.steps.length-1 ? (tour.kind==="lesson" ? "Понятно" : "Готово") : "Дальше →";
+  root.querySelector(".tour-back").hidden = i===0;
+  // подпись над поднятой зоной — когда камера доехала
+  var tag = root.querySelector(".tour-tag"); tag.classList.remove("on");
+  tour.timers.push(setTimeout(function(){ tourPlaceTag(); if(tour) tour.root.querySelector(".tour-tag").classList.add("on"); }, first ? 1300 : 1000));
+}
+function tourPlaceTag(){
+  if(!tour) return;
+  var s = tour.steps[tour.i], tag = tour.root.querySelector(".tour-tag"), stage = tour.root.querySelector(".tour-stage");
+  var b = tour.root.querySelector('.tb[data-k="'+s.at+'"]'); if(!b) return;
+  var r = b.getBoundingClientRect(), sr = stage.getBoundingClientRect();
+  tag.textContent = s.tag;
+  var x = Math.min(Math.max(r.left + r.width/2 - sr.left, 70), sr.width - 70), y = Math.max(r.top - sr.top - 10, 34);
+  tag.style.left = x + "px"; tag.style.top = y + "px";
+}
+function finishTour(){
+  if(!tour) return;
+  var kind = tour.kind;
+  if(course && course.progress) course.progress[kind==="lesson" ? "tour_lesson_seen" : "tour_home_seen"] = true;
+  if(!previewMode) api("/course/tour-seen", { method:"PUT", body: JSON.stringify({ tour: kind }) }).catch(function(){});
+  closeTour();
+}
+function closeTour(instant){
+  if(!tour) return;
+  var t = tour; tour = null;
+  t.timers.forEach(clearTimeout);
+  if(instant){ t.root.remove(); return; }
+  t.root.classList.remove("open"); t.root.classList.add("closing");
+  setTimeout(function(){ t.root.remove(); }, 650);
+}
+document.addEventListener("keydown", function(e){
+  if(!tour) return;
+  if(e.key==="Escape"){ e.preventDefault(); finishTour(); }
+  else if(e.key==="ArrowRight"){ e.preventDefault(); if(tour.i < tour.steps.length-1) tourGo(tour.i+1); }
+  else if(e.key==="ArrowLeft"){ e.preventDefault(); if(tour.i > 0) tourGo(tour.i-1); }
+}, true);
+window.addEventListener("resize", function(){ if(tour) tourPlaceTag(); });
+
 /* ============================= ВЫДЕЛЕНИЕ ТЕКСТА В УРОКЕ ============================= */
 // Врач выделяет фрагмент урока — над ним появляется панель: маркер (сохраняется
 // и подсвечивается при следующих открытиях), в заметку, спросить куратора,
@@ -1515,6 +1679,7 @@ function render(){
     // отсутствующими в DOM узлами.
     lessonPlyrInstance = null;
   }
+  if(view==="student") tourMaybeStart(); else if(tour) closeTour(true);
   syncNavHistory();
 }
 
@@ -4695,6 +4860,8 @@ function renderSettingsPage(){
         var on = homeBg()===x[0];
         return '<button type="button" class="fx-card'+(on?' on':'')+'" data-action="set-home-bg" data-bg="'+x[0]+'"><span class="fx-prev fxp-bg fxp-'+x[0]+'"><i></i><i></i><i></i></span><b>'+x[1]+(on?' <em>выбран</em>':'')+'</b><span>'+x[2]+'</span></button>';
       }).join("") + '</div></div>' +
+    (me.role==="student" && !previewMode && !me.impersonator ? '<div class="card co-card"><b class="co-card-title">Знакомство с платформой</b>' +
+      '<div class="set-row" style="border-bottom:none;"><div><b>Как всё устроено</b><span>Короткий показ главной и страницы урока — меньше минуты.</span></div><button class="btn btn-sm btn-ghost" data-action="tour-replay">Пройти заново</button></div></div>' : '') +
     '<div class="card co-card"><b class="co-card-title">Безопасность</b>' +
       '<div class="set-row"><div><b>Пароль</b><span>Меняйте пароль, если входили с чужого устройства.</span></div><button class="btn btn-sm btn-ghost" data-action="open-change-password">Сменить пароль</button></div>' +
       '<div class="set-row" style="border-bottom:none;"><div><b>Активные сеансы</b><span>С каких устройств входили в аккаунт.</span></div><button class="btn btn-sm btn-ghost" data-action="logout-everywhere">Выйти со всех устройств</button></div>' +
@@ -8719,6 +8886,13 @@ function wireEvents(root){
       // advanceAfterLesson() ДО того, как renderCoursePlayer показал этот гейт
       // (см. findPendingModuleGate); здесь просто убираем гейт с дороги.
       render(); return;
+    }
+    if(action==="tour-replay"){
+      // Оба показа снова «не просмотрены»: главная откроется сейчас, урок — при следующем входе в урок.
+      if(course && course.progress){ course.progress.tour_home_seen = false; course.progress.tour_lesson_seen = false; }
+      ["home","lesson"].forEach(function(k){ api("/course/tour-seen", { method:"PUT", body: JSON.stringify({ tour:k, seen:false }) }).catch(function(){}); });
+      studentState.tab = "course"; studentState.navKey = "course"; studentState.quizMode = false;
+      render(); window.scrollTo(0, 0); return;
     }
     if(action==="welcome-start"){
       // Приветствие уезжает, главная въезжает (см. .wl-leave / .home-enter в styles.css).

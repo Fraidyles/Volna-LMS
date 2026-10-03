@@ -195,6 +195,9 @@ ALTER TABLE progress ADD COLUMN IF NOT EXISTS last_streak_date DATE;
 ALTER TABLE progress ADD COLUMN IF NOT EXISTS onboarding_dismissed BOOLEAN NOT NULL DEFAULT false;
 -- Экран приветствия на главной врача: показан и закрыт кнопкой «Приступить к обучению».
 ALTER TABLE progress ADD COLUMN IF NOT EXISTS welcome_seen BOOLEAN NOT NULL DEFAULT false;
+-- Голограммное знакомство с платформой: главная и страница урока — по одному разу.
+ALTER TABLE progress ADD COLUMN IF NOT EXISTS tour_home_seen BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE progress ADD COLUMN IF NOT EXISTS tour_lesson_seen BOOLEAN NOT NULL DEFAULT false;
 
 -- Центр уведомлений врача.
 CREATE TABLE IF NOT EXISTS notifications (
