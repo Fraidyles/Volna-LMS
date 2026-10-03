@@ -207,6 +207,7 @@ var ICONS = {
   book: '<path d="M5 5.5A1.5 1.5 0 0 1 6.5 4H18v14H6.5A1.5 1.5 0 0 0 5 19.5v-14Z"/><path d="M5 19.5A1.5 1.5 0 0 0 6.5 21H18v-3"/><path d="M9 8h5"/>',
   shield: '<path d="M12 3.5l7 2.8v5.4c0 4.2-3 7.4-7 8.8-4-1.4-7-4.6-7-8.8V6.3l7-2.8Z"/><path d="M9 12l2 2 4-4"/>',
   chevron: '<path d="M6 9.5l6 6 6-6"/>',
+  chevleft: '<path d="M15 18l-6-6 6-6"/>',
   camera: '<path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.2l1.4-2h5.8l1.4 2h2.2A1.5 1.5 0 0 1 20 8.5v9A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5v-9Z"/><circle cx="12" cy="12.8" r="3.4"/>',
   trash: '<path d="M5 7h14"/><path d="M9 7V5.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5.5V7"/><path d="M7 7l1 12.5A1.5 1.5 0 0 0 9.5 21h5a1.5 1.5 0 0 0 1.5-1.5L17 7"/>',
   bell: '<path d="M6 10.5a6 6 0 0 1 12 0v4l1.8 3H4.2L6 14.5v-4Z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
@@ -2565,13 +2566,28 @@ function renderSidebar(){
       '<span class="sbx-btns"><a href="?tab=settings" class="sbx-ib'+(navKeyNow==="settings"?' on':'')+'" data-action="sidebar-nav" data-key="settings" title="Настройки">'+icon("gear")+'</a>' +
       '<button type="button" class="sbx-ib" data-action="logout" title="Выйти">'+icon("logout")+'</button></span></div>';
   }
+  // На уроке развёрнутый сайдбар — навигатор курса: уроки и разделы вместо пунктов меню.
+  // «Главное меню» временно возвращает пункты; на телефоне меню всегда обычное (см. CSS).
+  var lessonsMode = view==="student" && studentState.tab==="lesson" && course && course.lessons && !collapsed;
+  var navPane;
+  if(lessonsMode && !studentState.sbMainMenu){
+    navPane = '<div class="sbx-lessons">' +
+        '<button type="button" class="sbx-switch" data-action="sb-main-menu">'+icon("chevleft")+'Главное меню</button>' +
+        '<div class="sbx-k">Уроки курса</div>' + lessonNavHtml() +
+      '</div>' +
+      '<div class="sidebar-nav sbx-nav-m">'+items+'</div>';
+  } else {
+    navPane = '<div class="sidebar-nav">' +
+      (lessonsMode ? '<button type="button" class="sbx-switch sbx-switch-l" data-action="sb-lessons">'+icon("list")+'Уроки курса</button>' : '') +
+      items+'</div>';
+  }
   return el(
-    '<div class="sidebar sbx'+(collapsed?' collapsed':'')+(mobileNavOpen?' mobile-open':'')+'">' +
+    '<div class="sidebar sbx'+(collapsed?' collapsed':'')+(mobileNavOpen?' mobile-open':'')+(lessonsMode && !studentState.sbMainMenu?' has-lessons':'')+'">' +
       '<div class="sbx-top">'+top +
         '<button type="button" class="sbx-collapse" data-action="toggle-sidebar" title="'+(collapsed?'Развернуть меню':'Свернуть меню')+'" aria-label="'+(collapsed?'Развернуть меню':'Свернуть меню')+'">'+icon("panel")+'</button>' +
         '<button type="button" class="sidebar-toggle" data-action="toggle-mobile-nav" title="Меню" aria-label="Меню">'+icon(mobileNavOpen?"close":"menu")+'</button>' +
       '</div>' +
-      '<div class="sidebar-nav">'+items+'</div>' + next + meRow +
+      navPane + next + meRow +
     '</div>'
   );
 }
@@ -3414,6 +3430,7 @@ function lessonStagesFor(lesson){
 }
 function resetLessonStageState(){
   studentState.lessonStage = "intro";
+  studentState.sbMainMenu = false;
   studentState.videoEnded = false;
   studentState.lessonQuizResult = null;
   Object.keys(quizRuns).forEach(function(k){ if(k.indexOf("lesson:")===0) delete quizRuns[k]; });
@@ -3470,23 +3487,11 @@ function advanceAfterLesson(){
   else { showToast("Пока больше нечего проходить — куратор скоро откроет остальные материалы"); studentState.tab="course"; studentState.quizMode=false; }
 }
 
-function renderCoursePlayer(){
-  if(!studentState.moduleGateStage){
-    var pendingModule = findPendingModuleGate();
-    if(pendingModule){
-      studentState.moduleGateId = pendingModule.id;
-      studentState.moduleGateStage = (pendingModule.quiz && pendingModule.quiz.length) ? "quiz" : "feedback";
-      studentState.moduleQuizResult = null;
-      studentState.moduleFeedbackRating = 0;
-      studentState.moduleFeedbackComment = "";
-    }
-  }
-  if(studentState.moduleGateStage) return renderModuleGate();
-  if(studentState.quizMode) return renderQuizOrCert();
+// Список уроков курса с разделами текущего: в сайдбаре (компьютер) и в плеере (телефон,
+// свёрнутое меню).
+function lessonNavHtml(){
   var idx = studentState.lessonIndex;
-  var lesson = course.lessons[idx];
   var doneIds = (course.progress && course.progress.completed_lessons) || [];
-
   var nav = '<div class="lesson-nav">';
   course.lessons.forEach(function(l,i){
     var isDone = doneIds.indexOf(l.id)!==-1;
@@ -3507,6 +3512,26 @@ function renderCoursePlayer(){
   nav += '<div class="lesson-item'+(studentState.quizMode?' active':'')+'" data-action="goto-quiz"'+(course.quizHiddenForMe?' style="opacity:.45;cursor:not-allowed;"':'')+'>' +
     '<span class="lesson-num">'+(course.quizHiddenForMe?icon("lock","ic-sm"):(course.progress && course.progress.completed?icon("check","ic-sm"):icon("star","ic-sm")))+'</span><div><b>Итоговый тест</b><span>'+(course.quizHiddenForMe?'Временно недоступен':course.quiz.length+' вопросов')+'</span></div></div>';
   nav += '</div>';
+  return nav;
+}
+function renderCoursePlayer(){
+  if(!studentState.moduleGateStage){
+    var pendingModule = findPendingModuleGate();
+    if(pendingModule){
+      studentState.moduleGateId = pendingModule.id;
+      studentState.moduleGateStage = (pendingModule.quiz && pendingModule.quiz.length) ? "quiz" : "feedback";
+      studentState.moduleQuizResult = null;
+      studentState.moduleFeedbackRating = 0;
+      studentState.moduleFeedbackComment = "";
+    }
+  }
+  if(studentState.moduleGateStage) return renderModuleGate();
+  if(studentState.quizMode) return renderQuizOrCert();
+  var idx = studentState.lessonIndex;
+  var lesson = course.lessons[idx];
+  var doneIds = (course.progress && course.progress.completed_lessons) || [];
+
+  var nav = lessonNavHtml();
 
   if(lesson.hiddenForMe || lesson.dripLockedForMe){
     var lockedText = lesson.hiddenForMe ? 'Этот урок временно недоступен.<br>Куратор откроет его позже.' : 'Этот урок ещё не открылся.<br>Станет доступен '+fmtDate(lesson.availableAt)+'.';
@@ -8473,7 +8498,8 @@ function wireEvents(root){
     if(action==="toggle-sidebar"){ try{ localStorage.setItem("lms-sb-collapsed", sidebarCollapsed() ? "0" : "1"); }catch(err){} render(); return; }
     if(action==="toggle-mobile-nav"){ mobileNavOpen = !mobileNavOpen; render(); return; }
     if(action==="close-mobile-nav"){ mobileNavOpen = false; render(); return; }
-    if(action==="sidebar-nav"){
+    if(action==="sb-main-menu" || action==="sb-lessons"){ studentState.sbMainMenu = action==="sb-main-menu"; render(); return; }
+    if(action==="sidebar-nav"){ studentState.sbMainMenu = false;
       // Пункты меню — теперь настоящие <a href="?tab=..."> (см. sidebarItem), чтобы
       // по ним работало ПКМ → «Открыть в новой вкладке» и Ctrl/⌘+клик — в этих
       // случаях отдаём браузеру его обычное поведение, а не гасим клик как обычно.
