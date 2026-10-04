@@ -2721,15 +2721,7 @@ function renderSidebar(){
     var pct = Math.round((doneIds.length + (pr.completed?1:0)) / (total+1) * 100);
     top = '<div class="sbx-ring" style="--p:'+pct+'%"><b>'+pct+'%</b></div>' +
       '<div class="sbx-title"><strong>'+escapeHtml(course.course.title)+'</strong><span>'+doneIds.length+' из '+total+' '+ruPluralClient(total,"урока","уроков","уроков")+'</span></div>';
-    var curIdx = -1; course.lessons.forEach(function(l,i){ if(curIdx<0 && doneIds.indexOf(l.id)===-1 && !l.hiddenForMe && !l.dripLockedForMe) curIdx = i; });
-    if(!previewMode && !(course.locked||{}).locked && studentState.tab!=="lesson" && studentState.tab!=="course"){
-      if(curIdx>=0){
-        var nl = course.lessons[curIdx];
-        next = '<button type="button" class="sbx-next" data-action="open-lesson-at" data-idx="'+curIdx+'" title="Продолжить: '+escapeHtml(nl.title)+'"><span class="sbx-next-k">Продолжить'+(nl.duration?' · '+escapeHtml(nl.duration):'')+'</span><b>'+escapeHtml(nl.title)+'</b><span class="sbx-go">'+icon("go")+'</span></button>';
-      } else if(!pr.completed && !course.quizHiddenForMe){
-        next = '<button type="button" class="sbx-next" data-action="open-final-quiz" title="Итоговый тест"><span class="sbx-next-k">Остался последний шаг</span><b>Итоговый тест</b><span class="sbx-go">'+icon("go")+'</span></button>';
-      }
-    }
+    // Карточки «Продолжить» внизу меню нет: продолжить урок можно с главной («Ваш следующий шаг»).
   } else {
     var roleLabel = { super_admin:"Главный администратор", admin:"Администратор", curator:"Куратор", student:"Врач" }[me && me.role] || "";
     top = '<div class="sbx-mark">'+icon("doctor")+'</div><div class="sbx-title"><strong>Медицина Долголетия</strong><span>'+(view==="student"?"Демо-курс":escapeHtml(roleLabel))+'</span></div>';
@@ -4802,13 +4794,13 @@ function roleCapabilities(role){
   if(role==="student"){
     return [
       { label:"Просматривать уроки, материалы и расписание эфиров", allowed:true },
-      { label:"Проходить итоговый тест и получать сертификат", allowed:true },
+      { label:"Проходить итоговый тест", allowed:true },
       { label:"Общаться с куратором и потоком в Telegram-группе", allowed:true },
       { label:"Сохранять уроки в «Мои материалы» и оставлять личные заметки", allowed:true },
       { label:"Отвечать на задания к урокам и заполнять анкеты", allowed:true },
       { label:"Просматривать прогресс и данные других врачей", allowed:false },
       { label:"Редактировать уроки, тест или график их открытия", allowed:false },
-      { label:"Управлять доступом, сертификатами или ролями сотрудников", allowed:false }
+      { label:"Управлять доступом и ролями сотрудников", allowed:false }
     ];
   }
   if(role==="curator"){
@@ -4864,7 +4856,7 @@ function renderMyProfilePage(){
   var specNamesList = isStudent ? (me.specializationIds||[]).map(function(id){ var sp=(specializationsList||[]).find(function(x){ return x.id===id; }); return sp?sp.name:null; }).filter(Boolean) : [];
   var myStream = isStudent && me.stream_id ? (calendarState.streams||[]).find(function(x){ return x.id===me.stream_id; }) : null;
 
-  var html = '<div class="page-wide"><div class="card profile-hero">' +
+  var html = '<div class="page-wide acc-page"><div class="card profile-hero">' +
     '<div class="profile-cover aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
     '<div class="profile-main">' +
       '<div class="profile-photo">'+userAvatar(me, "profile-av")+
