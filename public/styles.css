@@ -3246,3 +3246,20 @@ body.qz-ord-dragging{cursor:grabbing;user-select:none;-webkit-user-select:none;}
 .mf-lbl{min-height:1.25rem;margin:.375rem 0 1.25rem;font-size:.875rem;font-weight:600;color:var(--muted);}
 .mf-ta{width:100%;height:5.5rem;text-align:left;}
 .mf-go{margin-top:1rem;width:100%;}
+/* «Профиль и настройки» — спокойнее: без обложки и чипов, одна колонка одинаковых карточек, цифры строкой */
+.acc-page{max-width:48rem;margin:0 auto;}
+.acc-page .profile-cover,.acc-page .acc-nav,.acc-page .profile-photo-actions,.acc-page .profile-kicker{display:none;}
+.acc-page .profile-main{margin:0;padding:1.5rem 1.75rem;align-items:center;gap:1.25rem;}
+.acc-page .profile-av{width:4.5rem;height:4.5rem;font-size:1.375rem;border:none;box-shadow:none;}
+.acc-page .profile-photo-btn{width:1.75rem;height:1.75rem;right:-.125rem;bottom:-.125rem;}
+.acc-page .profile-id{gap:.375rem;min-width:0;}
+.acc-page .profile-id h1{font-size:1.5rem;}
+.acc-page .profile-stats{width:100%;gap:.5rem 1.5rem;flex-wrap:wrap;padding:1rem 0 0;margin-top:.25rem;border-top:1px solid color-mix(in srgb,var(--ink) 8%,transparent);}
+.acc-page .profile-stats div{flex-direction:row;align-items:baseline;gap:.375rem;padding:0;min-width:0;background:none;border:none;}
+.acc-page .profile-stats b{font-size:1rem;}
+.acc-page .profile-stats span{font-size:.8125rem;}
+.acc-page .acc-grid{display:flex;flex-direction:column;align-items:stretch;gap:1rem;margin-top:1rem;}
+.acc-page .acc-grid .pp-col{display:contents;}
+.acc-page .acc-grid .co-card{width:100%;box-sizing:border-box;padding:1.5rem 1.75rem;}
+.acc-page #acc-personal{order:1;} .acc-page #acc-look{order:2;} .acc-page #acc-security{order:3;} .acc-page #acc-tour{order:4;} .acc-page #acc-access{order:5;}
+@media (max-width:640px){ .acc-page .profile-main{padding:1.25rem;flex-direction:column;align-items:flex-start;} .acc-page .acc-grid .co-card{padding:1.25rem;} }
