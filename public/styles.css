@@ -116,8 +116,10 @@
 
 *{box-sizing:border-box;}
 html{-webkit-text-size-adjust:100%;}
-/* Масштаб интерфейса: все размеры в rem, на компьютерах — чуть крупнее. */
-@media (min-width:1100px){html{font-size:106.25%;}}
+/* Масштаб интерфейса: все размеры в rem, на компьютерах — чуть крупнее. Множитель
+   --ui-scale выбирает сам человек в настройках (несколько фиксированных шагов). */
+html{font-size:calc(100% * var(--ui-scale, 1));}
+@media (min-width:1100px){html{font-size:calc(106.25% * var(--ui-scale, 1));}}
 body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;transition:background .15s ease,color .15s ease;font-variant-numeric:tabular-nums;isolation:isolate;}
 body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--ambient-glow);filter:blur(var(--ambient-blur));}
 h1,h2,h3{font-family:var(--sans);font-weight:600;letter-spacing:-0.01em;margin:0;}
@@ -3219,11 +3221,11 @@ body.qz-ord-dragging{cursor:grabbing;user-select:none;-webkit-user-select:none;}
 @media (max-width:640px){ .acc-page .profile-main{padding:1.25rem;flex-direction:column;align-items:flex-start;} .acc-page .acc-grid .co-card{padding:1.25rem;} }
 
 /* ---------- Главная: карточка курса + стеклянная панель урока с 3D-объектом ---------- */
-.hx-info{display:flex;align-items:center;gap:1.5rem;padding:1.375rem 1.75rem;}
-.hx-t{flex:1;min-width:0;}
+.hx-info{display:flex;flex-wrap:wrap;align-items:center;gap:1rem 1.5rem;padding:1.375rem 1.75rem;}
+.hx-t{flex:1 1 13rem;min-width:0;}
 .hx-t b{display:block;font-size:1rem;}
 .hx-t small{display:block;color:var(--muted);font-size:.8125rem;margin-top:.25rem;}
-.hx-track{flex:1.1;min-width:10rem;max-width:22rem;}
+.hx-track{flex:1.4 1 14rem;}
 .hx-track i{display:block;height:.375rem;border-radius:1rem;background:color-mix(in srgb,var(--ink) 9%,transparent);overflow:hidden;}
 .hx-track i b{display:block;height:100%;background:linear-gradient(90deg,var(--primary),var(--rose));border-radius:inherit;}
 .hx-track>span{display:flex;justify-content:space-between;gap:.75rem;font-size:.75rem;color:var(--muted);margin-top:.5rem;}
@@ -3253,7 +3255,6 @@ body.qz-ord-dragging{cursor:grabbing;user-select:none;-webkit-user-select:none;}
 .fxp-3d-live::after{animation:fxp3d 3s ease-in-out infinite;}
 @keyframes fxp3d{50%{transform:translateY(-.25rem) scale(1.08);}}
 @media (prefers-reduced-motion:reduce){.fxp-3d-live::after{animation:none;}}
-@media (max-width:900px){.hx-info{flex-wrap:wrap;gap:1rem 1.5rem;}.hx-track{order:3;flex-basis:100%;max-width:none;}}
 @media (max-width:640px){
   .hx-info{padding:1.125rem 1.25rem;}
   .hx-t{flex-basis:100%;}
@@ -3264,3 +3265,12 @@ body.qz-ord-dragging{cursor:grabbing;user-select:none;-webkit-user-select:none;}
   .hx-stage[data-kind="orbit"]::before{display:none;}
   .hx-h{font-size:1.375rem;}
 }
+
+/* настройка «Масштаб» */
+.scale-opts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.375rem;}
+.scale-opt{display:flex;flex-direction:column;align-items:center;gap:.25rem;padding:.625rem .25rem .5rem;border-radius:.75rem;border:1px solid var(--line-2);background:transparent;color:var(--ink);font:inherit;cursor:pointer;transition:border-color .15s ease,background .15s ease;}
+.scale-opt:hover{border-color:color-mix(in srgb,var(--primary) 45%,transparent);}
+.scale-opt.on{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 10%,transparent);}
+.scale-opt b{font-weight:700;line-height:1;height:1.5rem;display:flex;align-items:flex-end;}
+.scale-opt span{font-size:.6875rem;color:var(--muted);}
+.scale-hint{font-size:.75rem;color:var(--muted);margin:.5rem 0 0;}

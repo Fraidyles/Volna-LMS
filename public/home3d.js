@@ -113,9 +113,15 @@ function sceneOrbit(o){
     root.add(g); let gl = null; if (cur) { gl = glow('#FF7AA8', size * 6, .55); root.add(gl); }
     pl.push({ g, sph, m, am, gl, rr, tilt, ph: cur ? -0.45 - i / 8 * .8 - (o.t0) * .015 : i * 2.4 + 1, sp: cur ? .015 : .26 / Math.sqrt(rr), cur, spin: .15 + (i % 4) * .08 });
   }
-  root.rotation.z = .16; root.position.x = o.shift == null ? 2.0 : o.shift; root.scale.setScalar(o.center ? .72 : .78);
+  root.rotation.z = .16;
+  // Раскладка от пропорций панели: широкая — система справа от текста; узкая и высокая
+  // (крупный масштаб интерфейса) — сверху справа, мельче; на телефоне — по центру над текстом.
+  const place = () => { const halfW = 16 * Math.tan(16 * Math.PI / 180) * cam.aspect, halfH = halfW / cam.aspect;
+    if (o.stack) { root.position.set(0, 0, 0); root.scale.setScalar(.72); }
+    else if (cam.aspect < 1.25) { root.position.set(.38 * halfW, .32 * halfH, 0); root.scale.setScalar(.6); }
+    else { root.position.set(.55 * halfW, 0, 0); root.scale.setScalar(.78); } };
   const sunW = new THREE.Vector3();
-  const frame = t => { sunMat.uniforms.t.value = t; sun.rotation.y = t * .05; corona1.scale.setScalar(4.2 + Math.sin(t * 1.3) * .15);
+  const frame = t => { place(); sunMat.uniforms.t.value = t; sun.rotation.y = t * .05; corona1.scale.setScalar(4.2 + Math.sin(t * 1.3) * .15);
     root.updateMatrixWorld(); sun.getWorldPosition(sunW);
     pl.forEach(q => { const a = q.ph + t * q.sp, x = Math.cos(a) * q.rr, z = Math.sin(a) * q.rr; q.g.position.set(x, -z * Math.sin(q.tilt), z * Math.cos(q.tilt)); q.sph.rotation.y = t * q.spin;
       q.m.uniforms.t.value = t; q.m.uniforms.sunW.value.copy(sunW); q.am.uniforms.sunW.value.copy(sunW);
@@ -293,15 +299,21 @@ function sceneHero(kind, o){
     const bg = glow('#9D7BFF', 6, .16); bg.position.z = -2; g.add(bg);
     return g; };
   const build = kind === 'cell' ? CELL : kind === 'waves' ? WAVES : LIQ;
-  const HERO = new THREE.Vector3(o.center ? 0 : 2.05, o.center ? .1 : -.05, 0);
-  { const c = (o.cur >= 0 ? o.cur : 8) % 9; const h = build(c); h.position.copy(HERO); h.scale.setScalar((kind === 'cell' ? ([1,2,6,7].includes(c) ? 1.05 : 1.4) : kind === 'waves' ? 1.2 : kind === 'pearl' ? 1.05 : 1.25) * (o.center ? .95 : 1)); if (kind === 'pearl') h.position.y += .2; root.add(h); }
-  const frame = t => { T.value = t; tick.forEach(f => f(t));
+  const c = (o.cur >= 0 ? o.cur : 8) % 9, hero = build(c), baseS = kind === 'cell' ? ([1,2,6,7].includes(c) ? 1.05 : 1.4) : kind === 'waves' ? 1.2 : kind === 'pearl' ? 1.05 : 1.25;
+  root.add(hero);
+  // Раскладка от пропорций панели (см. сцену орбит): справа от текста / сверху справа / по центру.
+  const place = () => { const halfH = 14 * Math.tan(15 * Math.PI / 180), halfW = halfH * cam.aspect; let x, y, k;
+    if (o.stack) { x = 0; y = .1; k = .95; }
+    else if (cam.aspect < 1.25) { x = .34 * halfW; y = .36 * halfH; k = .72; }
+    else { x = .366 * halfW; y = -.05; k = 1; }
+    hero.position.set(x, y + (kind === 'pearl' ? .2 * k : 0), 0); hero.scale.setScalar(baseS * k); };
+  const frame = t => { place(); T.value = t; tick.forEach(f => f(t));
     cam.position.x += (o.ptr.x * 1.1 - cam.position.x) * .05; cam.position.y += (-o.ptr.y * .8 - cam.position.y) * .05; cam.lookAt(0, 0, 0);
     r.render(sc, cam); };
   return { renderer:r, camera:cam, scene:sc, frame:frame };
 }
 
-// kind: orbit | cell | waves | pearl | dusk. o: { w, h, done, cur, total, center, ptr:{x,y}, slow, allowSlow, t0 }
+// kind: orbit | cell | waves | pearl | dusk. o: { w, h, done, cur, total, stack, ptr:{x,y}, slow, allowSlow, t0 }
 window.LmsHome3D = {
   create: function(kind, o){ return kind === 'orbit' ? sceneOrbit(o) : sceneHero(kind, o); },
   dispose: function(s){

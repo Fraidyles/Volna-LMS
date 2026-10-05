@@ -2802,6 +2802,18 @@ function applyTheme(){
   if(SKY_THEMES[t]) root.setAttribute("data-sky", t); else root.removeAttribute("data-sky");
   skyStart(SKY_THEMES[t] ? t : null);
 }
+// Масштаб интерфейса — фиксированные шаги, чтобы не было нечитаемо мелко или
+// огромно; всё в rem, поэтому меняется пропорционально. Хранится в браузере.
+var UI_SCALES = [["85","Мельче",.85],["92","Компактный",.925],["100","Стандартный",1],["110","Крупный",1.1],["120","Очень крупный",1.2]];
+function getUiScale(){
+  var v = null; try{ v = localStorage.getItem("lms-scale"); }catch(e){}
+  return UI_SCALES.some(function(x){ return x[0]===v; }) ? v : "100";
+}
+function applyUiScale(){
+  var v = getUiScale(), k = 1;
+  UI_SCALES.forEach(function(x){ if(x[0]===v) k = x[2]; });
+  if(k===1) document.documentElement.style.removeProperty("--ui-scale"); else document.documentElement.style.setProperty("--ui-scale", String(k));
+}
 function setTheme(t){
   try{
     localStorage.setItem("lms-theme", t);
@@ -2896,8 +2908,9 @@ function home3dSync(){
   if(!window.LmsHome3D){ home3dLoad(home3dSync); return; }
   var w = host.clientWidth, h = host.clientHeight;
   if(!w || !h) return;
-  var center = w / h < 1.25, kind = host.getAttribute("data-kind");
-  var key = [kind, host.getAttribute("data-done"), host.getAttribute("data-cur"), host.getAttribute("data-total"), center].join("|");
+  // На телефоне холст стоит отдельным блоком над текстом (не absolute) — объект по центру.
+  var stack = getComputedStyle(host).position!=="absolute", kind = host.getAttribute("data-kind");
+  var key = [kind, host.getAttribute("data-done"), host.getAttribute("data-cur"), host.getAttribute("data-total"), stack].join("|");
   if(h3.s && h3.key===key){
     if(h3.cv.parentNode!==host) host.appendChild(h3.cv);
     if(h3.w!==w || h3.h!==h){ h3.w = w; h3.h = h; h3.s.renderer.setSize(w, h, false); h3.s.camera.aspect = w/h; h3.s.camera.updateProjectionMatrix(); h3.last = 0; }
@@ -2906,7 +2919,7 @@ function home3dSync(){
   home3dStop();
   h3.t0 = performance.now()/1000;
   var o = { w:w, h:h, done:+host.getAttribute("data-done"), cur:+host.getAttribute("data-cur"), total:+host.getAttribute("data-total"),
-    center:center, shift: center ? 0 : 3.8, ptr:h3.ptr, t0:h3.t0 };
+    stack:stack, ptr:h3.ptr, t0:h3.t0 };
   var s = null;
   // Без аппаратного ускорения сцену всё равно показываем, но одним кадром в пониженном разрешении.
   try{ s = LmsHome3D.create(kind, o); h3.slow = false; }
@@ -4942,6 +4955,10 @@ function settingsCards(){
   }
   var left = '<div class="card co-card" id="acc-look"><b class="co-card-title">Внешний вид</b>' +
       '<b class="fx-title" style="margin-top:0;">Тема</b><div class="theme-cards">'+themeCard("dark","Тёмная","moon")+themeCard("light","Светлая","sun")+themeCard("depth","Глубина","sparkle")+themeCard("stars","Созвездие","star")+themeCard("cells","Клетки","eye")+'</div>' +
+      '<b class="fx-title">Масштаб</b><div class="scale-opts">' + UI_SCALES.map(function(x){
+        var on = getUiScale()===x[0];
+        return '<button type="button" class="scale-opt'+(on?' on':'')+'" data-action="set-ui-scale" data-v="'+x[0]+'" aria-pressed="'+on+'"><b style="font-size:'+(x[2]*1.0625).toFixed(3)+'rem">Аа</b><span>'+x[0]+'%</span></button>';
+      }).join("") + '</div><p class="scale-hint">'+(UI_SCALES.filter(function(x){ return x[0]===getUiScale(); })[0][1])+'. Меняет размер всего интерфейса — удобно для небольшого ноутбука или большого монитора.</p>' +
       '<b class="fx-title">Анимация главной</b><div class="fx-cards">' + HOME_FX.map(function(x){
         var on = homeFx()===x[0], text = me.role!=="student" && HOME_FX_STAFF_TEXT[x[0]] ? HOME_FX_STAFF_TEXT[x[0]] : x[2];
         return '<button type="button" class="fx-card'+(on?' on':'')+'" data-action="set-home-fx" data-fx="'+x[0]+'"><span class="fx-prev '+(x[0]==="live"?"fxp-cascade fxp-light":"fxp-"+x[0])+'"><i></i><i></i><i></i></span><b>'+x[1]+(on?' <em>выбрана</em>':'')+'</b><span>'+text+'</span></button>';
@@ -8865,6 +8882,7 @@ function wireEvents(root){
       embers = []; render();
       showToast("Фон главной: «"+t.querySelector("b").childNodes[0].textContent.trim()+"» — посмотрите на главной"); return;
     }
+    if(action==="set-ui-scale"){ try{ localStorage.setItem("lms-scale", t.getAttribute("data-v")); }catch(err){} applyUiScale(); render(); return; }
     if(action==="set-home-3d"){ try{ localStorage.setItem("lms-home-3d", t.getAttribute("data-v")); }catch(err){} render(); showToast("3D на главной: «"+t.querySelector("b").childNodes[0].textContent.trim()+"»"); return; }
     if(action==="set-home-fx"){ try{ localStorage.setItem("lms-home-fx", t.getAttribute("data-fx")); }catch(err){} render(); showToast("Анимация главной: «"+t.querySelector("b").childNodes[0].textContent.trim()+"» — посмотрите на главной"); return; }
     if(action==="final-quiz-retry"){ delete quizRuns["final"]; studentState.quizSubmitted=false; render(); window.scrollTo(0,0); return; }
@@ -10535,6 +10553,7 @@ document.addEventListener("dragend", function(){
 });
 
 applyTheme();
+applyUiScale();
 init();
 
 // Вынесено сюда из index.html (было инлайновым <script>) — так CSP может запрещать
