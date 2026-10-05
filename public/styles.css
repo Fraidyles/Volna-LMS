@@ -116,8 +116,10 @@
 
 *{box-sizing:border-box;}
 html{-webkit-text-size-adjust:100%;}
-/* Масштаб интерфейса: все размеры в rem, на компьютерах — чуть крупнее. */
-@media (min-width:1100px){html{font-size:106.25%;}}
+/* Масштаб интерфейса: все размеры в rem, на компьютерах — чуть крупнее. Множитель
+   --ui-scale выбирает сам человек в настройках (несколько фиксированных шагов). */
+html{font-size:calc(100% * var(--ui-scale, 1));}
+@media (min-width:1100px){html{font-size:calc(106.25% * var(--ui-scale, 1));}}
 body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;transition:background .15s ease,color .15s ease;font-variant-numeric:tabular-nums;isolation:isolate;}
 body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--ambient-glow);filter:blur(var(--ambient-blur));}
 h1,h2,h3{font-family:var(--sans);font-weight:600;letter-spacing:-0.01em;margin:0;}
@@ -2139,46 +2141,16 @@ body.qz-ord-dragging{cursor:grabbing;user-select:none;-webkit-user-select:none;}
 .home-main > .card[style*="margin-bottom"]{margin-bottom:0 !important;}
 
 /* «Дальше по курсу» */
-.home-next{padding:1.125rem 1.25rem .625rem;}
-.hn-row{display:flex;align-items:center;gap:.875rem;padding:.6875rem .625rem;margin:0 -.625rem;border-radius:.75rem;cursor:pointer;transition:background .15s;}
-.hn-row:hover{background:var(--surface-2);}
-.hn-row.locked{cursor:default;opacity:.62;}
-.hn-row.locked:hover{background:none;}
-.hn-row + .hn-row{border-top:1px solid var(--line-2);border-radius:0;}
-.hn-row + .hn-row:hover{border-radius:0;}
-.hn-num{flex:0 0 1.875rem;height:1.875rem;border-radius:.625rem;display:grid;place-items:center;font-size:.8125rem;font-weight:700;color:var(--muted);
   background:var(--surface-2);border:1px solid var(--line-2);}
-.hn-row.cur .hn-num{background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:0 0 .875rem -.125rem color-mix(in srgb,var(--primary) 60%,transparent);}
-.hn-body{flex:1;min-width:0;}
-.hn-body b{display:block;font-size:.875rem;font-weight:600;line-height:1.35;}
-.hn-body span{display:block;font-size:.75rem;color:var(--muted);margin-top:.125rem;}
-.hn-st{flex:0 0 auto;display:inline-flex;align-items:center;gap:.3125rem;font-size:.75rem;color:var(--muted);white-space:nowrap;}
-.hn-st.done{color:var(--status-active);}
-.hn-st.cur{color:var(--primary);font-weight:600;}
-.hn-final .hn-num{color:var(--status-attention);}
 
-/* конспект и протоколы */
-.home-extras{display:grid;grid-template-columns:repeat(auto-fit,minmax(16.25rem,1fr));gap:.875rem;}
-.home-stats{display:flex;gap:1.375rem;flex-wrap:wrap;margin:.125rem 0 .5rem;}
-.home-stats b{display:block;font-size:1.375rem;font-weight:700;letter-spacing:-.02em;line-height:1.1;}
-.home-stats span{display:block;font-size:.75rem;color:var(--muted);margin-top:.125rem;}
-.home-quote{margin:.25rem 0 0;padding:.5rem .75rem;border-left:.1875rem solid var(--primary);border-radius:.5rem;font-size:.8125rem;line-height:1.5;
-  background:color-mix(in srgb,var(--primary) 9%,transparent);}
 
 /* правая колонка */
-.home-pts{height:.375rem;border-radius:6.1875rem;background:var(--line-2);margin-top:.75rem;overflow:hidden;align-self:stretch;}
-.home-pts i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--primary),var(--status-active));}
 .home-cur{display:flex;align-items:center;gap:.625rem;margin-bottom:.625rem;}
 .home-cur .home-cur-av{width:2.375rem;height:2.375rem;font-size:.8125rem;}
 .home-cur b{display:block;font-size:.875rem;font-weight:600;}
 .home-cur span{display:block;font-size:.75rem;color:var(--muted);}
-.home-notifs{display:flex;flex-direction:column;align-self:stretch;}
-.home-notifs div{font-size:.8125rem;font-weight:600;padding:.5rem 0;border-top:1px solid var(--line-2);}
-.home-notifs div:first-child{border-top:none;padding-top:0;}
-.home-ref{display:flex;gap:.375rem;margin-top:.75rem;align-self:stretch;}
-.home-ref .input{font-size:.75rem;min-width:0;}
-/* Узкий экран — одна колонка в осмысленном порядке: курс → эфир и прогресс →
-   что дальше → куратор, уведомления, приглашение (а не вся правая колонка в конце). */
+/* Узкий экран — одна колонка в осмысленном порядке: курс и урок, анкета (без
+   класса ho-*, порядок 0 — как в разметке), затем куратор и эфир (ho-1). */
 @media (max-width:1099px){
   .home-grid{display:flex;flex-direction:column;}
   .home-main,.home-rail{display:contents;}
@@ -2195,21 +2167,18 @@ body.qz-ord-dragging{cursor:grabbing;user-select:none;-webkit-user-select:none;}
 @keyframes fxSide{from{opacity:0;transform:translateX(1.625rem);}to{opacity:1;transform:none;}}
 @keyframes fxRow{from{opacity:0;transform:translateX(-.625rem);}to{opacity:1;transform:none;}}
 @keyframes fxBar{from{transform:scaleX(0);}to{transform:scaleX(1);}}
-.fx-cascade .home-main > *,.fx-cascade .home-extras > *{animation:fxUp .7s cubic-bezier(.16,1,.3,1) both;}
+.fx-cascade .home-main > *{animation:fxUp .7s cubic-bezier(.16,1,.3,1) both;}
 .fx-cascade .home-rail > *{animation:fxSide .7s cubic-bezier(.16,1,.3,1) both;}
 .fx-cascade .home-main > :nth-child(1){animation-delay:.02s;} .fx-cascade .home-main > :nth-child(2){animation-delay:.1s;}
 .fx-cascade .home-main > :nth-child(3){animation-delay:.18s;} .fx-cascade .home-main > :nth-child(4){animation-delay:.26s;}
 .fx-cascade .home-main > :nth-child(5){animation-delay:.34s;} .fx-cascade .home-main > :nth-child(6){animation-delay:.42s;}
-.fx-cascade .home-extras > :nth-child(2){animation-delay:.52s;}
 .fx-cascade .home-rail > :nth-child(1){animation-delay:.14s;} .fx-cascade .home-rail > :nth-child(2){animation-delay:.22s;}
 .fx-cascade .home-rail > :nth-child(3){animation-delay:.3s;} .fx-cascade .home-rail > :nth-child(4){animation-delay:.38s;}
 .fx-cascade .home-rail > :nth-child(5){animation-delay:.46s;} .fx-cascade .home-rail > :nth-child(6){animation-delay:.54s;}
-.fx-cascade .hn-row{animation:fxRow .5s cubic-bezier(.16,1,.3,1) both;animation-delay:calc(.45s + var(--k,0) * .07s);}
-.fx-cascade .home-pts i{transform-origin:left;animation:fxBar 1.1s cubic-bezier(.16,1,.3,1) .6s both;}
+.fx-cascade .hx-track i b{transform-origin:left;animation:fxBar 1.1s cubic-bezier(.16,1,.3,1) .6s both;}
 @media (max-width:1099px){ .fx-cascade .home-rail > *{animation-name:fxUp;} }
 /* фоновое обновление той же страницы не проигрывает сборку заново */
-#app.rerender .fx-cascade .home-main > *,#app.rerender .fx-cascade .home-rail > *,#app.rerender .fx-cascade .home-extras > *,
-#app.rerender .fx-cascade .hn-row,#app.rerender .fx-cascade .home-pts i{animation:none;}
+#app.rerender .fx-cascade .home-main > *,#app.rerender .fx-cascade .home-rail > *,#app.rerender .fx-cascade .hx-track i b{animation:none;}
 
 /* ===== Вариант 2. Живой свет: пятна света за стеклом следуют за курсором ===== */
 @property --lx{syntax:"<percentage>";inherits:true;initial-value:30%;}
@@ -2360,7 +2329,6 @@ body.qz-ord-dragging{cursor:grabbing;user-select:none;-webkit-user-select:none;}
   box-shadow:0 0 1.625rem -.375rem color-mix(in srgb,var(--teal) 60%,transparent);}
 [data-look="depth"] .status-track .slot.done{background:linear-gradient(90deg,var(--primary),var(--teal));}
 [data-look="depth"] .status-track .slot.current{background:color-mix(in srgb,var(--teal) 55%,var(--line));}
-[data-look="depth"] .hn-row.cur .hn-num{background:linear-gradient(135deg,var(--primary),var(--teal));border-color:transparent;}
 
 /* превью темы в настройках */
 .theme-prev.depth{background:radial-gradient(80% 90% at 90% 0%,rgba(157,123,255,.6),transparent 70%),radial-gradient(70% 80% at 0% 100%,rgba(255,77,109,.5),transparent 70%),#0A0612;}
@@ -2738,17 +2706,7 @@ body.qz-ord-dragging{cursor:grabbing;user-select:none;-webkit-user-select:none;}
 .lb-bar .lb-bar-sep{width:1px;align-self:stretch;background:var(--line);margin:.125rem .25rem;}
 
 /* ============================= ГЛАВНАЯ ВРАЧА: приветствие и «следующий шаг» ============================= */
-.hs-hero{padding:1.75rem 1.875rem;}
-.hs-kick,.wl-kick{display:block;font-size:.7813rem;font-weight:600;letter-spacing:.02em;color:var(--primary);margin-bottom:.625rem;}
-.hs-h{font-size:1.625rem;font-weight:700;line-height:1.25;margin:0 0 .5rem;}
-.hs-hero .hs-sub{font-size:.9375rem;color:var(--muted);line-height:1.55;margin:0;max-width:40rem;}
-.hs-act{display:flex;gap:.625rem;align-items:center;flex-wrap:wrap;margin-top:1.375rem;}
-.hs-act .btn-primary{padding:.8125rem 1.625rem;font-size:.9375rem;}
-.hs-bar{margin-top:1.625rem;padding-top:1.25rem;border-top:1px solid var(--line-2);}
-.hs-bar-t{display:flex;justify-content:space-between;gap:.375rem .625rem;font-size:.8125rem;color:var(--muted);margin-bottom:.625rem;flex-wrap:wrap;}
-.hs-bar-t b{color:var(--ink);font-weight:600;}
-.hs-track{height:.375rem;border-radius:.25rem;background:color-mix(in srgb,var(--ink) 10%,transparent);overflow:hidden;}
-.hs-track i{display:block;height:100%;border-radius:.25rem;background:linear-gradient(90deg,var(--primary),var(--rose));transition:width .6s cubic-bezier(.16,1,.3,1);}
+.wl-kick{display:block;font-size:.7813rem;font-weight:600;letter-spacing:.02em;color:var(--primary);margin-bottom:.625rem;}
 .home-grid.wl-mode{display:block;}
 .wl{position:relative;max-width:61.25rem;margin:0 auto;display:flex;flex-direction:column;gap:.875rem;}
 .wl-hello{padding:2.5rem 2.75rem 1.875rem;text-align:center;}
@@ -2777,16 +2735,14 @@ body.qz-ord-dragging{cursor:grabbing;user-select:none;-webkit-user-select:none;}
 #app .home-grid.home-enter .home-main > *,#app .home-grid.home-enter .home-rail > *{animation:homeIn .7s cubic-bezier(.16,1,.3,1) both;}
 #app .home-grid.home-enter .home-main > :nth-child(2){animation-delay:.1s;} #app .home-grid.home-enter .home-main > :nth-child(3){animation-delay:.18s;} #app .home-grid.home-enter .home-main > :nth-child(n+4){animation-delay:.24s;}
 #app .home-grid.home-enter .home-rail > :nth-child(1){animation-delay:.16s;} #app .home-grid.home-enter .home-rail > :nth-child(2){animation-delay:.24s;} #app .home-grid.home-enter .home-rail > :nth-child(n+3){animation-delay:.3s;}
-.home-grid.home-enter .hs-track i{animation:hsGrow 1s .45s cubic-bezier(.16,1,.3,1) both;}
+.home-grid.home-enter .hx-track i b{animation:hsGrow 1s .45s cubic-bezier(.16,1,.3,1) both;}
 @keyframes homeIn{from{opacity:0;transform:translateY(1.75rem) scale(.98);filter:blur(.25rem);}to{opacity:1;transform:none;filter:none;}}
 @keyframes hsGrow{from{width:0;}}
 @media (prefers-reduced-motion:reduce){
-  .wl > *,.wl-step,.wl.wl-leave > *,#app .home-grid.home-enter .home-main > *,#app .home-grid.home-enter .home-rail > *,.home-grid.home-enter .hs-track i{animation:none;}
+  .wl > *,.wl-step,.wl.wl-leave > *,#app .home-grid.home-enter .home-main > *,#app .home-grid.home-enter .home-rail > *,.home-grid.home-enter .hx-track i b{animation:none;}
 }
 @media (max-width:900px){ .wl-two{grid-template-columns:minmax(0,1fr);} }
 @media (max-width:600px){
-  .hs-hero{padding:1.375rem 1.125rem;} .hs-h{font-size:1.3125rem;}
-  .hs-act .btn{flex:1;justify-content:center;}
   .wl-hello{padding:1.625rem 1.125rem 1.25rem;} .wl-h{font-size:1.5rem;}
   .wl-steps{grid-template-columns:minmax(0,1fr);margin-top:1.375rem;}
   .wl-foot .btn-primary{width:100%;justify-content:center;}
@@ -2809,7 +2765,7 @@ body.qz-ord-dragging{cursor:grabbing;user-select:none;-webkit-user-select:none;}
 [data-sky] .player .lesson-body{background:rgba(9,5,16,.55);}
 [data-sky] .btn-primary{background:linear-gradient(120deg,#A88BFF,#FF5C7A);border-color:transparent;box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 .625rem 1.625rem -.625rem rgba(255,92,122,.65);}
 [data-sky] .btn-ghost{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.12);}
-[data-sky] .hs-track i,[data-sky] .home-pts i{box-shadow:0 0 .875rem rgba(255,77,109,.5);}
+[data-sky] .hx-track i b{box-shadow:0 0 .875rem rgba(255,77,109,.5);}
 [data-sky] .lb-card,[data-sky] .lb-note{background:rgba(255,255,255,.03);border-color:rgba(255,255,255,.08);}
 [data-sky] .lb-step,[data-sky] .lb-stat,[data-sky] .lb-seg{background:rgba(255,255,255,.045);}
 [data-sky] .tile-num{background:linear-gradient(180deg,#fff,#C9BCFF);-webkit-background-clip:text;background-clip:text;color:transparent;}
@@ -3263,3 +3219,58 @@ body.qz-ord-dragging{cursor:grabbing;user-select:none;-webkit-user-select:none;}
 .acc-page .acc-grid .co-card{width:100%;box-sizing:border-box;padding:1.5rem 1.75rem;}
 .acc-page #acc-personal{order:1;} .acc-page #acc-look{order:2;} .acc-page #acc-security{order:3;} .acc-page #acc-tour{order:4;} .acc-page #acc-access{order:5;}
 @media (max-width:640px){ .acc-page .profile-main{padding:1.25rem;flex-direction:column;align-items:flex-start;} .acc-page .acc-grid .co-card{padding:1.25rem;} }
+
+/* ---------- Главная: карточка курса + стеклянная панель урока с 3D-объектом ---------- */
+.hx-info{display:flex;flex-wrap:wrap;align-items:center;gap:1rem 1.5rem;padding:1.375rem 1.75rem;}
+.hx-t{flex:1 1 13rem;min-width:0;}
+.hx-t b{display:block;font-size:1rem;}
+.hx-t small{display:block;color:var(--muted);font-size:.8125rem;margin-top:.25rem;}
+.hx-track{flex:1.4 1 14rem;}
+.hx-track i{display:block;height:.375rem;border-radius:1rem;background:color-mix(in srgb,var(--ink) 9%,transparent);overflow:hidden;}
+.hx-track i b{display:block;height:100%;background:linear-gradient(90deg,var(--primary),var(--rose));border-radius:inherit;}
+.hx-track>span{display:flex;justify-content:space-between;gap:.75rem;font-size:.75rem;color:var(--muted);margin-top:.5rem;}
+.hx-stat{text-align:right;font-size:.8125rem;color:var(--muted);white-space:nowrap;}
+.hx-stat b{display:block;font-size:1.375rem;color:var(--ink);line-height:1.15;}
+.hx-stage{position:relative;height:31rem;margin-top:.875rem;border-radius:var(--radius-m);overflow:hidden;isolation:isolate;
+  background:radial-gradient(60% 80% at 68% 50%,color-mix(in srgb,var(--primary) 16%,transparent),transparent 70%),color-mix(in srgb,var(--surface) 55%,transparent);
+  border:1px solid color-mix(in srgb,var(--ink) 7%,transparent);box-shadow:inset 0 1px 0 color-mix(in srgb,var(--ink) 9%,transparent);}
+.hx-3d,.hx-cv{position:absolute;inset:0;width:100%;height:100%;z-index:0;}
+/* «Созвездие»: орбиты шире панели — у текста лёгкое затемнение, чтобы планеты под ним не мешали читать */
+.hx-stage[data-kind="orbit"]::before{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;background:radial-gradient(75% 70% at 0% 100%,color-mix(in srgb,var(--bg) 78%,transparent),color-mix(in srgb,var(--bg) 35%,transparent) 45%,transparent 75%);}
+.hx-lesson{position:absolute;left:1.75rem;bottom:1.75rem;z-index:2;width:23rem;max-width:calc(100% - 3.5rem);}
+.hx-k{display:flex;align-items:center;gap:.5rem;font-size:.6875rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--primary);}
+.hx-k i{width:.5rem;height:.5rem;border-radius:50%;background:var(--rose);box-shadow:0 0 .625rem var(--rose);flex-shrink:0;}
+.hx-h{margin:.625rem 0 .5rem;font-size:1.625rem;font-weight:800;line-height:1.2;letter-spacing:-.02em;text-wrap:balance;}
+.hx-p{margin:0 0 1.25rem;color:var(--muted);font-size:.875rem;line-height:1.5;}
+.hx-act{display:flex;flex-wrap:wrap;gap:.5rem;}
+:root:not([data-theme="light"]) .hx-h,:root:not([data-theme="light"]) .hx-p{text-shadow:0 1px .75rem rgba(10,5,20,.6);}
+/* Светлая тема — «студийный свет»: светлое пятно за объектом, мягкий горизонт */
+:root[data-theme="light"] .hx-stage{background:radial-gradient(30% 44% at 69% 42%,#fff,rgba(255,255,255,0) 72%),radial-gradient(80% 50% at 69% 100%,rgba(150,128,190,.16),transparent 70%),linear-gradient(180deg,#f6f3f9 0%,#f0ebf5 62%,#e7e0ef 67%,#ece6f3 100%);
+  border-color:rgba(120,100,160,.1);box-shadow:inset 0 1px 0 #fff,inset 0 -3rem 4rem -3rem rgba(110,90,150,.12),0 1.25rem 3rem -1.75rem rgba(90,70,140,.3);}
+/* превью настройки «3D на главной» */
+.fxp-3d{position:relative;}
+.fxp-3d i{background:color-mix(in srgb,var(--ink) 8%,transparent);}
+.fxp-3d-live::after,.fxp-3d-still::after{content:"";position:absolute;right:22%;top:50%;width:1.5rem;height:1.5rem;margin-top:-.75rem;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%,#fff,color-mix(in srgb,var(--primary) 70%,#fff) 40%,var(--rose));box-shadow:0 0 .75rem color-mix(in srgb,var(--primary) 60%,transparent);}
+.fxp-3d-live::after{animation:fxp3d 3s ease-in-out infinite;}
+@keyframes fxp3d{50%{transform:translateY(-.25rem) scale(1.08);}}
+@media (prefers-reduced-motion:reduce){.fxp-3d-live::after{animation:none;}}
+@media (max-width:640px){
+  .hx-info{padding:1.125rem 1.25rem;}
+  .hx-t{flex-basis:100%;}
+  .hx-stat{text-align:left;}
+  .hx-stage{height:auto;display:flex;flex-direction:column;}
+  .hx-3d{position:relative;inset:auto;height:15rem;}
+  .hx-lesson{position:relative;left:auto;bottom:auto;width:auto;max-width:none;padding:0 1.25rem 1.375rem;}
+  .hx-stage[data-kind="orbit"]::before{display:none;}
+  .hx-h{font-size:1.375rem;}
+}
+
+/* настройка «Масштаб» */
+.scale-opts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.375rem;}
+.scale-opt{display:flex;flex-direction:column;align-items:center;gap:.25rem;padding:.625rem .25rem .5rem;border-radius:.75rem;border:1px solid var(--line-2);background:transparent;color:var(--ink);font:inherit;cursor:pointer;transition:border-color .15s ease,background .15s ease;}
+.scale-opt:hover{border-color:color-mix(in srgb,var(--primary) 45%,transparent);}
+.scale-opt.on{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 10%,transparent);}
+.scale-opt b{font-weight:700;line-height:1;height:1.5rem;display:flex;align-items:flex-end;}
+.scale-opt span{font-size:.6875rem;color:var(--muted);}
+.scale-hint{font-size:.75rem;color:var(--muted);margin:.5rem 0 0;}
