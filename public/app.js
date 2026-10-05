@@ -846,14 +846,14 @@ var TOUR = {
   home: {
     kicker: "Знакомство с платформой",
     blocks: { sbTop:[0,0,5,2.6], nav0:[.4,3.2,4.2,.75], nav1:[.4,4.25,4.2,.75], nav2:[.4,5.3,4.2,.75], nav3:[.4,6.35,4.2,.75], nav4:[.4,7.75,4.2,.75], nav5:[.4,8.8,4.2,.75],
-      sbNext:[0,11.2,5,3.2], sbMe:[0,15,5,2], hero:[6,0,12,5.5], list:[6,6.5,12,4], survey:[6,11.5,12,2.3], steps:[6,14.6,12,2.4],
-      curator:[19,0,6,3.8], efir:[19,4.6,6,2.8], progress:[19,8.2,6,4.2], notifs:[19,13.2,6,3.8] },
+      sbNext:[0,11.2,5,3.2], sbMe:[0,15,5,2], info:[6,0,12,2.2], hero:[6,2.8,12,8.4], survey:[6,11.8,12,2.3],
+      curator:[19,0,6,3.8], efir:[19,4.6,6,2.8] },
     steps: function(){
       var n = course && course.lessons ? course.lessons.length : 0;
       return [
         { t:"Прогресс курса", p:"Кольцо в меню показывает, какая часть курса уже позади. "+(n ? n+" "+ruPluralClient(n,"урок","урока","уроков")+" и итоговый тест — это 100%." : "Все уроки и итоговый тест — это 100%."), tag:"Кольцо прогресса", at:"sbTop", w:{sbTop:1}, cam:[-30,3,2.5,1.04] },
         { t:"Ваш следующий шаг", p:"Главная всегда начинается с урока, на котором вы остановились. Нажмите «Начать урок» — и продолжите с того же места.", tag:"Следующий шаг", at:"hero", w:{hero:1}, cam:[-34,0,2.5,1.04] },
-        { t:"Урок и разделы", p:"В уроке меню превращается в список уроков с разделами. Выделите фразу в тексте — появятся маркер, заметка и вопрос куратору.", tag:"Уроки и разделы", at:"nav0", w:{nav0:1,nav1:1,nav2:1,nav3:1,nav4:.9,nav5:.9,hero:.45,list:.45,survey:.45,steps:.45}, cam:[-28,2.5,-.5,1] },
+        { t:"Урок и разделы", p:"В уроке меню превращается в список уроков с разделами. Выделите фразу в тексте — появятся маркер, заметка и вопрос куратору.", tag:"Уроки и разделы", at:"nav0", w:{nav0:1,nav1:1,nav2:1,nav3:1,nav4:.9,nav5:.9,info:.45,hero:.45,survey:.45}, cam:[-28,2.5,-.5,1] },
         { t:"Мой конспект", p:"Все маркеры и заметки собираются в «Моём конспекте» — по урокам и с поиском. Ничего не потеряется.", tag:"Мой конспект", at:"nav1", w:{nav1:1}, cam:[-31,4,.5,1.1] },
         { t:"Эфиры и куратор", p:"Ближайший эфир и связь с куратором — справа на главной. Расписание и чат потока в Telegram — в меню.", tag:"Эфиры и куратор", at:"curator", w:{curator:1,efir:1,nav4:.7,nav5:.7}, cam:[-36,-4,2.5,1.06] }
       ];
@@ -893,13 +893,13 @@ function tourMaybeStart(){
   if(tour || tourPending || previewMode || (me && me.impersonator) || view!=="student" || !course || !course.progress || (course.locked||{}).locked) return;
   var pr = course.progress, kind = null;
   if(studentState.tab==="lesson" && !studentState.quizMode && !studentState.moduleGateStage && !pr.tour_lesson_seen && document.getElementById("lessonProse")) kind = "lesson";
-  else if(studentState.tab==="course" && !pr.tour_home_seen && document.querySelector(".hs-h") && !document.querySelector('[data-action="welcome-start"]')) kind = "home";
+  else if(studentState.tab==="course" && !pr.tour_home_seen && document.querySelector(".hx-h") && !document.querySelector('[data-action="welcome-start"]')) kind = "home";
   if(!kind) return;
   tourPending = true;
   setTimeout(function(){
     tourPending = false;
     // за это время врач мог уйти с экрана
-    if(kind==="lesson" ? !document.getElementById("lessonProse") : !document.querySelector(".hs-h")) return;
+    if(kind==="lesson" ? !document.getElementById("lessonProse") : !document.querySelector(".hx-h")) return;
     openTour(kind);
   }, kind==="home" ? 1100 : 700);
 }
@@ -1661,6 +1661,7 @@ function render(){
   runEntranceAnimations();
   if(view==="login" || view==="register") initAuroraFx();
   ensureEmbers();
+  home3dSync();
   if(view==="staff" && lpActive()) lpDecoratePreview();
   if(view==="student"){
     applyGlossaryTerms();
@@ -2780,7 +2781,7 @@ function renderMobileNavBackdrop(){
   return mobileNavOpen ? el('<div class="sidebar-backdrop" data-action="close-mobile-nav"></div>') : null;
 }
 
-// Темы: «Тёмная» — дефолт продукта, «Светлая», «Глубина» — тёмная тема на двух
+// Темы: по умолчанию (первый вход) — «Созвездие»; ещё «Тёмная», «Светлая», «Глубина» — тёмная тема на двух
 // цветах (фиолетовый + красный) с туманностью за стеклом, и две темы с живым фоном
 // на весь экран — «Созвездие» (ночное небо с Млечным Путём) и «Клетки» (живая
 // ткань под микроскопом). Все тёмные строятся поверх тёмной (data-theme="dark"),
@@ -2792,7 +2793,7 @@ var SKY_THEMES = { stars:1, cells:1 };
 function getTheme(){
   var v = null; try{ v = localStorage.getItem("lms-theme"); }catch(e){}
   var q = /[?&]theme=(dark|light|depth|stars|cells)/.exec(location.search); if(q) v = q[1];
-  return THEMES.indexOf(v)>=0 ? v : "dark";
+  return THEMES.indexOf(v)>=0 ? v : "stars";
 }
 function applyTheme(){
   var t = getTheme(), root = document.documentElement;
@@ -2869,6 +2870,78 @@ document.addEventListener("pointermove", function(e){ if(sky.kind) sky.target = 
 document.addEventListener("visibilitychange", function(){ if(sky.gl && !sky.raf && !document.hidden) sky.raf = requestAnimationFrame(skyFrame); });
 // Неподвижный кадр (нет ускорения или «уменьшить движение») перерисовываем при смене размера окна.
 window.addEventListener("resize", function(){ if(sky.gl && !sky.raf) sky.raf = requestAnimationFrame(skyFrame); });
+
+/* ---------- 3D-сцена в панели урока на главной ---------- */
+// Сама сцена — public/home3d.js (+ three.js), грузится лениво при первом показе главной.
+// У каждой темы свой объект; перерисовка страницы холст не пересоздаёт — он переезжает
+// в новую панель, пока не сменились тема, урок или пропорции панели. Ушли с главной —
+// сцена освобождается вместе с WebGL-контекстом.
+var HOME3D_KIND = { stars:"orbit", cells:"cell", dark:"waves", light:"pearl", depth:"dusk" };
+var HOME_3D = [["live","Анимация","Объект урока медленно живёт и следует за курсором"],["still","Неподвижно","Один кадр без движения — меньше нагрузки"],["off","Выключить","Только урок и кнопки"]];
+function home3dMode(){
+  var v = null; try{ v = localStorage.getItem("lms-home-3d"); }catch(e){}
+  return v==="still" || v==="off" ? v : "live";
+}
+var h3 = { loading:false, failed:false, key:"", s:null, cv:null, raf:0, last:0, t0:0, slow:false, ptr:{ x:0, y:0 }, w:0, h:0 };
+function home3dLoad(cb){
+  if(window.LmsHome3D){ cb(); return; }
+  if(h3.loading || h3.failed) return;
+  h3.loading = true;
+  var add = function(src, next){ var s = document.createElement("script"); s.src = src; s.onload = next; s.onerror = function(){ h3.loading = false; h3.failed = true; }; document.head.appendChild(s); };
+  add("vendor/three/three.min.js", function(){ add("home3d.js", function(){ h3.loading = false; cb(); }); });
+}
+function home3dSync(){
+  var host = document.querySelector(".hx-3d");
+  if(!host || home3dMode()==="off" || h3.failed){ home3dStop(); return; }
+  if(!window.LmsHome3D){ home3dLoad(home3dSync); return; }
+  var w = host.clientWidth, h = host.clientHeight;
+  if(!w || !h) return;
+  var center = w / h < 1.25, kind = host.getAttribute("data-kind");
+  var key = [kind, host.getAttribute("data-done"), host.getAttribute("data-cur"), host.getAttribute("data-total"), center].join("|");
+  if(h3.s && h3.key===key){
+    if(h3.cv.parentNode!==host) host.appendChild(h3.cv);
+    if(h3.w!==w || h3.h!==h){ h3.w = w; h3.h = h; h3.s.renderer.setSize(w, h, false); h3.s.camera.aspect = w/h; h3.s.camera.updateProjectionMatrix(); h3.last = 0; }
+    home3dKick(); return;
+  }
+  home3dStop();
+  h3.t0 = performance.now()/1000;
+  var o = { w:w, h:h, done:+host.getAttribute("data-done"), cur:+host.getAttribute("data-cur"), total:+host.getAttribute("data-total"),
+    center:center, shift: center ? 0 : 3.8, ptr:h3.ptr, t0:h3.t0 };
+  var s = null;
+  // Без аппаратного ускорения сцену всё равно показываем, но одним кадром в пониженном разрешении.
+  try{ s = LmsHome3D.create(kind, o); h3.slow = false; }
+  catch(e){ try{ o.slow = o.allowSlow = true; s = LmsHome3D.create(kind, o); h3.slow = true; }catch(e2){ h3.failed = true; return; } }
+  h3.s = s; h3.key = key; h3.w = w; h3.h = h; h3.cv = s.renderer.domElement; h3.cv.className = "hx-cv"; h3.cv.setAttribute("aria-hidden", "true");
+  host.appendChild(h3.cv); h3.last = 0; home3dKick();
+}
+function home3dStop(){
+  if(h3.raf) cancelAnimationFrame(h3.raf);
+  h3.raf = 0;
+  if(h3.s){ if(h3.cv) h3.cv.remove(); try{ LmsHome3D.dispose(h3.s); }catch(e){} }
+  h3.s = null; h3.cv = null; h3.key = "";
+}
+function home3dKick(){ if(h3.s && !h3.raf) h3.raf = requestAnimationFrame(home3dFrame); }
+function home3dFrame(now){
+  h3.raf = 0;
+  if(!h3.s) return;
+  if(!h3.cv.isConnected){ home3dStop(); return; }   // ушли с главной
+  var still = h3.slow || home3dMode()==="still" || (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
+  if(still){ if(!h3.last){ h3.last = now; h3.s.frame(h3.t0); } return; }
+  if(!document.hidden && now - h3.last >= 33){
+    var r = h3.cv.getBoundingClientRect();
+    if(r.bottom > 0 && r.top < innerHeight){ h3.last = now; h3.s.frame(now/1000); }
+  }
+  h3.raf = requestAnimationFrame(home3dFrame);
+}
+document.addEventListener("pointermove", function(e){
+  if(!h3.cv) return;
+  var r = h3.cv.getBoundingClientRect();
+  h3.ptr.x = Math.max(-.6, Math.min(.6, (e.clientX - r.left)/r.width - .5));
+  h3.ptr.y = Math.max(-.6, Math.min(.6, (e.clientY - r.top)/r.height - .5));
+}, { passive:true });
+document.addEventListener("visibilitychange", function(){ if(!document.hidden) home3dKick(); });
+var h3Resize = 0;
+window.addEventListener("resize", function(){ if(!h3Resize) h3Resize = requestAnimationFrame(function(){ h3Resize = 0; home3dSync(); }); });
 
 // Переключатель в меню: светлая ↔ последняя из тёмных.
 function toggleTheme(){
@@ -3224,46 +3297,12 @@ function renderStudentSchedule(){
   return el(html);
 }
 
-// Три пункта первых шагов новичка — не хранятся отдельным флагом каждый,
-// а считаются из уже имеющихся данных (профиль/прогресс) плюс один локальный
-// флаг на "посмотрели расписание" (смотреть его не с чем сверять на сервере).
-function onboardingChecklistItems(){
-  var profileDone = !!(me.workplace && me.workplace.trim()) && !!(me.phone && me.phone.trim());
-  var lessonDone = ((course.progress && course.progress.completed_lessons) || []).length > 0;
-  var scheduleDone = localStorage.getItem("lms-viewed-schedule-"+me.id) === "1";
-  return [
-    { done:profileDone, label:"Заполните профиль", action:"open-profile-editor" },
-    { done:lessonDone, label:"Посмотрите первый урок", action:"open-course" },
-    { done:scheduleDone, label:"Посмотрите расписание эфиров", action:"student-tab", tab:"schedule" }
-  ];
-}
-function renderOnboardingCard(){
-  var pr = course.progress || {};
-  if(pr.onboarding_dismissed) return "";
-  var items = onboardingChecklistItems();
-  var doneCount = items.filter(function(i){ return i.done; }).length;
-  if(doneCount===items.length) return "";
-  var html = '<div class="card" style="padding:1.125rem 1.25rem;margin-bottom:.875rem;">' +
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.625rem;">' +
-      '<b style="font-size:.875rem;">Первые шаги ('+doneCount+'/'+items.length+')</b>' +
-      '<button class="btn btn-sm btn-ghost" data-action="dismiss-onboarding">Скрыть</button>' +
-    '</div>';
-  items.forEach(function(i,idx){
-    html += '<div style="display:flex;align-items:center;gap:.625rem;padding:.5rem 0;'+(idx<items.length-1?'border-bottom:1px solid var(--line-2);':'')+(i.done?'':'cursor:pointer;')+'" '+(i.done?'':'data-action="'+i.action+'"'+(i.tab?' data-tab="'+i.tab+'"':''))+'>' +
-      '<span style="width:1.25rem;height:1.25rem;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;background:'+(i.done?'var(--status-done)':'var(--line-2)')+';">'+(i.done?icon("check","ic-sm"):'')+'</span>' +
-      '<span style="font-size:.875rem;'+(i.done?'color:var(--muted);text-decoration:line-through;':'')+'">'+escapeHtml(i.label)+'</span>' +
-    '</div>';
-  });
-  html += '</div>';
-  return html;
-}
-
 // Главная врача. При самом первом входе (ни одного урока, приветствие ещё не
 // закрыто) — экран «Добро пожаловать»: как устроен курс и кто куратор. Кнопка
-// «Приступить к обучению» с анимацией сменяет его обычной главной: один следующий
-// шаг, одна полоска прогресса, ближайшие уроки, справа куратор и эфир. Серия дней,
-// очки и «Пригласите коллегу» появляются после первого пройденного урока — до этого
-// там одни нули. Курс демо, поэтому про сертификат здесь ничего нет.
+// «Приступить к обучению» с анимацией сменяет его обычной главной: сверху карточка
+// курса (прогресс, очки и серия — после первого урока, до этого там одни нули),
+// под ней стеклянная панель с текущим уроком и 3D-объектом урока, справа куратор
+// и эфир. Курс демо, поэтому про сертификат здесь ничего нет.
 var homeEnterAnim = false;
 function homeCuratorTile(){
   var cur = me.curator;
@@ -3289,6 +3328,11 @@ function homeEventTile(){
     html += '<span class="tile-sub">Эфиры пока не запланированы.</span>';
   }
   return html + '</div>';
+}
+// «10 мин» → «10 минут» для подписи урока на главной.
+function lessonReadTime(d){
+  var m = /^\s*(\d+)\s*мин\.?\s*$/.exec(d||"");
+  return m ? m[1]+" "+ruPluralClient(+m[1],"минута","минуты","минут") : escapeHtml(d);
 }
 function renderWelcomeHome(){
   var L = course.lessons, first = L[0] || {}, q = first.quiz ? first.quiz.length : 0;
@@ -3320,10 +3364,9 @@ function renderStudentHome(){
   var lock = course.locked || {locked:false};
   if(!lock.locked && !done && !pr.completed && !pr.welcome_seen) return el(renderWelcomeHome());
 
-  // На широком экране — две колонки: слева следующий шаг и что потом, справа —
-  // куратор, эфир и прочее «сбоку». На узком всё идёт одной колонкой.
+  // На широком экране — две колонки: слева курс и текущий урок, справа куратор
+  // и эфир. На узком всё идёт одной колонкой.
   var enter = homeEnterAnim; homeEnterAnim = false;
-  // Следующий шаг — первым; анкета и чеклист «Первые шаги» идут после «Потом».
   var html = '<div class="home-grid '+homeFxClass()+homeBgClass()+(enter?' home-enter':'')+'" style="margin-top:.625rem;">'+homeBgLayer()+'<div class="home-main">';
   var curIdx = -1;
   course.lessons.forEach(function(l,i){ if(curIdx<0 && doneIds.indexOf(l.id)===-1) curIdx = i; });
@@ -3334,21 +3377,23 @@ function renderStudentHome(){
       '<p>'+(lock.reason==="blocked" ? 'Куратор временно ограничил ваш доступ к демо-курсу.' : 'Срок доступа к демо-курсу истёк.')+' Чтобы продолжить обучение, напишите куратору в Telegram-группе потока — он может продлить или снять ограничение.</p>' +
       '<button class="btn btn-primary" data-action="open-telegram-modal">Написать куратору</button></div>';
   } else {
+    // Сверху — информация о курсе; ниже стеклянная панель: текущий урок (или первый,
+    // или следующий после пройденного) с кнопкой, а за ним 3D-объект этого урока.
     var quizDone = !!pr.completed, kick, title, sub, acts;
     var allBtn = '<button class="btn btn-ghost" data-action="open-course">Все уроки</button>';
     if(curIdx >= 0){
       var l = course.lessons[curIdx], q = l.quiz ? l.quiz.length : 0, locked = l.hiddenForMe || l.dripLockedForMe;
-      kick = "Ваш следующий шаг";
-      title = "Урок "+(curIdx+1)+". "+escapeHtml(l.title);
+      kick = "Урок "+(curIdx+1)+" из "+total+" · "+(done ? "следующий" : "начните отсюда");
+      title = escapeHtml(l.title);
       sub = locked ? (l.hiddenForMe ? "Урок пока недоступен — куратор откроет его." : "Урок откроется "+fmtDateShort(l.availableAt)+".")
-        : (l.duration ? escapeHtml(l.duration)+" чтения" : "Короткий урок") + (q ? ", затем короткий тест из "+q+" "+ruPluralClient(q,"вопроса","вопросов","вопросов")+" — он проверяет, что главное понятно." : ".");
-      acts = (locked ? '' : '<button class="btn btn-primary" data-action="open-lesson-at" data-idx="'+curIdx+'">Начать урок</button>') + allBtn;
+        : (l.duration ? lessonReadTime(l.duration)+" чтения" : "Короткий урок") + (q ? " и тест из "+q+" "+ruPluralClient(q,"вопроса","вопросов","вопросов") : "");
+      acts = (locked ? '' : '<button class="btn btn-primary" data-action="open-lesson-at" data-idx="'+curIdx+'">'+(done ? "Начать урок" : "Начать курс")+' →</button>') + allBtn;
     } else if(!quizDone){
       var fq = course.quiz ? course.quiz.length : 0;
-      kick = "Остался последний шаг";
+      kick = "Все "+total+" "+ruPluralClient(total,"урок","урока","уроков")+" пройдены";
       title = "Итоговый тест";
       sub = (fq ? fq+" "+ruPluralClient(fq,"вопрос","вопроса","вопросов")+", нужно от 60%. " : "") + "После него можно оставить заявку на полную программу обучения.";
-      acts = '<button class="btn btn-primary" data-action="open-final-quiz">Пройти тест</button>' + allBtn;
+      acts = '<button class="btn btn-primary" data-action="open-final-quiz">Пройти тест →</button>' + allBtn;
     } else {
       kick = "Демо-курс пройден";
       title = escapeHtml(course.course.title);
@@ -3356,19 +3401,24 @@ function renderStudentHome(){
       acts = (pr.requested_full_access ? magnet("done","Заявка отправлена") : '<button class="btn btn-primary" data-action="request-full">Хочу полное обучение</button>') + allBtn;
     }
     var pct = Math.round((done + (quizDone?1:0)) / (total+1) * 100);
-    html += '<div class="card course-hero hs-hero">' +
-      '<div class="hero-aurora aurora" aria-hidden="true">'+AURORA_BANDS+'</div>' +
-      '<span class="hs-kick">'+kick+'</span><h2 class="hs-h">'+title+'</h2><p class="hs-sub">'+sub+'</p>' +
-      '<div class="hs-act">'+acts+'</div>' +
-      '<div class="hs-bar"><div class="hs-bar-t"><span><b>'+escapeHtml(course.course.title)+'</b> · '+done+' из '+total+' '+ruPluralClient(total,"урока","уроков","уроков")+'</span>' +
-        '<span>'+(quizDone ? (curIdx<0 ? 'курс пройден' : 'итоговый тест сдан') : done===total ? 'остался итоговый тест' : 'дальше — итоговый тест')+'</span></div>' +
-        '<div class="hs-track"><i style="width:'+Math.max(pct,2)+'%"></i></div></div>' +
+    var gam = course.gamification || { points:0, currentStreak:0 };
+    var stats = done > 0 || quizDone
+      ? '<div class="hx-stat"><b data-count="'+(gam.points||0)+'">'+(gam.points||0)+'</b>'+ruPluralClient(gam.points||0,"очко","очка","очков")+'</div>' +
+        '<div class="hx-stat"><b data-count="'+(gam.currentStreak||0)+'">'+(gam.currentStreak||0)+'</b>'+ruPluralClient(gam.currentStreak||0,"день подряд","дня подряд","дней подряд")+'</div>'
+      : '';
+    html += '<div class="card hx-info">' +
+      '<div class="hx-t"><b>'+escapeHtml(course.course.title)+'</b><small>Демо-курс · '+total+' '+ruPluralClient(total,"урок","урока","уроков")+' и итоговый тест</small></div>' +
+      '<div class="hx-track"><i><b style="width:'+Math.max(pct,2)+'%"></b></i><span><span>'+done+' из '+total+' '+ruPluralClient(total,"урока","уроков","уроков")+'</span>' +
+        '<span>'+(quizDone ? (curIdx<0 ? 'курс пройден' : 'итоговый тест сдан') : curIdx>=0 && curIdx<total-1 ? 'дальше — урок '+(curIdx+2) : done===total ? 'остался итоговый тест' : 'дальше — итоговый тест')+'</span></span></div>' + stats +
+    '</div>';
+    var kind3d = HOME3D_KIND[getTheme()] || "orbit";
+    html += '<div class="hx-stage" data-kind="'+kind3d+'">' +
+      (home3dMode()!=="off" ? '<div class="hx-3d" data-kind="'+kind3d+'" data-done="'+done+'" data-cur="'+curIdx+'" data-total="'+total+'" aria-hidden="true"></div>' : '') +
+      '<div class="hx-lesson"><div class="hx-k"><i></i>'+kick+'</div><h2 class="hx-h">'+title+'</h2><p class="hx-p">'+sub+'</p><div class="hx-act">'+acts+'</div></div>' +
     '</div>';
   }
 
-  if(!lock.locked) html += renderHomeNextLessons(doneIds, curIdx);
-  html += renderSurveyHomeCard() + renderOnboardingCard();
-  if(!lock.locked) html += renderHomeExtras();
+  html += renderSurveyHomeCard();
   html += '</div><aside class="home-rail">' + homeCuratorTile() + homeEventTile();
 
   if(pr.completed && course.course && course.course.certificatesEnabled){
@@ -3378,81 +3428,8 @@ function renderStudentHome(){
       '<div style="margin-top:.375rem;">'+magnet(issued?"done":"attention", issued?"выдан":"на проверке")+'</div></div>';
   }
 
-  if(done > 0 || pr.completed){
-    var gam = course.gamification || { points:0, currentStreak:0, longestStreak:0 };
-    var ptsPct = Math.min(100, Math.round((gam.points||0)/10));
-    html += '<div class="card board-tile ho-1">' +
-      cardHead("Прогресс", '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="progress">Подробнее →</button>') +
-      '<div class="tile-row">'+icon("flame","ic-sm streak-flame") +
-        '<b class="tile-num" data-count="'+(gam.currentStreak||0)+'">'+(gam.currentStreak||0)+'</b>' +
-        '<span class="tile-sub">'+ruPluralClient(gam.currentStreak||0,"день подряд","дня подряд","дней подряд")+' · рекорд '+(gam.longestStreak||0)+'</span></div>' +
-      '<div class="tile-row"><b class="tile-num" data-count="'+(gam.points||0)+'">'+(gam.points||0)+'</b>' +
-        '<span class="tile-sub">из 1000 очков — это скидка на полный курс</span></div>' +
-      '<div class="home-pts"><i style="width:'+ptsPct+'%"></i></div>' +
-    '</div>';
-  }
-
-  // Уведомления — только когда есть что показать (пустая плитка «нет новых» — лишний шум).
-  var homeNotifItems = upcomingEventReminders().concat(notifState.items.filter(function(n){ return !n.read_at; }));
-  if(homeNotifItems.length){
-    html += '<div class="card board-tile ho-3">' + cardHead("Уведомления", '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="notifications">Все →</button>') +
-      '<div class="home-notifs">' + homeNotifItems.slice(0,3).map(function(n){ return '<div>'+escapeHtml(n.title)+'</div>'; }).join("") + '</div></div>';
-  }
-
-  if(me.referral_code && (done > 0 || pr.completed)){
-    // От адреса самой платформы, а не корня домена — иначе при установке в
-    // подпапку (/lms/) ссылка вела бы на главную основного сайта.
-    var refLink = window.location.origin + window.location.pathname.replace(/[^/]*$/, "") + "?ref=" + me.referral_code;
-    html += '<div class="card board-tile ho-3">' + cardHead("Пригласите коллегу", "") +
-      '<span class="tile-sub">Поделитесь ссылкой — когда коллега зарегистрируется по ней, мы это увидим.</span>' +
-      '<div class="home-ref"><input class="input" readonly value="'+escapeHtml(refLink)+'" id="refLinkInput">' +
-        '<button class="btn btn-sm btn-ghost" data-action="copy-ref-link">Скопировать</button></div></div>';
-  }
   html += '</aside></div>';
   return el(html);
-}
-
-// «Потом»: два урока после текущего (а когда текущий — последний, итоговый тест),
-// остальные — по «Все уроки». Текущий урок уже крупно в карточке выше.
-function renderHomeNextLessons(doneIds, curIdx){
-  var lessons = course.lessons, pr = course.progress || {};
-  if(curIdx < 0) return "";
-  var rows = lessons.slice(curIdx+1, curIdx+3).map(function(l, k){
-    var i = curIdx+1+k, done = doneIds.indexOf(l.id)!==-1, locked = l.hiddenForMe || l.dripLockedForMe;
-    var st = done ? '<span class="hn-st done">'+icon("check","ic-sm")+'пройден</span>'
-      : locked ? '<span class="hn-st">'+icon("lock","ic-sm")+(l.hiddenForMe?'недоступен':'откроется '+fmtDateShort(l.availableAt))+'</span>' : '';
-    return '<div class="hn-row'+(done?' done':'')+(locked?' locked':'')+'" style="--k:'+k+'"'+(locked?'':' data-action="open-lesson-at" data-idx="'+i+'"')+'>' +
-      '<span class="hn-num">'+(done?icon("check","ic-sm"):(i+1))+'</span><div class="hn-body"><b>'+escapeHtml(l.title)+'</b>' +
-      '<span>'+(l.duration?escapeHtml(l.duration):'')+(l.quiz && l.quiz.length?' · тест '+l.quiz.length+' '+ruPluralClient(l.quiz.length,"вопрос","вопроса","вопросов"):'')+(l.assignment?' · задание':'')+'</span></div>'+st+'</div>';
-  }).join("");
-  if(curIdx >= lessons.length-2 && !pr.completed){
-    rows += '<div class="hn-row hn-final locked"><span class="hn-num">'+icon("badge","ic-sm")+'</span><div class="hn-body"><b>Итоговый тест</b><span>'+(course.quiz&&course.quiz.length?course.quiz.length+' '+ruPluralClient(course.quiz.length,"вопрос","вопроса","вопросов")+' · ':'')+'нужно от 60%</span></div><span class="hn-st">после всех уроков</span></div>';
-  }
-  return '<div class="card home-next ho-2">' + cardHead("Потом", '<button class="btn btn-sm btn-ghost" data-action="open-course">Все '+lessons.length+' '+ruPluralClient(lessons.length,"урок","урока","уроков")+' →</button>') + rows + '</div>';
-}
-// Конспект и протоколы — с реальными цифрами; плитка появляется, только когда
-// в разделе уже есть что показать.
-function renderHomeExtras(){
-  var out = [];
-  var hl = (course.progress && course.progress.lesson_highlights) || {}, notes = (course.progress && course.progress.lesson_notes) || {};
-  var hlCount = 0, lastQuote = null;
-  Object.keys(hl).forEach(function(k){ (hl[k]||[]).forEach(function(h){ hlCount++; if(!lastQuote || (h.at||"") > (lastQuote.at||"")) lastQuote = h; }); });
-  var noteCount = Object.keys(notes).filter(function(k){ return (notes[k]||"").trim(); }).length;
-  var saved = (course.bookmarkedLessonIds||[]).length;
-  out.push('<div class="card board-tile">' + cardHead("Мой конспект", '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="materials">Открыть →</button>') +
-    (hlCount || noteCount || saved
-      ? '<div class="home-stats"><div><b>'+hlCount+'</b><span>'+ruPluralClient(hlCount,"выделение","выделения","выделений")+'</span></div><div><b>'+noteCount+'</b><span>'+ruPluralClient(noteCount,"заметка","заметки","заметок")+'</span></div><div><b>'+saved+'</b><span>'+ruPluralClient(saved,"урок сохранён","урока сохранено","уроков сохранено")+'</span></div></div>' +
-        (lastQuote ? '<p class="home-quote">«'+escapeHtml(lastQuote.text.length>140?lastQuote.text.slice(0,140)+'…':lastQuote.text)+'»</p>' : '')
-      : '<span class="tile-sub">Выделяйте главное в уроках маркером и делайте заметки — всё соберётся здесь.</span>') + '</div>');
-  if(protocolsSectionAvailable()){
-    var sp = studentProtocols, opened = (sp.forYou||[]).length + (sp.additional||[]).length, total = Math.max(sp.totalInCourse||0, opened);
-    out.push('<div class="card board-tile">' + cardHead("Протоколы", '<button class="btn btn-sm btn-ghost" data-action="student-tab" data-tab="protocols">Открыть →</button>') +
-      (studentState.protocolsLoaded
-        ? '<div class="home-stats"><div><b>'+opened+'</b><span>из '+total+' открыто</span></div>' + ((sp.forYou||[]).length ? '<div><b>'+(sp.forYou||[]).length+'</b><span>под вашу специализацию</span></div>' : '') + '</div>' +
-          (sp.nextLesson ? '<span class="tile-sub">Урок '+(sp.nextLesson.idx+1)+' откроет ещё '+sp.nextLesson.unlocks+' '+ruPluralClient(sp.nextLesson.unlocks,"протокол","протокола","протоколов")+'.</span>' : '')
-        : '<span class="tile-sub">Гайды применения протоколов из уроков под вашу специализацию.</span>') + '</div>');
-  }
-  return '<div class="home-extras ho-2">' + out.join("") + '</div>';
 }
 
 function stripHtml(html){
@@ -4972,6 +4949,10 @@ function settingsCards(){
       '<b class="fx-title">Фон главной</b><div class="fx-cards">' + HOME_BG.map(function(x){
         var on = homeBg()===x[0];
         return '<button type="button" class="fx-card'+(on?' on':'')+'" data-action="set-home-bg" data-bg="'+x[0]+'"><span class="fx-prev fxp-bg fxp-'+x[0]+'"><i></i><i></i><i></i></span><b>'+x[1]+(on?' <em>выбран</em>':'')+'</b><span>'+x[2]+'</span></button>';
+      }).join("") + '</div>' +
+      '<b class="fx-title">3D на главной</b><div class="fx-cards">' + HOME_3D.map(function(x){
+        var on = home3dMode()===x[0];
+        return '<button type="button" class="fx-card'+(on?' on':'')+'" data-action="set-home-3d" data-v="'+x[0]+'"><span class="fx-prev fxp-3d fxp-3d-'+x[0]+'"><i></i><i></i><i></i></span><b>'+x[1]+(on?' <em>выбрано</em>':'')+'</b><span>'+x[2]+'</span></button>';
       }).join("") + '</div></div>' +
     '\u0001' + (me.role==="student" && !previewMode && !me.impersonator ? '<div class="card co-card" id="acc-tour"><b class="co-card-title">Знакомство с платформой</b>' +
       '<div class="set-row" style="border-bottom:none;"><div><b>Как всё устроено</b><span>Короткий показ главной и страницы урока — меньше минуты.</span></div><button class="btn btn-sm btn-ghost" data-action="tour-replay">Пройти заново</button></div></div>' : '') +
@@ -8884,6 +8865,7 @@ function wireEvents(root){
       embers = []; render();
       showToast("Фон главной: «"+t.querySelector("b").childNodes[0].textContent.trim()+"» — посмотрите на главной"); return;
     }
+    if(action==="set-home-3d"){ try{ localStorage.setItem("lms-home-3d", t.getAttribute("data-v")); }catch(err){} render(); showToast("3D на главной: «"+t.querySelector("b").childNodes[0].textContent.trim()+"»"); return; }
     if(action==="set-home-fx"){ try{ localStorage.setItem("lms-home-fx", t.getAttribute("data-fx")); }catch(err){} render(); showToast("Анимация главной: «"+t.querySelector("b").childNodes[0].textContent.trim()+"» — посмотрите на главной"); return; }
     if(action==="final-quiz-retry"){ delete quizRuns["final"]; studentState.quizSubmitted=false; render(); window.scrollTo(0,0); return; }
     if(action==="final-quiz-done"){ studentState.quizSubmitted=false; render(); window.scrollTo(0,0); return; }
@@ -9017,11 +8999,6 @@ function wireEvents(root){
     }
     if(action==="select-protocol-guide"){
       var sgId=t.getAttribute("data-id"); protocolGuideTab[sgId]=t.getAttribute("data-spec"); render(); return;
-    }
-    if(action==="dismiss-onboarding"){
-      course.progress.onboarding_dismissed=true; render();
-      api("/course/onboarding-dismiss", { method:"PUT" }).catch(function(){});
-      return;
     }
     if(action==="download-ics"){
       var evObj = calendarState.events.filter(function(x){ return x.id===t.getAttribute("data-id"); })[0];
