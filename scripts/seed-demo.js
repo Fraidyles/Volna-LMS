@@ -29,6 +29,11 @@ const STREAM2_ID = "demo-stream-2";
 
 const CURATOR_EMAIL = "curator-demo@dolgoletie.local";
 const CURATOR_PASSWORD = "DemoCurator2026!";
+// Ещё два демо-куратора — чтобы показать работу команды кураторов (у каждого свои врачи).
+const EXTRA_CURATORS = [
+  { id: "demo-curator-2", email: "curator2-demo@dolgoletie.local", password: "DemoCurator2-2026!", name: "Анна Белова", phone: "+7 900-000-0004" },
+  { id: "demo-curator-3", email: "curator3-demo@dolgoletie.local", password: "DemoCurator3-2026!", name: "Игорь Ковалёв", phone: "+7 900-000-0005" }
+];
 const ADMIN_EMAIL = "admin-demo@dolgoletie.local";
 const ADMIN_PASSWORD = "DemoAdmin2026!";
 const STUDENT_EMAIL = "student-demo@dolgoletie.local";
@@ -60,7 +65,7 @@ function phone(n) { return "+7 9" + String(10 + (n % 89)).padStart(2, "0") + "-"
 
 async function upsertUser(id, { email, name, role, curatorId, product, payment, createdAt, phoneNum, workplace }) {
   const hash = await bcrypt.hash(
-    role === "curator" ? CURATOR_PASSWORD : role === "admin" ? ADMIN_PASSWORD : id === STUDENT_ID ? STUDENT_PASSWORD : BULK_PASSWORD,
+    role === "curator" ? ((EXTRA_CURATORS.find((c) => c.id === id) || {}).password || CURATOR_PASSWORD) : role === "admin" ? ADMIN_PASSWORD : id === STUDENT_ID ? STUDENT_PASSWORD : BULK_PASSWORD,
     10
   );
   await pool.query(
@@ -108,8 +113,11 @@ async function upsertProgress(userId, courseId, opts) {
     process.exit(1);
   }
 
-  // ---------- Три «входа»: куратор, админ, врач ----------
+  // ---------- «Входы»: три куратора, админ, врач ----------
   await upsertUser(CURATOR_ID, { email: CURATOR_EMAIL, name: "Демо Куратор", role: "curator", product: "longevity", payment: "paid", createdAt: daysAgo(60), phoneNum: "+7 900-000-0001" });
+  for (const c of EXTRA_CURATORS) {
+    await upsertUser(c.id, { email: c.email, name: c.name, role: "curator", product: "longevity", payment: "paid", createdAt: daysAgo(45), phoneNum: c.phone });
+  }
   await upsertUser(ADMIN_ID, { email: ADMIN_EMAIL, name: "Демо Администратор", role: "admin", product: "longevity", payment: "paid", createdAt: daysAgo(60), phoneNum: "+7 900-000-0002" });
   await upsertUser(STUDENT_ID, {
     email: STUDENT_EMAIL, name: "Демо Врач", role: "student", curatorId: CURATOR_ID, product: "longevity",
@@ -120,9 +128,10 @@ async function upsertProgress(userId, courseId, opts) {
   await upsertProgress(STUDENT_ID, COURSE_A_ID, {
     completedLessons: ["l1", "l2", "l3", "l4"], lastActiveAt: daysAgo(1), streak: 4, longestStreak: 6, createdAt: daysAgo(14)
   });
-  console.log("Три «входа» готовы:");
+  console.log("Демо-входы готовы:");
   console.log("  Врач:    " + STUDENT_EMAIL + " / " + STUDENT_PASSWORD);
   console.log("  Куратор: " + CURATOR_EMAIL + " / " + CURATOR_PASSWORD);
+  EXTRA_CURATORS.forEach((c) => console.log("  Куратор: " + c.email + " / " + c.password + " (" + c.name + ")"));
   console.log("  Админ:   " + ADMIN_EMAIL + " / " + ADMIN_PASSWORD);
 
   // Несколько уведомлений демо-врачу — чтобы «Центр уведомлений» не был пустым.
@@ -185,7 +194,8 @@ async function upsertProgress(userId, courseId, opts) {
     const email = "doctor" + String(idx).padStart(2, "0") + "@demo.local";
     const name = fullName();
     const bucket = buckets[i];
-    const curatorId = i % 2 === 0 ? CURATOR_ID : null; // половина — «мои» у демо-куратора, половина без куратора (видна любому)
+    // По четверти врачей у каждого из трёх кураторов, четверть без куратора (видна любому).
+    const curatorId = [CURATOR_ID, EXTRA_CURATORS[0].id, EXTRA_CURATORS[1].id, null][i % 4];
     const spec1 = pick(specs);
     const product = pick(["longevity", "longevity", "longevity", "personal_brand"]);
     const payment = pick(["paid", "paid", "partial", "unpaid"]);
